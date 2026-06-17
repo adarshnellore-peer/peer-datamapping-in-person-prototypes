@@ -1,14 +1,13 @@
-import { useCallback, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import {
   ChevronDown,
   Copy,
-  FileSearch,
+  // FileSearch,
   History,
   Info,
-  Library,
   List,
   Moon,
-  Pencil,
+  // Pencil,
   Play,
   Plus,
   Settings,
@@ -23,15 +22,10 @@ import {
   Toast,
 } from "./EditRoadmapPanel";
 import { SectionContentBlock } from "./SectionContentBlock";
-import { SourceLibraryOverlay } from "./SourceLibraryOverlay";
-import { DOCUMENT_BLOCKS, getSourceLabel, TOC_ITEMS } from "../data/roadmapDocument";
-import {
-  DATA_SOURCES,
-  createSourceForType,
-  getReferenceKeysForDataSource,
-  type RoadmapSource,
-} from "../data/roadmap";
-import { getDefaultSectionForDocument } from "../data/documentPreview";
+// import { SourceLibraryOverlay } from "./SourceLibraryOverlay";
+import { DOCUMENT_BLOCKS, TOC_ITEMS } from "../data/roadmapDocument";
+import type { RoadmapSource } from "../data/roadmap";
+// import { getDefaultSectionForDocument } from "../data/documentPreview";
 import type { ContentBlockData, DocumentBlock, HeadingBlock, ViewMode } from "../types";
 
 type ActivePanel =
@@ -41,7 +35,7 @@ type ActivePanel =
   | { type: "trace" }
   | null;
 
-type LibraryMode = { type: "browse" } | { type: "add"; blockId: string };
+// type LibraryMode = { type: "browse" } | { type: "add"; blockId: string };
 
 function cloneBlock(block: ContentBlockData): ContentBlockData {
   return {
@@ -101,12 +95,111 @@ export function RoadmapPage() {
   const [activeTocId, setActiveTocId] = useState<string | null>("h-1-3");
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [libraryMode, setLibraryMode] = useState<LibraryMode | null>(null);
+  // const [libraryMode, setLibraryMode] = useState<LibraryMode | null>(null);
+  const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
+  const [marquee, setMarquee] = useState<{
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
   const blockRefs = useRef<Record<string, HTMLElement | null>>({});
+  const blockListRef = useRef<HTMLDivElement>(null);
+  const marqueeRef = useRef(marquee);
+  marqueeRef.current = marquee;
+
+  const selectBlock = useCallback((blockId: string, additive: boolean) => {
+    setSelectedBlockIds((prev) => {
+      const next = additive ? new Set(prev) : new Set<string>();
+      if (next.has(blockId)) {
+        if (additive) next.delete(blockId);
+      } else {
+        next.add(blockId);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedBlockIds(new Set()), []);
+
+  useEffect(() => {
+    if (!marquee) return;
+
+    const onMove = (event: MouseEvent) => {
+      const list = blockListRef.current;
+      if (!list) return;
+      const rect = list.getBoundingClientRect();
+      setMarquee((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentX: event.clientX - rect.left,
+              currentY: event.clientY - rect.top,
+            }
+          : null,
+      );
+    };
+
+    const onUp = () => {
+      const current = marqueeRef.current;
+      const list = blockListRef.current;
+      if (current && list) {
+        const box = normalizeRect(current);
+        if (box.width > 4 || box.height > 4) {
+          const listRect = list.getBoundingClientRect();
+          const marqueeScreen = {
+            left: listRect.left + box.left,
+            top: listRect.top + box.top,
+            right: listRect.left + box.left + box.width,
+            bottom: listRect.top + box.top + box.height,
+          };
+          const hits = new Set<string>();
+          list.querySelectorAll<HTMLElement>("[data-selectable-block]").forEach((el) => {
+            if (rectsIntersect(marqueeScreen, el.getBoundingClientRect())) {
+              const id = el.dataset.selectableBlock;
+              if (id) hits.add(id);
+            }
+          });
+          setSelectedBlockIds(hits);
+        }
+      }
+      setMarquee(null);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [marquee !== null]);
+
+  const handleListMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button, textarea, input, select, [role='listbox'], a")) return;
+    if (target.closest("[data-selectable-block]")) return;
+
+    const list = blockListRef.current;
+    if (!list) return;
+    const rect = list.getBoundingClientRect();
+    clearSelection();
+    setMarquee({
+      startX: event.clientX - rect.left,
+      startY: event.clientY - rect.top,
+      currentX: event.clientX - rect.left,
+      currentY: event.clientY - rect.top,
+    });
+  };
 
   const scrollToBlock = useCallback((id: string) => {
     blockRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
     setActiveTocId(id);
+    if (window.innerWidth < 768) setTocOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (window.innerWidth < 768) setTocOpen(false);
   }, []);
 
   const updatePrompt = (blockId: string, prompt: string) => {
@@ -169,6 +262,7 @@ export function RoadmapPage() {
     );
   };
 
+  /* PROTOTYPE_DISABLED: study library add flow
   const addSourceToBlock = (blockId: string, dataSource?: string) => {
     const ds = dataSource ?? DATA_SOURCES[0];
     const defaultSection = getDefaultSectionForDocument(ds);
@@ -190,6 +284,7 @@ export function RoadmapPage() {
     );
     setToast("Source added");
   };
+  */
 
   const deleteContentBlock = (blockId: string) => {
     setBlocks((prev) => prev.filter((b) => b.id !== blockId));
@@ -239,8 +334,8 @@ export function RoadmapPage() {
     <div className="flex h-screen flex-col bg-[#eeeeee]">
       {/* Header row */}
       <header className="shrink-0 border-b border-[#d4ced3] bg-white">
-        <div className="flex h-[68px] items-center justify-between gap-4 px-4">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-2 px-3 py-2 sm:min-h-[68px] sm:gap-4 sm:px-4 sm:py-0">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={() => setActivePanel({ type: "nav" })}
@@ -256,7 +351,7 @@ export function RoadmapPage() {
             <div className="min-w-0">
               <button
                 type="button"
-                className="block text-left text-[14px] font-normal leading-[18px] text-[#ff4e49] hover:underline"
+                className="block max-w-[min(100%,14rem)] truncate text-left text-[13px] font-normal leading-[18px] text-[#ff4e49] hover:underline sm:max-w-none sm:text-[14px]"
               >
                 Study ACM101 Demo (stg replica)
               </button>
@@ -271,7 +366,7 @@ export function RoadmapPage() {
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto sm:gap-2">
             <DropdownMenu
               align="right"
               trigger={
@@ -281,6 +376,7 @@ export function RoadmapPage() {
                 </button>
               }
             >
+              {/* PROTOTYPE_DISABLED: document view
               <MenuItem
                 icon={<Pencil size={18} strokeWidth={1.75} />}
                 title="Document View"
@@ -288,6 +384,7 @@ export function RoadmapPage() {
                 active={viewMode === "document"}
                 onClick={() => setViewMode("document")}
               />
+              */}
               <MenuItem
                 icon={<Wand2 size={18} strokeWidth={1.75} className="text-[#ff4e49]" />}
                 title="Roadmap View"
@@ -297,12 +394,12 @@ export function RoadmapPage() {
               />
             </DropdownMenu>
 
-            <div className="mx-1 h-6 w-px bg-[#d4ced3]" />
+            <div className="mx-1 hidden h-6 w-px bg-[#d4ced3] sm:block" />
 
             <button
               type="button"
               onClick={() => setActivePanel({ type: "share" })}
-              className="peer-btn-outline"
+              className="peer-btn-outline hidden sm:inline-flex"
             >
               Share
             </button>
@@ -312,7 +409,7 @@ export function RoadmapPage() {
               trigger={
                 <button type="button" className="peer-btn-outline !h-9 !px-3">
                   <Play size={16} strokeWidth={1.75} />
-                  <ChevronDown size={14} className="text-[#636161]" />
+                  <ChevronDown size={14} className="hidden text-[#636161] sm:inline" />
                 </button>
               }
             >
@@ -321,15 +418,17 @@ export function RoadmapPage() {
                 description="Generate all pending sections"
                 onClick={() => setToast("Generation started…")}
               />
+              {/* PROTOTYPE_DISABLED: document preview
               <MenuItem
                 title="Preview output"
                 description="Open document preview"
                 onClick={() => setViewMode("document")}
               />
+              */}
             </DropdownMenu>
 
             <div
-              className="flex overflow-hidden rounded-md border border-[#d4ced3]"
+              className="hidden overflow-hidden rounded-md border border-[#d4ced3] md:flex"
               role="group"
               aria-label="Theme switcher"
             >
@@ -363,16 +462,16 @@ export function RoadmapPage() {
             <button
               type="button"
               onClick={() => setToast("Document update queued")}
-              className="peer-btn-primary"
+              className="peer-btn-primary !px-3 text-[13px] sm:!px-4 sm:text-[14px]"
             >
-              {viewMode === "roadmap" ? "Update Document" : "Download"}
+              Update Document
             </button>
           </div>
         </div>
       </header>
 
       {/* Toolbar row */}
-      <div className="relative flex h-10 shrink-0 items-center border-b border-[#d4ced3] bg-white px-4">
+      <div className="relative flex h-10 shrink-0 items-center border-b border-[#d4ced3] bg-white px-3 sm:px-4">
         <button
           type="button"
           onClick={() => setTocOpen((v) => !v)}
@@ -386,7 +485,7 @@ export function RoadmapPage() {
           <List size={18} strokeWidth={1.75} />
         </button>
 
-        <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2">
+        <div className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 items-center gap-2 md:flex">
           <div className="pointer-events-auto flex h-8 items-center gap-2 rounded-md border border-[#d4ced3] bg-white px-3 text-[14px] text-[#9e9e9e]">
             <span>Heading 2</span>
             <ChevronDown size={14} />
@@ -401,6 +500,7 @@ export function RoadmapPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-1">
+          {/* PROTOTYPE_DISABLED: study library
           <button
             type="button"
             onClick={() => setLibraryMode({ type: "browse" })}
@@ -412,6 +512,7 @@ export function RoadmapPage() {
               {DATA_SOURCES.length}
             </span>
           </button>
+          */}
           <button
             type="button"
             onClick={() =>
@@ -422,6 +523,7 @@ export function RoadmapPage() {
           >
             <History size={18} strokeWidth={1.75} color="#636161" />
           </button>
+          {/* PROTOTYPE_DISABLED: trace to datasource
           <button
             type="button"
             onClick={() =>
@@ -432,12 +534,21 @@ export function RoadmapPage() {
           >
             <FileSearch size={18} strokeWidth={1.75} color="#636161" />
           </button>
+          */}
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         {tocOpen && (
-          <aside className="w-[204px] shrink-0 overflow-y-auto border-r border-[#d4ced3] bg-white">
+          <button
+            type="button"
+            aria-label="Close table of contents"
+            className="fixed inset-0 z-30 bg-black/20 md:hidden"
+            onClick={() => setTocOpen(false)}
+          />
+        )}
+        {tocOpen && (
+          <aside className="fixed inset-y-0 left-0 z-40 w-[min(85vw,240px)] shrink-0 overflow-y-auto border-r border-[#d4ced3] bg-white shadow-lg md:relative md:z-0 md:w-[204px] md:shadow-none">
             <nav className="py-2">
               {TOC_ITEMS.map((item) => (
                 <button
@@ -457,41 +568,69 @@ export function RoadmapPage() {
           </aside>
         )}
 
-        <main className="min-w-0 flex-1 overflow-y-auto px-8 py-6">
-          {viewMode === "roadmap" ? (
-            <div className="roadmap-blocks relative mx-auto w-full max-w-[680px] overflow-visible pb-12">
-              {blocks.map((block) => (
-                <BlockRenderer
-                  key={block.id}
-                  block={block}
-                  blockRefs={blockRefs}
-                  onUpdateSource={(source) => updateSourceInBlock(block.id, source)}
-                  onRemoveSource={(sourceId) => removeSourceFromBlock(block.id, sourceId)}
-                  onDuplicateSource={(sourceId) => duplicateSourceInBlock(block.id, sourceId)}
-                  onAddSource={() => setLibraryMode({ type: "add", blockId: block.id })}
-                  onPromptChange={(prompt) => updatePrompt(block.id, prompt)}
-                  onOutputTypeChange={(outputType) =>
-                    updateOutputType(block.id, outputType)
-                  }
-                  onDuplicate={duplicateBlock}
-                  onDelete={deleteContentBlock}
-                  onAddHeadingAfter={addHeadingAfter}
-                  onAddContentAfter={addContentAfter}
-                />
-              ))}
-            </div>
-          ) : (
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+          {/* PROTOTYPE_DISABLED: document view — roadmap only for now */}
+          <div
+            ref={blockListRef}
+            className={`roadmap-blocks relative mx-auto w-full min-w-0 max-w-[680px] overflow-x-hidden pb-12 ${
+              marquee ? "select-none" : ""
+            }`}
+            onMouseDown={handleListMouseDown}
+          >
+            {marquee && (
+              <div
+                className="pointer-events-none absolute z-30 border-2 border-[#ff4e49] bg-[#ff4e49]/10"
+                style={{
+                  left: normalizeRect(marquee).left,
+                  top: normalizeRect(marquee).top,
+                  width: normalizeRect(marquee).width,
+                  height: normalizeRect(marquee).height,
+                }}
+              />
+            )}
+            {blocks.map((block) => (
+              <BlockRenderer
+                key={block.id}
+                block={block}
+                blockRefs={blockRefs}
+                selected={block.type === "content" && selectedBlockIds.has(block.id)}
+                onSelectBlock={
+                  block.type === "content"
+                    ? (additive) => selectBlock(block.id, additive)
+                    : undefined
+                }
+                onUpdateSource={(source) => updateSourceInBlock(block.id, source)}
+                onRemoveSource={(sourceId) => removeSourceFromBlock(block.id, sourceId)}
+                onDuplicateSource={(sourceId) => duplicateSourceInBlock(block.id, sourceId)}
+                onAddSource={() =>
+                  setToast("Study library is disabled in this prototype")
+                }
+                onPromptChange={(prompt) => updatePrompt(block.id, prompt)}
+                onOutputTypeChange={(outputType) =>
+                  updateOutputType(block.id, outputType)
+                }
+                onDuplicate={duplicateBlock}
+                onDelete={deleteContentBlock}
+                onAddHeadingAfter={addHeadingAfter}
+                onAddContentAfter={addContentAfter}
+              />
+            ))}
+          </div>
+          {/* viewMode === "document" ? (
             <DocumentView blocks={blocks} blockRefs={blockRefs} />
-          )}
+          ) : null */}
         </main>
 
         {activePanel?.type === "version" && <VersionPanel onClose={() => setActivePanel(null)} />}
+        {/* PROTOTYPE_DISABLED: trace panel
         {activePanel?.type === "trace" && (
           <TracePanel blocks={blocks} onClose={() => setActivePanel(null)} />
         )}
+        */}
 
       </div>
 
+      {/* PROTOTYPE_DISABLED: study library overlay
       {libraryMode?.type === "browse" && (
         <SourceLibraryOverlay onClose={() => setLibraryMode(null)} />
       )}
@@ -502,6 +641,7 @@ export function RoadmapPage() {
           onAddToSection={(dataSource) => addSourceToBlock(libraryMode.blockId, dataSource)}
         />
       )}
+      */}
 
       {activePanel?.type === "share" && (
         <Modal
@@ -574,9 +714,37 @@ export function RoadmapPage() {
   );
 }
 
+function normalizeRect(m: {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+}) {
+  const left = Math.min(m.startX, m.currentX);
+  const top = Math.min(m.startY, m.currentY);
+  const width = Math.abs(m.currentX - m.startX);
+  const height = Math.abs(m.currentY - m.startY);
+  return { left, top, width, height };
+}
+
+function rectsIntersect(
+  a: { left: number; top: number; right: number; bottom: number },
+  b: DOMRect,
+) {
+  return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+}
+
+function headingAddLabel(level: HeadingBlock["level"]): string {
+  if (level === 1) return "Add heading";
+  if (level === 2) return "Add heading";
+  return "Add subheading";
+}
+
 function BlockRenderer({
   block,
   blockRefs,
+  selected = false,
+  onSelectBlock,
   onUpdateSource,
   onRemoveSource,
   onDuplicateSource,
@@ -590,6 +758,8 @@ function BlockRenderer({
 }: {
   block: DocumentBlock;
   blockRefs: MutableRefObject<Record<string, HTMLElement | null>>;
+  selected?: boolean;
+  onSelectBlock?: (additive: boolean) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
   onDuplicateSource: (sourceId: string) => void;
@@ -607,11 +777,11 @@ function BlockRenderer({
     const isH3 = block.level === 3;
     const Tag = isH1 ? "h1" : isH2 ? "h2" : "h3";
     const className = isH1
-      ? "mt-10 text-[28px] font-semibold leading-9 text-[#333] first:mt-0"
+      ? "mt-8 text-[24px] font-semibold leading-8 text-[#333] first:mt-0 sm:mt-10 sm:text-[28px] sm:leading-9"
       : isH2
-        ? "mt-8 text-[24px] font-semibold leading-8 text-[#333]"
+        ? "mt-6 text-[20px] font-semibold leading-7 text-[#333] sm:mt-8 sm:text-[24px] sm:leading-8"
         : isH3
-          ? "mt-6 text-[20px] font-semibold leading-7 text-[#333]"
+          ? "mt-5 text-[18px] font-semibold leading-7 text-[#333] sm:mt-6 sm:text-[20px]"
           : "mt-4 text-[16px] font-semibold leading-6 text-[#333]";
 
     return (
@@ -626,7 +796,7 @@ function BlockRenderer({
           {block.title}
         </Tag>
         <BlockAddButton
-          label="Add heading after"
+          addLabel={headingAddLabel(block.level)}
           className={isH1 || isH2 ? "top-1/2 -translate-y-1/2" : "top-3"}
           onClick={() => onAddHeadingAfter(block.id, block.level)}
         />
@@ -650,15 +820,28 @@ function BlockRenderer({
       ref={(el) => {
         blockRefs.current[block.id] = el;
       }}
-      className="group relative mb-4 mt-2 overflow-visible"
+      data-selectable-block={block.id}
+      onMouseDown={(event) => {
+        if (event.button !== 0 || !onSelectBlock) return;
+        const target = event.target as HTMLElement;
+        if (target.closest("button, textarea, input, select, [role='listbox'], a")) return;
+        onSelectBlock(event.shiftKey);
+      }}
+      className={`group relative mb-4 mt-2 min-w-0 overflow-x-hidden rounded-lg transition-shadow sm:overflow-visible ${
+        selected
+          ? "shadow-[0_0_0_2px_#ff4e49] ring-2 ring-[#ff4e49]/25"
+          : "hover:shadow-[0_0_0_1px_#d4ced3]"
+      }`}
     >
       <BlockAddButton
-        label="Add content block after"
+        addLabel="Add section"
         className="top-4"
         onClick={() => onAddContentAfter(block.id)}
       />
       <SectionContentBlock
         block={block}
+        selected={selected}
+        onSelect={onSelectBlock}
         onUpdateSource={onUpdateSource}
         onRemoveSource={onRemoveSource}
         onDuplicateSource={onDuplicateSource}
@@ -673,27 +856,29 @@ function BlockRenderer({
 }
 
 function BlockAddButton({
-  label,
+  addLabel,
   onClick,
   className = "",
 }: {
-  label: string;
+  addLabel: string;
   onClick: () => void;
   className?: string;
 }) {
   return (
     <button
       type="button"
-      aria-label={label}
-      title={label}
+      aria-label={addLabel}
+      title={addLabel}
       onClick={onClick}
-      className={`absolute left-[calc(100%+10px)] z-10 flex h-7 w-7 items-center justify-center rounded-full border border-[#d4ced3] bg-white text-[#636161] opacity-0 shadow-sm transition-all hover:border-[#ff4e49]/50 hover:bg-[#fff5f5] hover:text-[#ff4e49] group-hover:opacity-100 focus-visible:opacity-100 ${className}`}
+      className={`absolute left-[calc(100%+10px)] z-10 hidden h-7 items-center gap-1 rounded-full border border-[#d4ced3] bg-white pl-2 pr-2.5 text-[#636161] opacity-0 shadow-sm transition-all hover:border-[#ff4e49]/50 hover:bg-[#fff5f5] hover:text-[#ff4e49] group-hover:opacity-100 focus-visible:opacity-100 min-[920px]:flex ${className}`}
     >
-      <Plus size={14} strokeWidth={2} />
+      <Plus size={14} strokeWidth={2} className="shrink-0" />
+      <span className="whitespace-nowrap text-[12px] font-medium">{addLabel}</span>
     </button>
   );
 }
 
+/* PROTOTYPE_DISABLED: document view
 function DocumentView({
   blocks,
   blockRefs,
@@ -745,6 +930,7 @@ function DocumentView({
     </div>
   );
 }
+*/
 
 function VersionPanel({ onClose }: { onClose: () => void }) {
   return (
@@ -772,6 +958,7 @@ function VersionPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+/* PROTOTYPE_DISABLED: trace to datasource panel
 function TracePanel({
   blocks,
   onClose,
@@ -807,3 +994,4 @@ function TracePanel({
     </aside>
   );
 }
+*/

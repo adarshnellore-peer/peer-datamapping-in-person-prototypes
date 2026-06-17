@@ -25,6 +25,11 @@ body {
   color: var(--peer-text);
   background: var(--peer-bg);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+html {
+  overflow-x: hidden;
 }
 
 .peer-btn-outline {

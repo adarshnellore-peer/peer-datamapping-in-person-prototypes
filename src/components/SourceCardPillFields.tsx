@@ -49,7 +49,7 @@ function PillFieldSection({
   picker?: React.ReactNode;
 }) {
   return (
-    <div className="border-b border-[#e8e8e8] pb-4 last:border-0 last:pb-0">
+    <div>
       {children}
       {picker && <div className="mt-2.5">{picker}</div>}
     </div>

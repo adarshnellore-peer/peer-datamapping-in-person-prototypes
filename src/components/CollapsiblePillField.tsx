@@ -74,7 +74,7 @@ export function PillOptionPicker({
   getLabel?: (value: string) => string;
 }) {
   return (
-    <div className="flex flex-wrap gap-1.5 rounded-md border border-[#c8c8c8] bg-[#ececec] p-2.5">
+    <div className="flex flex-wrap gap-1.5 rounded-md border border-[#e4e4e4] bg-[#fafafa] p-2.5">
       {options.map((option) => {
         const isCurrent = option === value;
         return (
