@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  --peer-primary: #ff4e49;
+  --peer-primary-hover: #e64641;
+  --peer-primary-tint: #fedbda;
+  --peer-primary-border: #fe9591;
+  --peer-border: #d4ced3;
+  --peer-border-light: #e1e1e1;
+  --peer-text: #302f2f;
+  --peer-heading: #333333;
+  --peer-muted: #636161;
+  --peer-bg: #eeeeee;
+  --peer-surface: #ffffff;
+  --peer-toc-active: #fedbda;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Albert Sans", system-ui, sans-serif;
+  color: var(--peer-text);
+  background: var(--peer-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.peer-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 36px;
+  padding: 8px 16px;
+  border: 1px solid var(--peer-border);
+  border-radius: 8px;
+  background: var(--peer-surface);
+  color: var(--peer-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.peer-btn-outline:hover {
+  background: #fafafa;
+}
+
+.peer-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--peer-primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.peer-btn-primary:hover {
+  background: var(--peer-primary-hover);
+}
+
+.peer-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--peer-border);
+  border-radius: 8px;
+  background: var(--peer-surface);
+  color: var(--peer-text);
+  cursor: pointer;
+}
+
+.peer-icon-btn.active {
+  background: var(--peer-primary-tint);
+  border-color: var(--peer-primary-border);
+}
+
+.roadmap-blocks > *:first-child [class*="mt-"] {
+  margin-top: 0 !important;
+}
+
