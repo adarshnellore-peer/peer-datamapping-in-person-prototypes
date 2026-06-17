@@ -300,7 +300,7 @@ export function RoadmapPage() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-[#eeeeee]">
+    <div className="flex h-dvh flex-col bg-[#eeeeee]">
       {/* Header row */}
       <header className="shrink-0 border-b border-[#d4ced3] bg-white">
         <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-2 px-3 py-2 sm:min-h-[68px] sm:gap-4 sm:px-4 sm:py-0">
@@ -341,7 +341,7 @@ export function RoadmapPage() {
               trigger={
                 <button type="button" className="peer-btn-outline !h-9 !px-3">
                   <Wand2 size={16} strokeWidth={1.75} />
-                  <ChevronDown size={14} className="text-[#636161]" />
+                  <ChevronDown size={14} className="hidden text-[#636161] sm:inline" />
                 </button>
               }
             >
@@ -433,7 +433,8 @@ export function RoadmapPage() {
               onClick={() => setToast("Document update queued")}
               className="peer-btn-primary !px-3 text-[13px] sm:!px-4 sm:text-[14px]"
             >
-              Update Document
+              <span className="sm:hidden">Update</span>
+              <span className="hidden sm:inline">Update Document</span>
             </button>
           </div>
         </div>
@@ -586,7 +587,17 @@ export function RoadmapPage() {
           ) : null */}
         </main>
 
-        {activePanel?.type === "version" && <VersionPanel onClose={() => setActivePanel(null)} />}
+        {activePanel?.type === "version" && (
+          <>
+            <button
+              type="button"
+              aria-label="Close version history"
+              className="fixed inset-0 z-30 bg-black/20 md:hidden"
+              onClick={() => setActivePanel(null)}
+            />
+            <VersionPanel onClose={() => setActivePanel(null)} />
+          </>
+        )}
         {/* PROTOTYPE_DISABLED: trace panel
         {activePanel?.type === "trace" && (
           <TracePanel blocks={blocks} onClose={() => setActivePanel(null)} />
@@ -648,7 +659,7 @@ export function RoadmapPage() {
             className="flex-1 bg-black/30"
             onClick={() => setActivePanel(null)}
           />
-          <aside className="w-[280px] bg-white shadow-xl">
+          <aside className="w-[min(85vw,280px)] bg-white shadow-xl">
             <header className="flex items-center justify-between border-b border-[#d4ced3] px-4 py-4">
               <span className="text-[14px] font-semibold text-[#302f2f]">Dev test</span>
               <button type="button" onClick={() => setActivePanel(null)}>
@@ -898,7 +909,7 @@ function DocumentView({
 
 function VersionPanel({ onClose }: { onClose: () => void }) {
   return (
-    <aside className="w-[300px] shrink-0 overflow-y-auto border-l border-[#d4ced3] bg-white">
+    <aside className="fixed inset-y-0 right-0 z-40 w-[min(90vw,300px)] shrink-0 overflow-y-auto border-l border-[#d4ced3] bg-white shadow-lg md:relative md:z-0 md:w-[300px] md:shadow-none">
       <header className="flex items-center justify-between border-b border-[#d4ced3] px-4 py-3">
         <h3 className="text-[14px] font-medium">Version history</h3>
         <button type="button" onClick={onClose}>

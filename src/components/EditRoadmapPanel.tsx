@@ -342,7 +342,7 @@ export function Modal({
         </header>
         <div className="px-5 py-4">{children}</div>
         {footer && (
-          <footer className="flex justify-end gap-2 border-t border-[#d4ced3] px-5 py-4">
+          <footer className="flex flex-wrap justify-end gap-2 border-t border-[#d4ced3] px-5 py-4">
             {footer}
           </footer>
         )}
@@ -358,7 +358,7 @@ export function Toast({ message, onClose }: { message: string; onClose: () => vo
   }, [onClose]);
 
   return (
-    <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-[#1a1a1a] px-4 py-3 text-[14px] text-white shadow-lg">
+    <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg bg-[#1a1a1a] px-4 py-3 text-[14px] text-white shadow-lg">
       {message}
     </div>
   );

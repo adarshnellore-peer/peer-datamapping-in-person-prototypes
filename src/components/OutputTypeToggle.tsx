@@ -66,7 +66,7 @@ export function GenerateAsSelect({
         <ul
           id={listId}
           role="listbox"
-          className="absolute right-0 top-full z-20 mt-1 min-w-[9rem] overflow-hidden rounded-md border border-[#d4ced3] bg-white py-1 shadow-lg"
+          className="absolute left-0 right-auto top-full z-20 mt-1 min-w-[9rem] overflow-hidden rounded-md border border-[#d4ced3] bg-white py-1 shadow-lg sm:left-auto sm:right-0"
         >
           {OPTIONS.map((option) => {
             const isSelected = option.value === value;

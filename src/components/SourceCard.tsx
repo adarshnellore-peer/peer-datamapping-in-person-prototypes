@@ -24,7 +24,7 @@ export function DuplicateDeleteActions({
         aria-label={duplicateLabel}
         title={duplicateLabel}
         onClick={onDuplicate}
-        className="rounded p-1 text-[#525252] hover:bg-black/5"
+        className="rounded p-1.5 text-[#525252] hover:bg-black/5 sm:p-1"
       >
         <Copy size={14} strokeWidth={1.75} />
       </button>
@@ -33,7 +33,7 @@ export function DuplicateDeleteActions({
         aria-label={removeLabel}
         title={removeLabel}
         onClick={onRemove}
-        className="rounded p-1 text-[#525252] hover:bg-[#fff0f0] hover:text-[#ff4e49]"
+        className="rounded p-1.5 text-[#525252] hover:bg-[#fff0f0] hover:text-[#ff4e49] sm:p-1"
       >
         <X size={14} strokeWidth={1.75} />
       </button>
