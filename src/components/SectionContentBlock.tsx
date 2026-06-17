@@ -121,7 +121,6 @@ function ContextForAI({
 
 export function SectionContentBlock({
   block,
-  selected = false,
   onSelect,
   onUpdateSource,
   onRemoveSource,
@@ -133,7 +132,6 @@ export function SectionContentBlock({
   onDelete,
 }: {
   block: ContentBlockData;
-  selected?: boolean;
   onSelect?: (additive: boolean) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
@@ -145,11 +143,7 @@ export function SectionContentBlock({
   onDelete: () => void;
 }) {
   return (
-    <div
-      className={`overflow-hidden rounded-lg border bg-white ${
-        selected ? "border-[#ff4e49]" : "border-[#d4ced3]"
-      }`}
-    >
+    <div className="overflow-hidden rounded-lg border border-[#d4ced3] bg-white">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-[#ececec] px-2 py-2.5 sm:pr-4">
         <button
           type="button"

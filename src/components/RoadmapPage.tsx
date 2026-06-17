@@ -593,7 +593,7 @@ export function RoadmapPage() {
                 key={block.id}
                 block={block}
                 blockRefs={blockRefs}
-                selected={block.type === "content" && selectedBlockIds.has(block.id)}
+                isSelected={block.type === "content" && selectedBlockIds.has(block.id)}
                 onSelectBlock={
                   block.type === "content"
                     ? (additive) => selectBlock(block.id, additive)
@@ -743,7 +743,7 @@ function headingAddLabel(level: HeadingBlock["level"]): string {
 function BlockRenderer({
   block,
   blockRefs,
-  selected = false,
+  isSelected = false,
   onSelectBlock,
   onUpdateSource,
   onRemoveSource,
@@ -758,7 +758,7 @@ function BlockRenderer({
 }: {
   block: DocumentBlock;
   blockRefs: MutableRefObject<Record<string, HTMLElement | null>>;
-  selected?: boolean;
+  isSelected?: boolean;
   onSelectBlock?: (additive: boolean) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
@@ -821,17 +821,14 @@ function BlockRenderer({
         blockRefs.current[block.id] = el;
       }}
       data-selectable-block={block.id}
+      data-selected={isSelected || undefined}
       onMouseDown={(event) => {
         if (event.button !== 0 || !onSelectBlock) return;
         const target = event.target as HTMLElement;
         if (target.closest("button, textarea, input, select, [role='listbox'], a")) return;
         onSelectBlock(event.shiftKey);
       }}
-      className={`group relative mb-4 mt-2 min-w-0 overflow-x-hidden rounded-lg transition-shadow sm:overflow-visible ${
-        selected
-          ? "shadow-[0_0_0_2px_#ff4e49] ring-2 ring-[#ff4e49]/25"
-          : "hover:shadow-[0_0_0_1px_#d4ced3]"
-      }`}
+      className="group relative mb-4 mt-2 min-w-0 overflow-x-hidden rounded-lg transition-shadow hover:shadow-[0_0_0_1px_#d4ced3] sm:overflow-visible"
     >
       <BlockAddButton
         addLabel="Add section"
@@ -840,7 +837,6 @@ function BlockRenderer({
       />
       <SectionContentBlock
         block={block}
-        selected={selected}
         onSelect={onSelectBlock}
         onUpdateSource={onUpdateSource}
         onRemoveSource={onRemoveSource}

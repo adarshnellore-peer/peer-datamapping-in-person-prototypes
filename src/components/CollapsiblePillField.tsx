@@ -6,8 +6,6 @@ const pillConfirmed =
   "border-[#a8a8a8] bg-[#f5f5f5] font-medium text-[#1f1f1f] hover:border-[#888]";
 const pillUnselected =
   "border-[#c8c8c8] bg-white text-[#454545] hover:border-[#999] hover:bg-[#fafafa]";
-const pillPickerCurrent =
-  "border-[#ff4e49] bg-[#fff5f5] font-semibold text-[#302f2f]";
 const pillEmpty =
   "border-dashed border-[#999] bg-white text-[#666] hover:border-[#666] hover:text-[#302f2f]";
 
@@ -74,7 +72,7 @@ export function PillOptionPicker({
   getLabel?: (value: string) => string;
 }) {
   return (
-    <div className="flex flex-wrap gap-1.5 rounded-md border border-[#e4e4e4] bg-[#fafafa] p-2.5">
+    <div className="flex flex-wrap gap-1.5">
       {options.map((option) => {
         const isCurrent = option === value;
         return (
@@ -83,9 +81,7 @@ export function PillOptionPicker({
             type="button"
             aria-pressed={isCurrent}
             onClick={() => onSelect(option)}
-            className={`inline-flex max-w-full w-fit ${pillBase} ${
-              isCurrent ? pillPickerCurrent : pillUnselected
-            }`}
+            className={`inline-flex max-w-full w-fit ${pillBase} ${pillUnselected}`}
           >
             <span className="whitespace-normal break-words text-left">{getLabel(option)}</span>
           </button>
