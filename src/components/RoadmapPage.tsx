@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, useState, Fragment, type MutableRefObject } from "react";
 import {
   ChevronDown,
   Copy,
@@ -96,101 +96,70 @@ export function RoadmapPage() {
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [toast, setToast] = useState<string | null>(null);
   // const [libraryMode, setLibraryMode] = useState<LibraryMode | null>(null);
-  const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
-  const [marquee, setMarquee] = useState<{
-    startX: number;
-    startY: number;
-    currentX: number;
-    currentY: number;
+  const [dragState, setDragState] = useState<{
+    blockId: string;
+    dropIndex: number;
   } | null>(null);
   const blockRefs = useRef<Record<string, HTMLElement | null>>({});
-  const blockListRef = useRef<HTMLDivElement>(null);
-  const marqueeRef = useRef(marquee);
-  marqueeRef.current = marquee;
+  const dragStateRef = useRef(dragState);
+  dragStateRef.current = dragState;
 
-  const selectBlock = useCallback((blockId: string, additive: boolean) => {
-    setSelectedBlockIds((prev) => {
-      const next = additive ? new Set(prev) : new Set<string>();
-      if (next.has(blockId)) {
-        if (additive) next.delete(blockId);
-      } else {
-        next.add(blockId);
-      }
-      return next;
-    });
+  const startBlockDrag = useCallback((blockId: string) => {
+    const index = blocks.findIndex((b) => b.id === blockId);
+    setDragState({ blockId, dropIndex: index === -1 ? 0 : index });
+  }, [blocks]);
+
+  const updateBlockDrag = useCallback(
+    (clientY: number) => {
+      setDragState((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          dropIndex: computeDropIndex(blocks, blockRefs.current, clientY),
+        };
+      });
+    },
+    [blocks],
+  );
+
+  const endBlockDrag = useCallback(() => {
+    const prev = dragStateRef.current;
+    if (prev) {
+      setBlocks((current) => reorderBlock(current, prev.blockId, prev.dropIndex));
+    }
+    setDragState(null);
   }, []);
 
-  const clearSelection = useCallback(() => setSelectedBlockIds(new Set()), []);
+  const handleDragHandlePointerDown = useCallback(
+    (blockId: string, event: React.PointerEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      const handle = event.currentTarget;
+      const startY = event.clientY;
+      let dragging = false;
 
-  useEffect(() => {
-    if (!marquee) return;
-
-    const onMove = (event: MouseEvent) => {
-      const list = blockListRef.current;
-      if (!list) return;
-      const rect = list.getBoundingClientRect();
-      setMarquee((prev) =>
-        prev
-          ? {
-              ...prev,
-              currentX: event.clientX - rect.left,
-              currentY: event.clientY - rect.top,
-            }
-          : null,
-      );
-    };
-
-    const onUp = () => {
-      const current = marqueeRef.current;
-      const list = blockListRef.current;
-      if (current && list) {
-        const box = normalizeRect(current);
-        if (box.width > 4 || box.height > 4) {
-          const listRect = list.getBoundingClientRect();
-          const marqueeScreen = {
-            left: listRect.left + box.left,
-            top: listRect.top + box.top,
-            right: listRect.left + box.left + box.width,
-            bottom: listRect.top + box.top + box.height,
-          };
-          const hits = new Set<string>();
-          list.querySelectorAll<HTMLElement>("[data-selectable-block]").forEach((el) => {
-            if (rectsIntersect(marqueeScreen, el.getBoundingClientRect())) {
-              const id = el.dataset.selectableBlock;
-              if (id) hits.add(id);
-            }
-          });
-          setSelectedBlockIds(hits);
+      const onMove = (ev: PointerEvent) => {
+        if (!dragging && Math.abs(ev.clientY - startY) > 4) {
+          dragging = true;
+          handle.setPointerCapture(ev.pointerId);
+          startBlockDrag(blockId);
         }
-      }
-      setMarquee(null);
-    };
+        if (dragging) updateBlockDrag(ev.clientY);
+      };
 
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-  }, [marquee !== null]);
+      const onUp = (ev: PointerEvent) => {
+        if (dragging) endBlockDrag();
+        if (handle.hasPointerCapture(ev.pointerId)) {
+          handle.releasePointerCapture(ev.pointerId);
+        }
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+      };
 
-  const handleListMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const target = event.target as HTMLElement;
-    if (target.closest("button, textarea, input, select, [role='listbox'], a")) return;
-    if (target.closest("[data-selectable-block]")) return;
-
-    const list = blockListRef.current;
-    if (!list) return;
-    const rect = list.getBoundingClientRect();
-    clearSelection();
-    setMarquee({
-      startX: event.clientX - rect.left,
-      startY: event.clientY - rect.top,
-      currentX: event.clientX - rect.left,
-      currentY: event.clientY - rect.top,
-    });
-  };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    },
+    [startBlockDrag, updateBlockDrag, endBlockDrag],
+  );
 
   const scrollToBlock = useCallback((id: string) => {
     blockRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -570,51 +539,47 @@ export function RoadmapPage() {
 
         <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
           {/* PROTOTYPE_DISABLED: document view — roadmap only for now */}
-          <div
-            ref={blockListRef}
-            className={`roadmap-blocks relative mx-auto w-full min-w-0 max-w-[680px] overflow-x-hidden pb-12 ${
-              marquee ? "select-none" : ""
-            }`}
-            onMouseDown={handleListMouseDown}
-          >
-            {marquee && (
+          <div className="roadmap-blocks relative mx-auto w-full min-w-0 max-w-[680px] overflow-x-hidden pb-12">
+            {blocks.map((block, index) => (
+              <Fragment key={block.id}>
+                {dragState?.dropIndex === index && dragState.blockId && (
+                  <div
+                    className="pointer-events-none relative z-20 -my-1 h-0.5 rounded-full bg-[#ff4e49]"
+                    aria-hidden
+                  />
+                )}
+                <BlockRenderer
+                  block={block}
+                  blockRefs={blockRefs}
+                  isDragging={dragState?.blockId === block.id}
+                  onDragHandlePointerDown={
+                    block.type === "content"
+                      ? (event) => handleDragHandlePointerDown(block.id, event)
+                      : undefined
+                  }
+                  onUpdateSource={(source) => updateSourceInBlock(block.id, source)}
+                  onRemoveSource={(sourceId) => removeSourceFromBlock(block.id, sourceId)}
+                  onDuplicateSource={(sourceId) => duplicateSourceInBlock(block.id, sourceId)}
+                  onAddSource={() =>
+                    setToast("Study library is disabled in this prototype")
+                  }
+                  onPromptChange={(prompt) => updatePrompt(block.id, prompt)}
+                  onOutputTypeChange={(outputType) =>
+                    updateOutputType(block.id, outputType)
+                  }
+                  onDuplicate={duplicateBlock}
+                  onDelete={deleteContentBlock}
+                  onAddHeadingAfter={addHeadingAfter}
+                  onAddContentAfter={addContentAfter}
+                />
+              </Fragment>
+            ))}
+            {dragState && dragState.dropIndex === blocks.length && (
               <div
-                className="pointer-events-none absolute z-30 border-2 border-[#ff4e49] bg-[#ff4e49]/10"
-                style={{
-                  left: normalizeRect(marquee).left,
-                  top: normalizeRect(marquee).top,
-                  width: normalizeRect(marquee).width,
-                  height: normalizeRect(marquee).height,
-                }}
+                className="pointer-events-none relative z-20 h-0.5 rounded-full bg-[#ff4e49]"
+                aria-hidden
               />
             )}
-            {blocks.map((block) => (
-              <BlockRenderer
-                key={block.id}
-                block={block}
-                blockRefs={blockRefs}
-                isSelected={block.type === "content" && selectedBlockIds.has(block.id)}
-                onSelectBlock={
-                  block.type === "content"
-                    ? (additive) => selectBlock(block.id, additive)
-                    : undefined
-                }
-                onUpdateSource={(source) => updateSourceInBlock(block.id, source)}
-                onRemoveSource={(sourceId) => removeSourceFromBlock(block.id, sourceId)}
-                onDuplicateSource={(sourceId) => duplicateSourceInBlock(block.id, sourceId)}
-                onAddSource={() =>
-                  setToast("Study library is disabled in this prototype")
-                }
-                onPromptChange={(prompt) => updatePrompt(block.id, prompt)}
-                onOutputTypeChange={(outputType) =>
-                  updateOutputType(block.id, outputType)
-                }
-                onDuplicate={duplicateBlock}
-                onDelete={deleteContentBlock}
-                onAddHeadingAfter={addHeadingAfter}
-                onAddContentAfter={addContentAfter}
-              />
-            ))}
           </div>
           {/* viewMode === "document" ? (
             <DocumentView blocks={blocks} blockRefs={blockRefs} />
@@ -714,24 +679,35 @@ export function RoadmapPage() {
   );
 }
 
-function normalizeRect(m: {
-  startX: number;
-  startY: number;
-  currentX: number;
-  currentY: number;
-}) {
-  const left = Math.min(m.startX, m.currentX);
-  const top = Math.min(m.startY, m.currentY);
-  const width = Math.abs(m.currentX - m.startX);
-  const height = Math.abs(m.currentY - m.startY);
-  return { left, top, width, height };
+function reorderBlock(
+  blocks: DocumentBlock[],
+  blockId: string,
+  toIndex: number,
+): DocumentBlock[] {
+  const fromIndex = blocks.findIndex((b) => b.id === blockId);
+  if (fromIndex === -1) return blocks;
+
+  const next = [...blocks];
+  const [item] = next.splice(fromIndex, 1);
+  const insertAt = toIndex > fromIndex ? toIndex - 1 : toIndex;
+  const clamped = Math.max(0, Math.min(insertAt, next.length));
+  if (clamped === fromIndex) return blocks;
+  next.splice(clamped, 0, item);
+  return next;
 }
 
-function rectsIntersect(
-  a: { left: number; top: number; right: number; bottom: number },
-  b: DOMRect,
-) {
-  return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+function computeDropIndex(
+  blocks: DocumentBlock[],
+  blockRefs: Record<string, HTMLElement | null>,
+  clientY: number,
+): number {
+  for (let i = 0; i < blocks.length; i++) {
+    const el = blockRefs[blocks[i].id];
+    if (!el) continue;
+    const rect = el.getBoundingClientRect();
+    if (clientY < rect.top + rect.height / 2) return i;
+  }
+  return blocks.length;
 }
 
 function headingAddLabel(level: HeadingBlock["level"]): string {
@@ -743,8 +719,8 @@ function headingAddLabel(level: HeadingBlock["level"]): string {
 function BlockRenderer({
   block,
   blockRefs,
-  isSelected = false,
-  onSelectBlock,
+  isDragging = false,
+  onDragHandlePointerDown,
   onUpdateSource,
   onRemoveSource,
   onDuplicateSource,
@@ -758,8 +734,8 @@ function BlockRenderer({
 }: {
   block: DocumentBlock;
   blockRefs: MutableRefObject<Record<string, HTMLElement | null>>;
-  isSelected?: boolean;
-  onSelectBlock?: (additive: boolean) => void;
+  isDragging?: boolean;
+  onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
   onDuplicateSource: (sourceId: string) => void;
@@ -820,15 +796,7 @@ function BlockRenderer({
       ref={(el) => {
         blockRefs.current[block.id] = el;
       }}
-      data-selectable-block={block.id}
-      data-selected={isSelected || undefined}
-      onMouseDown={(event) => {
-        if (event.button !== 0 || !onSelectBlock) return;
-        const target = event.target as HTMLElement;
-        if (target.closest("button, textarea, input, select, [role='listbox'], a")) return;
-        onSelectBlock(event.shiftKey);
-      }}
-      className="group relative mb-4 mt-2 min-w-0 overflow-x-hidden rounded-lg transition-shadow hover:shadow-[0_0_0_1px_#d4ced3] sm:overflow-visible"
+      className={`group relative mb-4 mt-2 min-w-0 rounded-lg ${isDragging ? "opacity-50" : ""}`}
     >
       <BlockAddButton
         addLabel="Add section"
@@ -837,7 +805,7 @@ function BlockRenderer({
       />
       <SectionContentBlock
         block={block}
-        onSelect={onSelectBlock}
+        onDragHandlePointerDown={onDragHandlePointerDown}
         onUpdateSource={onUpdateSource}
         onRemoveSource={onRemoveSource}
         onDuplicateSource={onDuplicateSource}

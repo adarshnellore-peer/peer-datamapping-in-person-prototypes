@@ -76,19 +76,9 @@ function ContextForAI({
   return (
     <div
       ref={containerRef}
-      className="group border-t border-[#ececec] bg-[#fafafa] px-3 py-3 sm:px-4"
+      className="border-t border-[#ececec] bg-[#fafafa] px-3 py-3 sm:px-4"
     >
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <p className="text-[12px] font-medium text-[#636161]">Context for AI</p>
-        {!editing && (
-          <Pencil
-            size={14}
-            strokeWidth={1.75}
-            className="shrink-0 text-[#636161] opacity-0 transition-opacity group-hover:opacity-100"
-            aria-hidden
-          />
-        )}
-      </div>
+      <p className="mb-1.5 text-[12px] font-medium text-[#636161]">Context for AI</p>
 
       {editing ? (
         <textarea
@@ -102,7 +92,7 @@ function ContextForAI({
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="block w-full rounded-md border border-[#e4e4e4] bg-white px-3 py-2 text-left transition-colors hover:border-[#d4ced3] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
+          className="group/preview relative block w-full rounded-md border border-[#e4e4e4] bg-white px-3 py-2 pr-9 text-left transition-colors hover:border-[#d4ced3] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
         >
           {displayText ? (
             <span className="line-clamp-2 whitespace-pre-line text-[14px] leading-relaxed text-[#4a4a4a]">
@@ -113,6 +103,12 @@ function ContextForAI({
               Add instructions for the model…
             </span>
           )}
+          <Pencil
+            size={14}
+            strokeWidth={1.75}
+            className="pointer-events-none absolute bottom-2 right-2 text-[#636161] opacity-0 transition-opacity group-hover/preview:opacity-100"
+            aria-hidden
+          />
         </button>
       )}
     </div>
@@ -121,7 +117,7 @@ function ContextForAI({
 
 export function SectionContentBlock({
   block,
-  onSelect,
+  onDragHandlePointerDown,
   onUpdateSource,
   onRemoveSource,
   onDuplicateSource,
@@ -132,7 +128,7 @@ export function SectionContentBlock({
   onDelete,
 }: {
   block: ContentBlockData;
-  onSelect?: (additive: boolean) => void;
+  onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
   onDuplicateSource: (sourceId: string) => void;
@@ -150,9 +146,9 @@ export function SectionContentBlock({
           data-drag-handle
           aria-label="Drag to reorder section"
           title="Drag to reorder"
-          onClick={(event) => {
+          onPointerDown={(event) => {
             event.stopPropagation();
-            onSelect?.(event.shiftKey);
+            onDragHandlePointerDown?.(event);
           }}
           className="flex shrink-0 cursor-grab items-center justify-center rounded p-1 text-[#9e9e9e] transition-colors hover:bg-[#f5f5f5] hover:text-[#636161] active:cursor-grabbing"
         >
