@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ChevronRight,
-  GripVertical,
   Plus,
   Search,
   Trash2,
@@ -118,7 +117,7 @@ function TocRow({
   hasChildren,
   onToggleCollapse,
   onNavigate,
-  onDragHandlePointerDown,
+  onDragPointerDown,
   label,
   actions,
 }: {
@@ -129,41 +128,32 @@ function TocRow({
   hasChildren?: boolean;
   onToggleCollapse?: () => void;
   onNavigate: () => void;
-  onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onDragPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   label: ReactNode;
   actions?: ReactNode;
 }) {
-  const indent = 8 + depth * 14;
+  const indent = 6 + depth * 12;
 
   return (
     <div
-      className={`group/toc-row flex min-h-[28px] items-center rounded-md pr-1 transition-colors ${
-        isDragging ? "opacity-40" : ""
-      } ${isActive ? "bg-[#fedbda]" : "hover:bg-black/[0.04]"}`}
+      onPointerDown={onDragPointerDown}
+      className={`group/toc-row flex min-h-[28px] items-start rounded-md pr-1 transition-colors ${
+        onDragPointerDown ? "cursor-grab touch-none active:cursor-grabbing" : ""
+      } ${isDragging ? "opacity-40" : ""} ${
+        isActive ? "bg-[#fedbda]" : "hover:bg-black/[0.04]"
+      }`}
       style={{ paddingLeft: `${indent}px` }}
     >
-      {onDragHandlePointerDown ? (
-        <button
-          type="button"
-          aria-label="Drag to reorder"
-          title="Drag to reorder"
-          onPointerDown={onDragHandlePointerDown}
-          className="mr-0.5 flex h-[22px] w-[14px] shrink-0 cursor-grab touch-none items-center justify-center rounded text-[#c8c8c8] transition-colors hover:text-[#636161] active:cursor-grabbing"
-        >
-          <GripVertical size={12} strokeWidth={2} />
-        </button>
-      ) : (
-        <span className="mr-0.5 w-[14px] shrink-0" aria-hidden />
-      )}
-
       <button
         type="button"
+        data-toc-no-drag
         aria-label={isCollapsed ? "Expand section" : "Collapse section"}
         onClick={(event) => {
           event.stopPropagation();
           onToggleCollapse?.();
         }}
-        className={`mr-0.5 flex h-[22px] w-[18px] shrink-0 items-center justify-center rounded text-[#9e9e9e] transition-colors hover:bg-black/[0.06] hover:text-[#636161] ${
+        onPointerDown={(event) => event.stopPropagation()}
+        className={`mr-0.5 mt-0.5 flex h-[22px] w-[18px] shrink-0 items-center justify-center rounded text-[#9e9e9e] transition-colors hover:bg-black/[0.06] hover:text-[#636161] ${
           hasChildren ? "visible" : "invisible pointer-events-none"
         }`}
       >
@@ -174,10 +164,17 @@ function TocRow({
         />
       </button>
 
-      <button
-        type="button"
-        onClick={onNavigate}
-        className={`min-w-0 flex-1 truncate py-1 text-left leading-tight ${
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={() => onNavigate()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onNavigate();
+          }
+        }}
+        className={`min-w-0 flex-1 py-1 text-left leading-snug ${
           depth === 0
             ? "text-[13px] font-semibold text-[#302f2f]"
             : depth === 1
@@ -186,9 +183,13 @@ function TocRow({
         } ${isActive ? "text-[#302f2f]" : ""}`}
       >
         {label}
-      </button>
+      </span>
 
-      {actions && <TocRowActions>{actions}</TocRowActions>}
+      {actions && (
+        <div data-toc-no-drag onPointerDown={(event) => event.stopPropagation()}>
+          <TocRowActions>{actions}</TocRowActions>
+        </div>
+      )}
     </div>
   );
 }
@@ -284,13 +285,12 @@ export function TableOfContents({
     return items.length;
   }, []);
 
-  const handleDragHandlePointerDown = useCallback(
-    (blockId: string, event: React.PointerEvent<HTMLButtonElement>) => {
+  const handleRowPointerDown = useCallback(
+    (blockId: string, event: React.PointerEvent<HTMLDivElement>) => {
       if (normalizedQuery) return;
+      if ((event.target as Element).closest("[data-toc-no-drag]")) return;
 
-      event.stopPropagation();
-      event.preventDefault();
-      const handle = event.currentTarget;
+      const row = event.currentTarget;
       const startY = event.clientY;
       let dragging = false;
       let dropFlatIndex = 0;
@@ -298,7 +298,8 @@ export function TableOfContents({
       const onMove = (ev: PointerEvent) => {
         if (!dragging && Math.abs(ev.clientY - startY) > 4) {
           dragging = true;
-          handle.setPointerCapture(ev.pointerId);
+          ev.preventDefault();
+          row.setPointerCapture(ev.pointerId);
           dropFlatIndex = computeDropFlatIndex(ev.clientY, visibleItemsRef.current);
           setTocDrag({ blockId, dropFlatIndex });
         }
@@ -313,8 +314,8 @@ export function TableOfContents({
           onMoveBlock(blockId, dropFlatIndex);
         }
         setTocDrag(null);
-        if (handle.hasPointerCapture(ev.pointerId)) {
-          handle.releasePointerCapture(ev.pointerId);
+        if (row.hasPointerCapture(ev.pointerId)) {
+          row.releasePointerCapture(ev.pointerId);
         }
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
@@ -396,10 +397,10 @@ export function TableOfContents({
                 isActive,
                 isDragging,
                 onNavigate: () => onNavigate(item.id),
-                onDragHandlePointerDown: normalizedQuery
+                onDragPointerDown: normalizedQuery
                   ? undefined
-                  : (event: React.PointerEvent<HTMLButtonElement>) =>
-                      handleDragHandlePointerDown(item.id, event),
+                  : (event: React.PointerEvent<HTMLDivElement>) =>
+                      handleRowPointerDown(item.id, event),
                 label: renderLabel(item),
               };
 
