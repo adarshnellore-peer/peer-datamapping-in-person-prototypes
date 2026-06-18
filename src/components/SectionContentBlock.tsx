@@ -35,23 +35,41 @@ function formatPromptForDisplay(prompt: string): string {
   );
 }
 
-function ContextForAI({
-  prompt,
+function EditableTextSection({
+  label,
+  value,
   onChange,
+  placeholder,
+  formatDisplay,
+  previewLines = 2,
+  editingRows = 6,
+  muted = false,
 }: {
-  prompt: string;
-  onChange: (prompt: string) => void;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  formatDisplay?: (value: string) => string;
+  previewLines?: 2 | 3 | 4;
+  editingRows?: number;
+  muted?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(prompt);
+  const [draft, setDraft] = useState(value);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const displayText = formatPromptForDisplay(prompt);
+  const displayText = formatDisplay ? formatDisplay(value) : value.trim();
+  const lineClampClass =
+    previewLines === 4
+      ? "line-clamp-4"
+      : previewLines === 3
+        ? "line-clamp-3"
+        : "line-clamp-2";
 
   useEffect(() => {
-    if (!editing) setDraft(prompt);
-  }, [prompt, editing]);
+    if (!editing) setDraft(value);
+  }, [value, editing]);
 
   useEffect(() => {
     if (!editing) return;
@@ -64,44 +82,45 @@ function ContextForAI({
         containerRef.current &&
         !containerRef.current.contains(event.target as Node)
       ) {
-        if (draft !== prompt) onChange(draft);
+        if (draft !== value) onChange(draft);
         setEditing(false);
       }
     };
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [editing, draft, prompt, onChange]);
+  }, [editing, draft, value, onChange]);
 
   return (
-    <div
-      ref={containerRef}
-      className="border-t border-[#ececec] bg-[#fafafa] px-3 py-3 sm:px-4"
-    >
-      <p className="mb-1.5 text-[12px] font-medium text-[#636161]">Context for AI</p>
+    <div ref={containerRef}>
+      <p className="mb-1.5 text-[12px] font-medium text-[#636161]">{label}</p>
 
       {editing ? (
         <textarea
           ref={textareaRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          rows={8}
+          rows={editingRows}
           className="w-full resize-y rounded-md border border-[#d4ced3] bg-white px-3 py-2.5 text-[14px] leading-relaxed text-[#302f2f] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
         />
       ) : (
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="group/preview relative block w-full rounded-md border border-[#e4e4e4] bg-white px-3 py-2 pr-9 text-left transition-colors hover:border-[#d4ced3] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
+          className={`group/preview relative block w-full rounded-md border bg-white px-3 py-2 pr-9 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30 ${
+            muted
+              ? "border-[#e4e4e4] hover:border-[#d4ced3]"
+              : "border-[#d4ced3] hover:border-[#bdbdbd]"
+          }`}
         >
           {displayText ? (
-            <span className="line-clamp-2 whitespace-pre-line text-[14px] leading-relaxed text-[#4a4a4a]">
+            <span
+              className={`${lineClampClass} whitespace-pre-line text-[14px] leading-relaxed text-[#4a4a4a]`}
+            >
               {displayText}
             </span>
           ) : (
-            <span className="text-[14px] leading-relaxed text-[#b0b0b0]">
-              Add instructions for the model…
-            </span>
+            <span className="text-[14px] leading-relaxed text-[#b0b0b0]">{placeholder}</span>
           )}
           <Pencil
             size={14}
@@ -123,6 +142,7 @@ export function SectionContentBlock({
   onDuplicateSource,
   onAddSource,
   onPromptChange,
+  onAdditionalContextChange,
   onOutputTypeChange,
   onDuplicate,
   onDelete,
@@ -134,6 +154,7 @@ export function SectionContentBlock({
   onDuplicateSource: (sourceId: string) => void;
   onAddSource: () => void;
   onPromptChange: (prompt: string) => void;
+  onAdditionalContextChange: (additionalContext: string) => void;
   onOutputTypeChange: (outputType: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -170,35 +191,57 @@ export function SectionContentBlock({
         </div>
       </div>
 
+      <div className="border-b border-[#ececec] px-3 py-3 sm:px-4">
+        <EditableTextSection
+          label="System prompt"
+          value={block.prompt}
+          onChange={onPromptChange}
+          placeholder="Add system instructions for this section…"
+          formatDisplay={formatPromptForDisplay}
+          previewLines={4}
+          editingRows={10}
+        />
+      </div>
+
       <div className="px-3 py-3 sm:px-4">
         <p className="mb-2 text-[12px] font-medium text-[#636161]">Sources</p>
         <div className="space-y-2">
-        {block.sources.length === 0 ? (
-          <p className="py-1 text-center text-[13px] text-[#9e9e9e]">
-            No sources mapped to this section.
-          </p>
-        ) : (
-          block.sources.map((source) => (
-            <SourceCard
-              key={source.id}
-              source={source}
-              onChange={onUpdateSource}
-              onDuplicate={() => onDuplicateSource(source.id)}
-              onRemove={() => onRemoveSource(source.id)}
-            />
-          ))
-        )}
-        <button
-          type="button"
-          onClick={onAddSource}
-          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-[#d4ced3] py-2 text-[13px] font-medium text-[#636161] transition-colors hover:border-[#ff4e49]/40 hover:bg-[#fffafa] hover:text-[#302f2f]"
-        >
-          <Plus size={14} /> Add source
-        </button>
+          {block.sources.length === 0 ? (
+            <p className="py-1 text-center text-[13px] text-[#9e9e9e]">
+              No sources mapped to this section.
+            </p>
+          ) : (
+            block.sources.map((source) => (
+              <SourceCard
+                key={source.id}
+                source={source}
+                onChange={onUpdateSource}
+                onDuplicate={() => onDuplicateSource(source.id)}
+                onRemove={() => onRemoveSource(source.id)}
+              />
+            ))
+          )}
+          <button
+            type="button"
+            onClick={onAddSource}
+            className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-[#d4ced3] py-2 text-[13px] font-medium text-[#636161] transition-colors hover:border-[#ff4e49]/40 hover:bg-[#fffafa] hover:text-[#302f2f]"
+          >
+            <Plus size={14} /> Add source
+          </button>
         </div>
       </div>
 
-      <ContextForAI prompt={block.prompt} onChange={onPromptChange} />
+      <div className="border-t border-[#ececec] bg-[#fafafa] px-3 py-3 sm:px-4">
+        <EditableTextSection
+          label="Additional context"
+          value={block.additionalContext ?? ""}
+          onChange={onAdditionalContextChange}
+          placeholder="Add optional context for this section…"
+          previewLines={2}
+          editingRows={5}
+          muted
+        />
+      </div>
     </div>
   );
 }

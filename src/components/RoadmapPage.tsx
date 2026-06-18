@@ -82,6 +82,7 @@ function createContentBlock(): ContentBlockData {
     title: "New section",
     previewText: "",
     prompt: "",
+    additionalContext: "",
     outputType: "OUTPUT_TYPE_SUMMARY",
     sources: [],
   };
@@ -176,6 +177,16 @@ export function RoadmapPage() {
       prev.map((block) =>
         block.type === "content" && block.id === blockId
           ? { ...block, prompt }
+          : block,
+      ),
+    );
+  };
+
+  const updateAdditionalContext = (blockId: string, additionalContext: string) => {
+    setBlocks((prev) =>
+      prev.map((block) =>
+        block.type === "content" && block.id === blockId
+          ? { ...block, additionalContext }
           : block,
       ),
     );
@@ -565,6 +576,9 @@ export function RoadmapPage() {
                     setToast("Study library is disabled in this prototype")
                   }
                   onPromptChange={(prompt) => updatePrompt(block.id, prompt)}
+                  onAdditionalContextChange={(additionalContext) =>
+                    updateAdditionalContext(block.id, additionalContext)
+                  }
                   onOutputTypeChange={(outputType) =>
                     updateOutputType(block.id, outputType)
                   }
@@ -737,6 +751,7 @@ function BlockRenderer({
   onDuplicateSource,
   onAddSource,
   onPromptChange,
+  onAdditionalContextChange,
   onOutputTypeChange,
   onDuplicate,
   onDelete,
@@ -752,6 +767,7 @@ function BlockRenderer({
   onDuplicateSource: (sourceId: string) => void;
   onAddSource: () => void;
   onPromptChange: (prompt: string) => void;
+  onAdditionalContextChange: (additionalContext: string) => void;
   onOutputTypeChange: (outputType: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
@@ -822,6 +838,7 @@ function BlockRenderer({
         onDuplicateSource={onDuplicateSource}
         onAddSource={onAddSource}
         onPromptChange={onPromptChange}
+        onAdditionalContextChange={onAdditionalContextChange}
         onOutputTypeChange={onOutputTypeChange}
         onDuplicate={() => onDuplicate(block.id)}
         onDelete={() => onDelete(block.id)}

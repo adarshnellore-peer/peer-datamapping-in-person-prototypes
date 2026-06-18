@@ -16,6 +16,7 @@ export type ContentBlockData = {
   title: string;
   previewText: string;
   prompt: string;
+  additionalContext?: string;
   outputType: string;
   sources: RoadmapSource[];
 };
