@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { ChevronDown, Copy, X } from "lucide-react";
+import { Copy, X } from "lucide-react";
 import { SourceCardPillFields } from "./SourceCardPillFields";
 import { getSourceHeaderParts } from "../data/sourceHelpers";
 import type { RoadmapSource } from "../data/roadmap";
@@ -23,7 +22,10 @@ export function DuplicateDeleteActions({
         type="button"
         aria-label={duplicateLabel}
         title={duplicateLabel}
-        onClick={onDuplicate}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDuplicate();
+        }}
         className="rounded p-1.5 text-[#525252] hover:bg-black/5 sm:p-1"
       >
         <Copy size={14} strokeWidth={1.75} />
@@ -32,7 +34,10 @@ export function DuplicateDeleteActions({
         type="button"
         aria-label={removeLabel}
         title={removeLabel}
-        onClick={onRemove}
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove();
+        }}
         className="rounded p-1.5 text-[#525252] hover:bg-[#fff0f0] hover:text-[#ff4e49] sm:p-1"
       >
         <X size={14} strokeWidth={1.75} />
@@ -43,34 +48,42 @@ export function DuplicateDeleteActions({
 
 export function SourceCard({
   source,
+  isExpanded,
+  isTraced,
+  onCardClick,
   onChange,
   onDuplicate,
   onRemove,
 }: {
   source: RoadmapSource;
+  isExpanded: boolean;
+  isTraced: boolean;
+  onCardClick: () => void;
   onChange: (source: RoadmapSource) => void;
   onDuplicate: () => void;
   onRemove: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const { tag, primary, secondary } = getSourceHeaderParts(source);
 
   return (
-    <div className="overflow-hidden rounded-md border border-[#c8c8c8] bg-[#ececec]">
-      <div className="flex items-center gap-2 px-3 py-2.5">
+    <div
+      data-source-card=""
+      className={`overflow-hidden rounded-md border transition-colors ${
+        isTraced ? "border-[#ff4e49]" : "border-[#c8c8c8]"
+      }`}
+    >
+      <div
+        className={`flex items-center gap-2 bg-[#ececec] px-3 py-2.5 transition-colors ${
+          !isExpanded ? "cursor-pointer hover:bg-[#dedede]" : ""
+        }`}
+      >
         <button
           type="button"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((open) => !open)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          onClick={onCardClick}
+          className={`flex min-w-0 flex-1 items-center gap-2 text-left ${
+            !isExpanded ? "cursor-pointer" : ""
+          }`}
         >
-          <ChevronDown
-            size={15}
-            strokeWidth={1.75}
-            className={`shrink-0 text-[#525252] transition-transform ${
-              expanded ? "rotate-180" : ""
-            }`}
-          />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[14px] font-semibold leading-snug text-[#1f1f1f]">
               {primary}
@@ -99,7 +112,7 @@ export function SourceCard({
         />
       </div>
 
-      {expanded && (
+      {isExpanded && (
         <div className="border-t border-[#c8c8c8] bg-white px-3 py-3">
           <SourceCardPillFields source={source} onChange={onChange} />
         </div>

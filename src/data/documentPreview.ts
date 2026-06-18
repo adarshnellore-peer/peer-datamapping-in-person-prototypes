@@ -1,10 +1,127 @@
+import { REFERENCE_KEYS } from "./roadmap";
+import type { RoadmapSource } from "./roadmap";
+import { getReferenceSectionName, getSourceLabel } from "./sourceHelpers";
+
 export type DocumentSection = {
   id: string;
   referenceKey: string;
   title: string;
   kind: "section" | "figure" | "listing" | "table";
   preview: string;
+  isTemplateInstruction?: boolean;
 };
+
+export type TracePreview = {
+  title: string;
+  body: string;
+  isTemplateInstruction: boolean;
+};
+
+export type DocumentPdfAsset = {
+  file: string;
+  pageCount: number;
+};
+
+/** Real PDFs served from public/pdfs/ (see public/pdfs/README.md). */
+export const DOCUMENT_PDF_ASSETS: Record<string, DocumentPdfAsset> = {
+  "Clinical Study Report": {
+    file: "/pdfs/clinical-study-report.pdf",
+    pageCount: 154,
+  },
+  "247HV101 Protocol Version 3": {
+    file: "/pdfs/protocol.pdf",
+    pageCount: 1413,
+  },
+  "109MS306 (CONNECT) LTE Statistical Analysis Plan": {
+    file: "/pdfs/sap.pdf",
+    pageCount: 59,
+  },
+  "C4591001 Protocol Amendment 9": {
+    file: "/pdfs/c4591001-protocol.pdf",
+    pageCount: 1413,
+  },
+  "C4591001 Final Statistical Analysis Plan": {
+    file: "/pdfs/c4591001-sap.pdf",
+    pageCount: 59,
+  },
+  "Biogen Clinical Study Report Template": {
+    file: "/pdfs/generic-template.pdf",
+    pageCount: 65,
+  },
+};
+
+const DOCUMENT_PAGE_COUNTS: Record<string, number> = {
+  "Biogen Clinical Study Report Template": 65,
+  "247HV101 Protocol Version 3": 312,
+  "109MS306 (CONNECT) LTE Statistical Analysis Plan": 128,
+  "Clinical Study Report": 420,
+  "C4591001 Protocol Amendment 9": 1413,
+  "C4591001 Final Statistical Analysis Plan": 59,
+};
+
+export function getDocumentPdfAsset(dataSource: string): DocumentPdfAsset | null {
+  return DOCUMENT_PDF_ASSETS[dataSource] ?? null;
+}
+
+export function getDocumentPdfPageUrl(dataSource: string, page: number): string | null {
+  const asset = getDocumentPdfAsset(dataSource);
+  if (!asset) return null;
+  const clamped = Math.max(1, Math.min(page, asset.pageCount));
+  return `${asset.file}#page=${clamped}`;
+}
+
+const SECTION_PREVIEWS: Record<string, string> = {
+  "Protocol Title Page: 1-1":
+    "A PHASE 1/2/3, PLACEBO-CONTROLLED, RANDOMIZED study to evaluate the safety, tolerability, immunogenicity, and efficacy of SARS-CoV-2 RNA vaccine candidates against COVID-19 in healthy individuals.",
+  "Protocol Amendment Summary of Changes / Document History: 2-9":
+    "Summary of changes table listing amendment dates, sections affected, and brief descriptions of revisions.",
+  "Table of Contents: 10-15": "Protocol section listing with page references.",
+  "Synopsis: 3-13":
+    "Study synopsis including objectives, design, population, treatments, and key efficacy and safety results.",
+  "Template Section 9.2: 142-148":
+    "[Instructional text goes here. Use paragraphs as appropriate.]",
+  "Template Section 10.8: 168-174":
+    "[Instructional text goes here. Use paragraphs as appropriate.]",
+};
+
+function isTemplateDataSource(dataSource: string): boolean {
+  return dataSource.includes("Template");
+}
+
+function sectionKind(referenceKey: string): DocumentSection["kind"] {
+  const name = getReferenceSectionName(referenceKey).toLowerCase();
+  if (name.includes("table")) return "table";
+  if (name.includes("figure") || name.includes("fig")) return "figure";
+  if (name.includes("listing")) return "listing";
+  return "section";
+}
+
+function defaultPreview(dataSource: string, referenceKey: string): string {
+  if (SECTION_PREVIEWS[referenceKey]) return SECTION_PREVIEWS[referenceKey];
+  const section = getReferenceSectionName(referenceKey);
+  if (isTemplateDataSource(dataSource)) {
+    return `[Instructional text for ${section}. Use paragraphs as appropriate.]`;
+  }
+  return `Content from ${section} of ${dataSource}.`;
+}
+
+function buildSection(dataSource: string, referenceKey: string, index: number): DocumentSection {
+  const title = getReferenceSectionName(referenceKey);
+  const template = isTemplateDataSource(dataSource);
+  return {
+    id: `${dataSource}-${index}`,
+    referenceKey,
+    title,
+    kind: sectionKind(referenceKey),
+    preview: defaultPreview(dataSource, referenceKey),
+    isTemplateInstruction: template,
+  };
+}
+
+function buildSectionsFromReferenceKeys(dataSource: string): DocumentSection[] {
+  const keys = REFERENCE_KEYS[dataSource] ?? [];
+  return keys.map((referenceKey, index) => buildSection(dataSource, referenceKey, index));
+}
 
 export const DOCUMENT_SECTIONS: Record<string, DocumentSection[]> = {
   "Clinical Study Report": [
@@ -13,8 +130,7 @@ export const DOCUMENT_SECTIONS: Record<string, DocumentSection[]> = {
       referenceKey: "Synopsis: 3-13",
       title: "Synopsis",
       kind: "section",
-      preview:
-        "This Phase 3 study evaluated mirvetuximab soravtansine in platinum-resistant ovarian cancer…",
+      preview: SECTION_PREVIEWS["Synopsis: 3-13"],
     },
     {
       id: "csr-intro",
@@ -53,58 +169,116 @@ export const DOCUMENT_SECTIONS: Record<string, DocumentSection[]> = {
       preview: "Document outline and section page references.",
     },
   ],
-  "247HV101 Protocol Version 3": [
-    {
-      id: "prot-title",
-      referenceKey: "Protocol Title Page: 1-1",
-      title: "Title Page",
-      kind: "section",
-      preview: "Protocol title, sponsor, and amendment number.",
-    },
-    {
-      id: "prot-s1",
-      referenceKey: "Section 1: 17-34",
-      title: "Section 1 — Background",
-      kind: "section",
-      preview: "Background, rationale, and study objectives.",
-    },
-    {
-      id: "prot-s8",
-      referenceKey: "Section 8: 84-102",
-      title: "Section 8 — Study design",
-      kind: "section",
-      preview: "Study design, visit schedule, and procedures.",
-    },
-    {
-      id: "prot-s92",
-      referenceKey: "Section 9.2: 118-126",
-      title: "Section 9.2 — Study duration",
-      kind: "section",
-      preview: "Study timelines, enrollment period, and follow-up.",
-    },
-  ],
+  "247HV101 Protocol Version 3": buildSectionsFromReferenceKeys("247HV101 Protocol Version 3"),
   "C4591001 Protocol Amendment 9": [
     {
-      id: "prot-title",
+      id: "c459-title",
       referenceKey: "Protocol Title Page: 1-1",
-      title: "Title Page",
+      title: "Protocol Title Page",
       kind: "section",
-      preview: "Protocol title, sponsor, and amendment number.",
+      preview: SECTION_PREVIEWS["Protocol Title Page: 1-1"],
     },
     {
-      id: "prot-synopsis",
-      referenceKey: "Table of Contents: 10-15",
-      title: "Table of Contents",
+      id: "c459-amend",
+      referenceKey: "Protocol Amendment Summary of Changes / Document History: 2-9",
+      title: "Protocol Amendment Summary of Changes",
       kind: "section",
-      preview: "Protocol section listing.",
+      preview: SECTION_PREVIEWS["Protocol Amendment Summary of Changes / Document History: 2-9"],
     },
+    ...buildSectionsFromReferenceKeys("C4591001 Protocol Amendment 9").filter(
+      (s) =>
+        s.referenceKey !== "Protocol Title Page: 1-1" &&
+        s.referenceKey !== "Protocol Amendment Summary of Changes / Document History: 2-9",
+    ),
   ],
+  "Biogen Clinical Study Report Template": buildSectionsFromReferenceKeys(
+    "Biogen Clinical Study Report Template",
+  ).map((s) => ({ ...s, isTemplateInstruction: true })),
+  "109MS306 (CONNECT) LTE Statistical Analysis Plan": buildSectionsFromReferenceKeys(
+    "109MS306 (CONNECT) LTE Statistical Analysis Plan",
+  ),
+  "C4591001 Final Statistical Analysis Plan": buildSectionsFromReferenceKeys(
+    "C4591001 Final Statistical Analysis Plan",
+  ),
 };
 
 export function getSectionsForDocument(dataSource: string): DocumentSection[] {
-  return DOCUMENT_SECTIONS[dataSource] ?? [];
+  if (DOCUMENT_SECTIONS[dataSource]) return DOCUMENT_SECTIONS[dataSource];
+  return buildSectionsFromReferenceKeys(dataSource);
 }
 
 export function getDefaultSectionForDocument(dataSource: string): DocumentSection | undefined {
   return getSectionsForDocument(dataSource)[0];
+}
+
+export function parsePageRange(referenceKey: string): {
+  start: number;
+  end: number;
+  chip: string;
+} {
+  const colon = referenceKey.lastIndexOf(":");
+  const rangePart = colon === -1 ? referenceKey.trim() : referenceKey.slice(colon + 1).trim();
+  const match = rangePart.match(/(\d+)\s*-\s*(\d+)/);
+  if (!match) {
+    const single = Number.parseInt(rangePart, 10);
+    const page = Number.isFinite(single) ? single : 1;
+    return { start: page, end: page, chip: String(page) };
+  }
+  const start = Number.parseInt(match[1], 10);
+  const end = Number.parseInt(match[2], 10);
+  return { start, end, chip: `${start}-${end}` };
+}
+
+export function getDocumentPageCount(dataSource: string): number {
+  const pdfAsset = getDocumentPdfAsset(dataSource);
+  if (pdfAsset) return pdfAsset.pageCount;
+
+  const sections = getSectionsForDocument(dataSource);
+  if (sections.length === 0) return DOCUMENT_PAGE_COUNTS[dataSource] ?? 100;
+  const maxEnd = sections.reduce((max, section) => {
+    const { end } = parsePageRange(section.referenceKey);
+    return Math.max(max, end);
+  }, 1);
+  return Math.max(DOCUMENT_PAGE_COUNTS[dataSource] ?? 0, maxEnd);
+}
+
+export function getPageRangeChips(dataSource: string): string[] {
+  const chips = getSectionsForDocument(dataSource).map((s) => parsePageRange(s.referenceKey).chip);
+  return [...new Set(chips)];
+}
+
+export function findSectionByReferenceKey(
+  dataSource: string,
+  referenceKey: string,
+): DocumentSection | undefined {
+  return getSectionsForDocument(dataSource).find((s) => s.referenceKey === referenceKey);
+}
+
+export function getPreviewForSource(source: RoadmapSource, page: number): TracePreview {
+  if (source.sourceType !== "DATA_SOURCE") {
+    return {
+      title: getSourceLabel(source),
+      body: "Preview not available for this source type.",
+      isTemplateInstruction: false,
+    };
+  }
+
+  const sections = getSectionsForDocument(source.dataSource);
+  const matched =
+    sections.find((s) => {
+      const { start, end } = parsePageRange(s.referenceKey);
+      return page >= start && page <= end;
+    }) ?? findSectionByReferenceKey(source.dataSource, source.referenceKey);
+
+  const title = matched?.title ?? getReferenceSectionName(source.referenceKey);
+  const body = matched?.preview ?? defaultPreview(source.dataSource, source.referenceKey);
+  const isTemplateInstruction =
+    matched?.isTemplateInstruction ?? isTemplateDataSource(source.dataSource);
+
+  return { title, body, isTemplateInstruction };
+}
+
+export function getInitialPageForSource(source: RoadmapSource): number {
+  if (source.sourceType !== "DATA_SOURCE") return 1;
+  return parsePageRange(source.referenceKey).start;
 }

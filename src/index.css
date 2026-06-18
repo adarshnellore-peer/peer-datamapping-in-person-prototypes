@@ -92,7 +92,7 @@ html {
   border-color: var(--peer-primary-border);
 }
 
-.roadmap-blocks > *:first-child [class*="mt-"] {
+.roadmap-blocks > *:first-child {
   margin-top: 0 !important;
 }
 

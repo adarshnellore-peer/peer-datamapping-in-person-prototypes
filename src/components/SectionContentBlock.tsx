@@ -136,6 +136,9 @@ function EditableTextSection({
 
 export function SectionContentBlock({
   block,
+  tracedSourceId,
+  expandedSourceId,
+  onSourceCardClick,
   onDragHandlePointerDown,
   onUpdateSource,
   onRemoveSource,
@@ -148,6 +151,9 @@ export function SectionContentBlock({
   onDelete,
 }: {
   block: ContentBlockData;
+  tracedSourceId: string | null;
+  expandedSourceId: string | null;
+  onSourceCardClick: (sourceId: string) => void;
   onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
@@ -215,6 +221,9 @@ export function SectionContentBlock({
               <SourceCard
                 key={source.id}
                 source={source}
+                isTraced={tracedSourceId === source.id}
+                isExpanded={expandedSourceId === source.id}
+                onCardClick={() => onSourceCardClick(source.id)}
                 onChange={onUpdateSource}
                 onDuplicate={() => onDuplicateSource(source.id)}
                 onRemove={() => onRemoveSource(source.id)}

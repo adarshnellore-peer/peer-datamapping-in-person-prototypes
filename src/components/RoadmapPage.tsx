@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, Fragment, type MutableRefObje
 import {
   ChevronDown,
   Copy,
-  // FileSearch,
+  FileSearch,
   History,
   Info,
   List,
@@ -22,18 +22,73 @@ import {
   Toast,
 } from "./EditRoadmapPanel";
 import { SectionContentBlock } from "./SectionContentBlock";
+import { DataSourcePanel } from "./DataSourcePanel";
+import { TableOfContents } from "./TableOfContents";
 // import { SourceLibraryOverlay } from "./SourceLibraryOverlay";
-import { DOCUMENT_BLOCKS, TOC_ITEMS } from "../data/roadmapDocument";
+import { DOCUMENT_BLOCKS } from "../data/roadmapDocument";
 import type { RoadmapSource } from "../data/roadmap";
 // import { getDefaultSectionForDocument } from "../data/documentPreview";
 import type { ContentBlockData, DocumentBlock, HeadingBlock, ViewMode } from "../types";
+import {
+  bumpSubsequentHeadingNumbers,
+  deleteHeadingSection,
+  findInsertIndexAfterHeadingSection,
+  getHeadingSectionBlockIds,
+  moveDocumentBlockFromTocDrop,
+  nextSiblingHeadingNumber,
+} from "../utils/documentBlocks";
 
 type ActivePanel =
   | { type: "share" }
   | { type: "nav" }
   | { type: "version" }
-  | { type: "trace" }
   | null;
+
+type TraceState = {
+  blockId: string;
+  sourceId: string;
+  view: "list" | "detail";
+} | null;
+
+type ExpandedSourceState = {
+  blockId: string;
+  sourceId: string;
+} | null;
+
+function findFirstMappedSource(
+  blocks: DocumentBlock[],
+): { blockId: string; sourceId: string } | null {
+  for (const block of blocks) {
+    if (block.type === "content" && block.sources.length > 0) {
+      return { blockId: block.id, sourceId: block.sources[0].id };
+    }
+  }
+  return null;
+}
+
+function findSourceInBlocks(
+  blocks: DocumentBlock[],
+  trace: { blockId: string; sourceId: string },
+): RoadmapSource | null {
+  const block = blocks.find((b) => b.id === trace.blockId);
+  if (!block || block.type !== "content") return null;
+  return block.sources.find((s) => s.id === trace.sourceId) ?? null;
+}
+
+function findBlockSources(
+  blocks: DocumentBlock[],
+  blockId: string,
+): RoadmapSource[] {
+  const block = blocks.find((b) => b.id === blockId);
+  if (!block || block.type !== "content") return [];
+  return block.sources;
+}
+
+function findBlockTitle(blocks: DocumentBlock[], blockId: string): string | null {
+  const block = blocks.find((b) => b.id === blockId);
+  if (!block || block.type !== "content") return null;
+  return block.title;
+}
 
 // type LibraryMode = { type: "browse" } | { type: "add"; blockId: string };
 
@@ -45,34 +100,17 @@ function cloneBlock(block: ContentBlockData): ContentBlockData {
   };
 }
 
-function createHeadingBlock(level: HeadingBlock["level"] = 3): HeadingBlock {
+function createHeadingBlock(
+  level: HeadingBlock["level"] = 2,
+  number = "",
+): HeadingBlock {
   return {
     id: crypto.randomUUID(),
     type: "heading",
     level,
-    number: "",
+    number,
     title: "New heading",
   };
-}
-
-function findInsertIndexAfterHeadingSection(
-  blocks: DocumentBlock[],
-  headingId: string,
-): number | null {
-  const headingIndex = blocks.findIndex((b) => b.id === headingId);
-  if (headingIndex === -1) return null;
-
-  const heading = blocks[headingIndex];
-  if (heading.type !== "heading") return null;
-
-  for (let i = headingIndex + 1; i < blocks.length; i++) {
-    const block = blocks[i];
-    if (block.type === "heading" && block.level <= heading.level) {
-      return i;
-    }
-  }
-
-  return blocks.length;
 }
 
 function createContentBlock(): ContentBlockData {
@@ -95,6 +133,8 @@ export function RoadmapPage() {
   const [tocOpen, setTocOpen] = useState(true);
   const [activeTocId, setActiveTocId] = useState<string | null>("h-1-3");
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
+  const [traceState, setTraceState] = useState<TraceState>(null);
+  const [expandedSource, setExpandedSource] = useState<ExpandedSourceState>(null);
   const [toast, setToast] = useState<string | null>(null);
   // const [libraryMode, setLibraryMode] = useState<LibraryMode | null>(null);
   const [dragState, setDragState] = useState<{
@@ -166,6 +206,10 @@ export function RoadmapPage() {
     blockRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
     setActiveTocId(id);
     if (window.innerWidth < 768) setTocOpen(false);
+  }, []);
+
+  const moveBlockFromToc = useCallback((blockId: string, dropFlatIndex: number) => {
+    setBlocks((prev) => moveDocumentBlockFromTocDrop(prev, blockId, dropFlatIndex));
   }, []);
 
   useEffect(() => {
@@ -240,6 +284,12 @@ export function RoadmapPage() {
           : block,
       ),
     );
+    setTraceState((prev) =>
+      prev?.blockId === blockId && prev.sourceId === sourceId ? null : prev,
+    );
+    setExpandedSource((prev) =>
+      prev?.blockId === blockId && prev.sourceId === sourceId ? null : prev,
+    );
   };
 
   /* PROTOTYPE_DISABLED: study library add flow
@@ -268,7 +318,19 @@ export function RoadmapPage() {
 
   const deleteContentBlock = (blockId: string) => {
     setBlocks((prev) => prev.filter((b) => b.id !== blockId));
-    setToast("Content block deleted");
+    setTraceState((prev) => (prev?.blockId === blockId ? null : prev));
+    setExpandedSource((prev) => (prev?.blockId === blockId ? null : prev));
+    setActiveTocId((prev) => (prev === blockId ? null : prev));
+    setToast("Section deleted");
+  };
+
+  const deleteHeading = (headingId: string) => {
+    const removedIds = new Set(getHeadingSectionBlockIds(blocks, headingId));
+    setBlocks((prev) => deleteHeadingSection(prev, headingId));
+    setTraceState((prev) => (prev && removedIds.has(prev.blockId) ? null : prev));
+    setExpandedSource((prev) => (prev && removedIds.has(prev.blockId) ? null : prev));
+    setActiveTocId((prev) => (prev && removedIds.has(prev) ? null : prev));
+    setToast("Heading deleted");
   };
 
   const duplicateBlock = (blockId: string) => {
@@ -297,11 +359,20 @@ export function RoadmapPage() {
 
   const addHeadingAfter = (headingId: string, level?: HeadingBlock["level"]) => {
     setBlocks((prev) => {
+      const headingIndex = prev.findIndex((b) => b.id === headingId);
       const insertAt = findInsertIndexAfterHeadingSection(prev, headingId);
-      if (insertAt === null) return prev;
+      if (insertAt === null || headingIndex === -1) return prev;
+
+      const heading = prev[headingIndex];
+      if (heading.type !== "heading") return prev;
+
+      const siblingLevel = level ?? heading.level;
+      const newNumber = nextSiblingHeadingNumber(prev, headingIndex);
+      const newHeading = createHeadingBlock(siblingLevel, newNumber);
+
       const next = [...prev];
-      next.splice(insertAt, 0, createHeadingBlock(level));
-      return next;
+      next.splice(insertAt, 0, newHeading);
+      return bumpSubsequentHeadingNumbers(next, insertAt, siblingLevel, newNumber);
     });
     setToast("Heading added");
   };
@@ -309,6 +380,74 @@ export function RoadmapPage() {
   const addContentAfter = (afterBlockId: string) => {
     insertBlockAfter(afterBlockId, createContentBlock());
   };
+
+  const closeTrace = useCallback(() => {
+    setTraceState(null);
+    setExpandedSource(null);
+  }, []);
+
+  const openTrace = useCallback(
+    (blockId: string, sourceId: string) => {
+      setActivePanel((panel) => (panel?.type === "version" ? null : panel));
+      setTraceState({ blockId, sourceId, view: "detail" });
+      setExpandedSource({ blockId, sourceId });
+      if (window.innerWidth < 768) setTocOpen(false);
+    },
+    [],
+  );
+
+  const handleSourceCardClick = useCallback(
+    (blockId: string, sourceId: string) => {
+      openTrace(blockId, sourceId);
+    },
+    [openTrace],
+  );
+
+  useEffect(() => {
+    if (!expandedSource) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-source-card]")) return;
+      if (target.closest("[data-datasource-panel]")) return;
+
+      setExpandedSource(null);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [expandedSource]);
+
+  const toggleTracePanel = useCallback(() => {
+    if (traceState) {
+      setTraceState(null);
+      setExpandedSource(null);
+      return;
+    }
+    const target = findFirstMappedSource(blocks);
+    if (!target) {
+      setToast("No sources mapped to trace");
+      return;
+    }
+    setActivePanel((panel) => (panel?.type === "version" ? null : panel));
+    setTraceState({ ...target, view: "list" });
+    setExpandedSource(target);
+    if (window.innerWidth < 768) setTocOpen(false);
+  }, [blocks, traceState]);
+
+  const tracedSource = traceState ? findSourceInBlocks(blocks, traceState) : null;
+  const tracedBlockSources = traceState
+    ? findBlockSources(blocks, traceState.blockId)
+    : [];
+  const tracedSectionTitle = traceState
+    ? findBlockTitle(blocks, traceState.blockId)
+    : null;
+
+  const handleTracedSourceChange = useCallback((sourceId: string) => {
+    setTraceState((prev) => (prev ? { ...prev, sourceId } : null));
+    setExpandedSource((prev) => (prev ? { ...prev, sourceId } : null));
+  }, []);
 
   return (
     <div className="flex h-dvh flex-col bg-[#eeeeee]">
@@ -496,26 +635,32 @@ export function RoadmapPage() {
           */}
           <button
             type="button"
-            onClick={() =>
-              setActivePanel((p) => (p?.type === "version" ? null : { type: "version" }))
-            }
+            onClick={() => {
+              setTraceState(null);
+              setExpandedSource(null);
+              setActivePanel((p) => (p?.type === "version" ? null : { type: "version" }));
+            }}
             className="flex h-8 w-8 items-center justify-center rounded hover:bg-[#f5f5f5]"
             aria-label="Toggle version panel"
           >
             <History size={18} strokeWidth={1.75} color="#636161" />
           </button>
-          {/* PROTOTYPE_DISABLED: trace to datasource
           <button
             type="button"
-            onClick={() =>
-              setActivePanel((p) => (p?.type === "trace" ? null : { type: "trace" }))
+            data-trace-toggle=""
+            onClick={toggleTracePanel}
+            aria-pressed={traceState !== null}
+            aria-label={
+              traceState
+                ? "Exit trace to datasource view"
+                : "Enter trace to datasource view"
             }
-            className="flex h-8 w-8 items-center justify-center rounded hover:bg-[#f5f5f5]"
-            aria-label="Enter trace to datasource view"
+            className={`flex h-8 w-8 items-center justify-center rounded hover:bg-[#f5f5f5] ${
+              traceState ? "bg-[#fedbda]" : ""
+            }`}
           >
             <FileSearch size={18} strokeWidth={1.75} color="#636161" />
           </button>
-          */}
         </div>
       </div>
 
@@ -529,29 +674,23 @@ export function RoadmapPage() {
           />
         )}
         {tocOpen && (
-          <aside className="fixed inset-y-0 left-0 z-40 w-[min(85vw,240px)] shrink-0 overflow-y-auto border-r border-[#d4ced3] bg-white shadow-lg md:relative md:z-0 md:w-[204px] md:shadow-none">
-            <nav className="py-2">
-              {TOC_ITEMS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => scrollToBlock(item.id)}
-                  className={`mx-2 block w-[calc(100%-16px)] rounded px-2 py-1.5 text-left text-[13px] leading-5 transition-colors ${
-                    activeTocId === item.id
-                      ? "bg-[#fedbda] font-medium text-[#302f2f]"
-                      : "text-[#636161] hover:bg-[#fafafa]"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
+          <aside className="fixed inset-y-0 left-0 z-40 flex w-[min(90vw,260px)] shrink-0 flex-col border-r border-[#e8e8e8] bg-[#fafafa] shadow-lg md:relative md:z-0 md:w-[240px] md:shadow-none">
+            <TableOfContents
+              blocks={blocks}
+              activeId={activeTocId}
+              onNavigate={scrollToBlock}
+              onMoveBlock={moveBlockFromToc}
+              onAddHeadingAfter={addHeadingAfter}
+              onAddContentAfter={addContentAfter}
+              onDeleteHeading={deleteHeading}
+              onDeleteContent={deleteContentBlock}
+            />
           </aside>
         )}
 
         <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
           {/* PROTOTYPE_DISABLED: document view — roadmap only for now */}
-          <div className="roadmap-blocks relative mx-auto w-full min-w-0 max-w-[680px] overflow-x-hidden pb-12">
+          <div className="roadmap-blocks relative mx-auto w-full min-w-0 max-w-[680px] overflow-visible pb-12">
             {blocks.map((block, index) => (
               <Fragment key={block.id}>
                 {dragState?.dropIndex === index && dragState.blockId && (
@@ -564,6 +703,13 @@ export function RoadmapPage() {
                   block={block}
                   blockRefs={blockRefs}
                   isDragging={dragState?.blockId === block.id}
+                  tracedSourceId={
+                    traceState?.blockId === block.id ? traceState.sourceId : null
+                  }
+                  expandedSourceId={
+                    expandedSource?.blockId === block.id ? expandedSource.sourceId : null
+                  }
+                  onSourceCardClick={(sourceId) => handleSourceCardClick(block.id, sourceId)}
                   onDragHandlePointerDown={
                     block.type === "content"
                       ? (event) => handleDragHandlePointerDown(block.id, event)
@@ -612,11 +758,26 @@ export function RoadmapPage() {
             <VersionPanel onClose={() => setActivePanel(null)} />
           </>
         )}
-        {/* PROTOTYPE_DISABLED: trace panel
-        {activePanel?.type === "trace" && (
-          <TracePanel blocks={blocks} onClose={() => setActivePanel(null)} />
+
+        {tracedSource && traceState && (
+          <>
+            <button
+              type="button"
+              aria-label="Close datasource panel"
+              className="fixed inset-0 z-30 bg-black/20 md:hidden"
+              onClick={closeTrace}
+            />
+            <DataSourcePanel
+              source={tracedSource}
+              sectionTitle={tracedSectionTitle}
+              initialPanelMode={traceState.view}
+              blockSources={tracedBlockSources}
+              activeSourceId={traceState.sourceId}
+              onSourceChange={handleTracedSourceChange}
+              onClose={closeTrace}
+            />
+          </>
         )}
-        */}
 
       </div>
 
@@ -745,6 +906,9 @@ function BlockRenderer({
   block,
   blockRefs,
   isDragging = false,
+  tracedSourceId,
+  expandedSourceId,
+  onSourceCardClick,
   onDragHandlePointerDown,
   onUpdateSource,
   onRemoveSource,
@@ -761,6 +925,9 @@ function BlockRenderer({
   block: DocumentBlock;
   blockRefs: MutableRefObject<Record<string, HTMLElement | null>>;
   isDragging?: boolean;
+  tracedSourceId: string | null;
+  expandedSourceId: string | null;
+  onSourceCardClick: (sourceId: string) => void;
   onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
@@ -779,28 +946,34 @@ function BlockRenderer({
     const isH2 = block.level === 2;
     const isH3 = block.level === 3;
     const Tag = isH1 ? "h1" : isH2 ? "h2" : "h3";
-    const className = isH1
-      ? "mt-8 text-[24px] font-semibold leading-8 text-[#333] first:mt-0 sm:mt-10 sm:text-[28px] sm:leading-9"
+    const wrapperClassName = isH1
+      ? "mt-8 sm:mt-10"
       : isH2
-        ? "mt-6 text-[20px] font-semibold leading-7 text-[#333] sm:mt-8 sm:text-[24px] sm:leading-8"
+        ? "mt-6 sm:mt-8"
         : isH3
-          ? "mt-5 text-[18px] font-semibold leading-7 text-[#333] sm:mt-6 sm:text-[20px]"
-          : "mt-4 text-[16px] font-semibold leading-6 text-[#333]";
+          ? "mt-5 sm:mt-6"
+          : "mt-4";
+    const tagClassName = isH1
+      ? "text-[24px] font-semibold leading-8 text-[#333] sm:text-[28px] sm:leading-9"
+      : isH2
+        ? "text-[20px] font-semibold leading-7 text-[#333] sm:text-[24px] sm:leading-8"
+        : isH3
+          ? "text-[18px] font-semibold leading-7 text-[#333] sm:text-[20px]"
+          : "text-[16px] font-semibold leading-6 text-[#333]";
 
     return (
       <div
         ref={(el) => {
           blockRefs.current[block.id] = el;
         }}
-        className="group relative overflow-visible"
+        className={`group flex items-center gap-2 first:mt-0 ${wrapperClassName}`}
       >
-        <Tag className={className}>
+        <Tag className={`min-w-0 flex-1 ${tagClassName}`}>
           {block.number && <span>{block.number} </span>}
           {block.title}
         </Tag>
         <BlockAddButton
           addLabel={headingAddLabel(block.level)}
-          className={isH1 || isH2 ? "top-1/2 -translate-y-1/2" : "top-3"}
           onClick={() => onAddHeadingAfter(block.id, block.level)}
         />
       </div>
@@ -823,15 +996,19 @@ function BlockRenderer({
       ref={(el) => {
         blockRefs.current[block.id] = el;
       }}
-      className={`group relative mb-4 mt-2 min-w-0 rounded-lg ${isDragging ? "opacity-50" : ""}`}
+      className={`group mb-4 mt-2 min-w-0 rounded-lg ${isDragging ? "opacity-50" : ""}`}
     >
-      <BlockAddButton
-        addLabel="Add section"
-        className="top-4"
-        onClick={() => onAddContentAfter(block.id)}
-      />
+      <div className="mb-1 flex justify-end">
+        <BlockAddButton
+          addLabel="Add section"
+          onClick={() => onAddContentAfter(block.id)}
+        />
+      </div>
       <SectionContentBlock
         block={block}
+        tracedSourceId={tracedSourceId}
+        expandedSourceId={expandedSourceId}
+        onSourceCardClick={onSourceCardClick}
         onDragHandlePointerDown={onDragHandlePointerDown}
         onUpdateSource={onUpdateSource}
         onRemoveSource={onRemoveSource}
@@ -850,11 +1027,9 @@ function BlockRenderer({
 function BlockAddButton({
   addLabel,
   onClick,
-  className = "",
 }: {
   addLabel: string;
   onClick: () => void;
-  className?: string;
 }) {
   return (
     <button
@@ -862,7 +1037,7 @@ function BlockAddButton({
       aria-label={addLabel}
       title={addLabel}
       onClick={onClick}
-      className={`absolute left-[calc(100%+10px)] z-10 hidden h-7 items-center gap-1 rounded-full border border-[#d4ced3] bg-white pl-2 pr-2.5 text-[#636161] opacity-0 shadow-sm transition-all hover:border-[#ff4e49]/50 hover:bg-[#fff5f5] hover:text-[#ff4e49] group-hover:opacity-100 focus-visible:opacity-100 min-[920px]:flex ${className}`}
+      className="flex h-7 shrink-0 items-center justify-center gap-1 rounded-full border border-[#d4ced3] bg-white px-2.5 text-[#636161] opacity-0 shadow-sm transition-all hover:border-[#ff4e49]/50 hover:bg-[#fff5f5] hover:text-[#ff4e49] group-hover:opacity-100 focus-visible:opacity-100"
     >
       <Plus size={14} strokeWidth={2} className="shrink-0" />
       <span className="whitespace-nowrap text-[12px] font-medium">{addLabel}</span>
@@ -949,41 +1124,3 @@ function VersionPanel({ onClose }: { onClose: () => void }) {
     </aside>
   );
 }
-
-/* PROTOTYPE_DISABLED: trace to datasource panel
-function TracePanel({
-  blocks,
-  onClose,
-}: {
-  blocks: DocumentBlock[];
-  onClose: () => void;
-}) {
-  const sources = blocks
-    .filter((b): b is ContentBlockData => b.type === "content")
-    .flatMap((b) => b.sources)
-    .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i);
-
-  return (
-    <aside className="w-[320px] shrink-0 overflow-y-auto border-l border-[#d4ced3] bg-white">
-      <header className="flex items-center justify-between border-b border-[#d4ced3] px-4 py-3">
-        <h3 className="text-[14px] font-medium">Trace to datasource</h3>
-        <button type="button" onClick={onClose}>
-          <X size={16} />
-        </button>
-      </header>
-      <div className="space-y-3 p-4">
-        {sources.map((source) => (
-          <div key={source.id} className="rounded-md border border-[#d4ced3] p-3 text-[13px]">
-            <p className="font-medium">{getSourceLabel(source)}</p>
-            {source.sourceType === "DATA_SOURCE" && (
-              <p className="mt-1 text-[12px] text-[#636161]">
-                {source.dataSource} · {source.referenceKey}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-    </aside>
-  );
-}
-*/
