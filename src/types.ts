@@ -8,6 +8,8 @@ export type HeadingBlock = {
   level: 1 | 2 | 3;
   number: string;
   title: string;
+  /** V3 matrix: evidence mapped directly to this content heading row. */
+  sources?: RoadmapSource[];
 };
 
 export type ContentBlockData = {

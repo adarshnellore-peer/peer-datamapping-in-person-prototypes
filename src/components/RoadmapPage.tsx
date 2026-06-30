@@ -86,13 +86,19 @@ function findFirstMappedSource(
   return null;
 }
 
+function sourcesForBlock(block: DocumentBlock | undefined): RoadmapSource[] {
+  if (!block) return [];
+  if (block.type === "content") return block.sources;
+  if (block.type === "heading") return block.sources ?? [];
+  return [];
+}
+
 function findSourceInBlocks(
   blocks: DocumentBlock[],
   trace: { blockId: string; sourceId: string },
 ): RoadmapSource | null {
   const block = blocks.find((b) => b.id === trace.blockId);
-  if (!block || block.type !== "content") return null;
-  return block.sources.find((s) => s.id === trace.sourceId) ?? null;
+  return sourcesForBlock(block).find((s) => s.id === trace.sourceId) ?? null;
 }
 
 function findBlockSources(
@@ -100,14 +106,17 @@ function findBlockSources(
   blockId: string,
 ): RoadmapSource[] {
   const block = blocks.find((b) => b.id === blockId);
-  if (!block || block.type !== "content") return [];
-  return block.sources;
+  return sourcesForBlock(block);
 }
 
 function findBlockTitle(blocks: DocumentBlock[], blockId: string): string | null {
   const block = blocks.find((b) => b.id === blockId);
-  if (!block || block.type !== "content") return null;
-  return block.title;
+  if (!block) return null;
+  if (block.type === "content") return block.title;
+  if (block.type === "heading") {
+    return block.number ? `${block.number} ${block.title}` : block.title;
+  }
+  return null;
 }
 
 // type LibraryMode = { type: "browse" } | { type: "add"; blockId: string };
@@ -286,24 +295,40 @@ export function RoadmapPage() {
 
   const updateSourceInBlock = (blockId: string, source: RoadmapSource) => {
     setBlocks((prev) =>
-      prev.map((block) =>
-        block.type === "content" && block.id === blockId
-          ? {
-              ...block,
-              sources: block.sources.map((s) => (s.id === source.id ? source : s)),
-            }
-          : block,
-      ),
+      prev.map((block) => {
+        if (block.id !== blockId) return block;
+        if (block.type === "content") {
+          return {
+            ...block,
+            sources: block.sources.map((s) => (s.id === source.id ? source : s)),
+          };
+        }
+        if (block.type === "heading") {
+          return {
+            ...block,
+            sources: (block.sources ?? []).map((s) => (s.id === source.id ? source : s)),
+          };
+        }
+        return block;
+      }),
     );
   };
 
   const removeSourceFromBlock = (blockId: string, sourceId: string) => {
     setBlocks((prev) =>
-      prev.map((block) =>
-        block.type === "content" && block.id === blockId
-          ? { ...block, sources: block.sources.filter((s) => s.id !== sourceId) }
-          : block,
-      ),
+      prev.map((block) => {
+        if (block.id !== blockId) return block;
+        if (block.type === "content") {
+          return { ...block, sources: block.sources.filter((s) => s.id !== sourceId) };
+        }
+        if (block.type === "heading") {
+          return {
+            ...block,
+            sources: (block.sources ?? []).filter((s) => s.id !== sourceId),
+          };
+        }
+        return block;
+      }),
     );
     setTraceState((prev) =>
       prev?.blockId === blockId && prev.sourceId === sourceId ? null : prev,
@@ -395,11 +420,16 @@ export function RoadmapPage() {
       role,
     };
     setBlocks((prev) =>
-      prev.map((block) =>
-        block.type === "content" && block.id === blockId
-          ? { ...block, sources: [...block.sources, created] }
-          : block,
-      ),
+      prev.map((block) => {
+        if (block.id !== blockId) return block;
+        if (block.type === "content") {
+          return { ...block, sources: [...block.sources, created] };
+        }
+        if (block.type === "heading") {
+          return { ...block, sources: [...(block.sources ?? []), created] };
+        }
+        return block;
+      }),
     );
     setToast("Source mapped");
   };
@@ -409,7 +439,8 @@ export function RoadmapPage() {
       if (payload.fromBlockId === toBlockId) return;
       setBlocks((prev) =>
         prev.map((block) => {
-          if (block.type !== "content" || block.id !== toBlockId) return block;
+          if (block.id !== toBlockId) return block;
+          if (block.type !== "content" && block.type !== "heading") return block;
           const base = createSourceForType(payload.sourceType, {
             content: payload.label,
             status: "confirmed",
@@ -426,7 +457,8 @@ export function RoadmapPage() {
                   referencedHeadingId: payload.fromHeadingId,
                   role,
                 };
-          return { ...block, sources: [...block.sources, created] };
+          const sources = block.type === "content" ? block.sources : (block.sources ?? []);
+          return { ...block, sources: [...sources, created] };
         }),
       );
       setToast(
@@ -555,21 +587,30 @@ export function RoadmapPage() {
     setBlocks((prev) => {
       let moved: RoadmapSource | null = null;
       const stripped = prev.map((block) => {
-        if (block.type !== "content") return block;
-        const found = block.sources.find((s) => s.id === sourceId);
+        if (block.type !== "content" && block.type !== "heading") return block;
+        const sources = sourcesForBlock(block);
+        const found = sources.find((s) => s.id === sourceId);
         if (!found) return block;
         moved = {
           ...found,
           role,
           isReference: role === "reference" ? true : undefined,
         };
-        return { ...block, sources: block.sources.filter((s) => s.id !== sourceId) };
+        const nextSources = sources.filter((s) => s.id !== sourceId);
+        if (block.type === "content") return { ...block, sources: nextSources };
+        return { ...block, sources: nextSources };
       });
       if (!moved) return prev;
 
       return stripped.map((block) => {
-        if (block.type !== "content" || block.id !== toBlockId) return block;
-        return { ...block, sources: [...block.sources, moved!] };
+        if (block.id !== toBlockId) return block;
+        if (block.type === "content") {
+          return { ...block, sources: [...block.sources, moved!] };
+        }
+        if (block.type === "heading") {
+          return { ...block, sources: [...(block.sources ?? []), moved!] };
+        }
+        return block;
       });
     });
     setTraceState((prev) =>
@@ -795,8 +836,9 @@ export function RoadmapPage() {
   const usageCountByStudySourceId = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const block of blocks) {
-      if (block.type !== "content") continue;
-      for (const source of block.sources) {
+      if (block.type !== "content" && block.type !== "heading") continue;
+      const sources = block.type === "content" ? block.sources : (block.sources ?? []);
+      for (const source of sources) {
         if (source.sourceType !== "DATA_SOURCE") continue;
         for (const entry of STUDY_DATA_SOURCES) {
           if (

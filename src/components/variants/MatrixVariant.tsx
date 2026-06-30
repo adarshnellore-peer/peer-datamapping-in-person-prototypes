@@ -4,7 +4,7 @@ import { DataSourcePanel } from "../DataSourcePanel";
 import { StudyDataSourcesList } from "../StudyDataSourcesList";
 import type { StudyDataSource } from "../../data/studyDataSources";
 import type { RoadmapSource, SourceRole } from "../../data/roadmap";
-import type { ContentBlockData, HeadingBlock } from "../../types";
+import type { HeadingBlock } from "../../types";
 import {
   MATRIX_COLUMNS,
   isOutlineReferenceSource,
@@ -100,58 +100,67 @@ export function MatrixVariant({
     setDropTarget(null);
   };
 
-  const contentBlocks = blocks.filter(
-    (b): b is ContentBlockData => b.type === "content",
-  );
 
-  const sourcesInColumn = (block: ContentBlockData, col: MatrixColumnId) =>
-    block.sources.filter((s) => matrixColumnForSource(s) === col);
+  const sourcesInColumn = (sources: RoadmapSource[], col: MatrixColumnId) =>
+    sources.filter((s) => matrixColumnForSource(s) === col);
 
   const roleTotals = (col: MatrixColumnId) =>
-    contentBlocks.reduce((n, b) => n + sourcesInColumn(b, col).length, 0);
+    blocks.reduce((n, b) => {
+      if (b.type === "content") return n + sourcesInColumn(b.sources, col).length;
+      if (b.type === "heading") return n + sourcesInColumn(b.sources ?? [], col).length;
+      return n;
+    }, 0);
 
   const dropMappedOnCell = (
-    block: ContentBlockData,
+    toBlockId: string,
     col: MatrixColumnId,
     fromBlockId: string,
     sourceId: string,
   ) => {
     const role = roleForMatrixColumn(col);
-    if (fromBlockId === block.id) {
-      const source = block.sources.find((s) => s.id === sourceId);
+    if (fromBlockId === toBlockId) {
+      const block = blocks.find((b) => b.id === toBlockId);
+      const sources =
+        block?.type === "content"
+          ? block.sources
+          : block?.type === "heading"
+            ? (block.sources ?? [])
+            : [];
+      const source = sources.find((s) => s.id === sourceId);
       if (!source) return;
-      onUpdateSource(block.id, sourceWithMatrixRole(source, role));
+      onUpdateSource(toBlockId, sourceWithMatrixRole(source, role));
     } else {
-      onMoveSourceToMatrixCell(fromBlockId, sourceId, block.id, role);
+      onMoveSourceToMatrixCell(fromBlockId, sourceId, toBlockId, role);
     }
     setDropTarget(null);
   };
 
   const dropOnCell = (
-    block: ContentBlockData,
+    toBlockId: string,
     col: MatrixColumnId,
     dataTransfer: DataTransfer,
+    rejectOutlineRef?: (payload: OutlineRefPayload) => boolean,
   ) => {
     const payload = readV2DragData(dataTransfer);
     if (payload?.kind === "mapped") {
-      dropMappedOnCell(block, col, payload.fromBlockId, payload.sourceId);
+      dropMappedOnCell(toBlockId, col, payload.fromBlockId, payload.sourceId);
       return;
     }
     if (payload?.kind === "study-source") {
       onMapStudySourceWithRole(
-        block.id,
+        toBlockId,
         payload.studySourceId,
         roleForMatrixColumn(col),
       );
     } else if (payload?.kind === "outline-ref") {
-      if (payload.fromBlockId === block.id) {
+      if (rejectOutlineRef?.(payload)) {
         setDropTarget(null);
         return;
       }
-      onMapOutlineRefWithRole(block.id, payload, roleForMatrixColumn(col));
+      onMapOutlineRefWithRole(toBlockId, payload, roleForMatrixColumn(col));
     } else if (payload?.kind === "toc") {
       onMapOutlineRefWithRole(
-        block.id,
+        toBlockId,
         {
           kind: "outline-ref",
           sourceType: payload.sourceType,
@@ -171,6 +180,77 @@ export function MatrixVariant({
       draggingRef.current?.kind === "mapped" ? "move" : "copy";
     setDropTarget(cellId);
   };
+
+  const renderMatrixCells = (
+    rowId: string,
+    rowSources: RoadmapSource[],
+    rejectOutlineRef?: (payload: OutlineRefPayload) => boolean,
+  ) =>
+    MATRIX_COLUMNS.map((col) => {
+      const cellId = `${rowId}|${col.id}`;
+      const cellSources = sourcesInColumn(rowSources, col.id);
+      const isOver = dropTarget === cellId;
+      const cellDropHandlers = {
+        onDragOver: (e: React.DragEvent) => handleCellDragOver(cellId, e),
+        onDrop: (e: React.DragEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropOnCell(rowId, col.id, e.dataTransfer, rejectOutlineRef);
+        },
+      };
+      return (
+        <td
+          key={col.id}
+          className={`group/cell border-b border-r border-[#d4ced3] align-top transition-colors ${col.cellTint} ${
+            isOver ? "outline outline-2 -outline-offset-2 outline-[#ff4e49]" : ""
+          }`}
+          onDragOver={(e) => handleCellDragOver(cellId, e)}
+          onDragLeave={() => setDropTarget((v) => (v === cellId ? null : v))}
+          onDrop={cellDropHandlers.onDrop}
+        >
+          <div
+            className="min-h-[2.5rem] space-y-1.5 p-2"
+            onDragOver={(e) => handleCellDragOver(cellId, e)}
+            onDrop={cellDropHandlers.onDrop}
+          >
+            {cellSources.map((source) => (
+              <SourcePill
+                key={source.id}
+                source={source}
+                variant="v2"
+                layout="matrix"
+                compact
+                traceOnFieldClick={Boolean(
+                  onTraceSource && !isOutlineReferenceSource(source),
+                )}
+                dragHandleAlwaysVisible={col.id === "insert"}
+                matrixCellDrop={cellDropHandlers}
+                matrixDrag={{
+                  onDragStart: (event) => {
+                    beginDrag(event, {
+                      kind: "mapped",
+                      fromBlockId: rowId,
+                      sourceId: source.id,
+                    });
+                  },
+                  onDragEnd: endDrag,
+                }}
+                isTraced={
+                  tracedSource?.blockId === rowId && tracedSource?.sourceId === source.id
+                }
+                onChange={(next) => onUpdateSource(rowId, next)}
+                onTrace={
+                  onTraceSource && !isOutlineReferenceSource(source)
+                    ? () => onTraceSource(rowId, source.id)
+                    : undefined
+                }
+                onRemove={() => onRemoveSource(rowId, source.id)}
+              />
+            ))}
+          </div>
+        </td>
+      );
+    });
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -237,18 +317,9 @@ export function MatrixVariant({
                           </span>
                         </div>
                       </td>
-                      {MATRIX_COLUMNS.map((col) => (
-                        <td
-                          key={col.id}
-                          className={`relative border-b border-r border-[#d4ced3] px-2 py-1 align-top ${col.cellTint}`}
-                        >
-                          <div
-                            className="pointer-events-none absolute inset-0 bg-[#302f2f]/[0.035]"
-                            aria-hidden
-                          />
-                          <div className="relative min-h-[1.25rem]" aria-hidden />
-                        </td>
-                      ))}
+                      {renderMatrixCells(block.id, block.sources ?? [], (payload) =>
+                        payload.sourceType === "CONTENT" && payload.fromHeadingId === block.id,
+                      )}
                     </tr>
                   );
                 }
@@ -281,77 +352,9 @@ export function MatrixVariant({
                         </span>
                       </div>
                     </td>
-                    {MATRIX_COLUMNS.map((col) => {
-                      const cellId = `${block.id}|${col.id}`;
-                      const cellSources = sourcesInColumn(block, col.id);
-                      const isOver = dropTarget === cellId;
-                      const cellDropHandlers = {
-                        onDragOver: (e: React.DragEvent) =>
-                          handleCellDragOver(cellId, e),
-                        onDrop: (e: React.DragEvent) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          dropOnCell(block, col.id, e.dataTransfer);
-                        },
-                      };
-                      return (
-                        <td
-                          key={col.id}
-                          className={`group/cell border-b border-r border-[#d4ced3] align-top transition-colors ${col.cellTint} ${
-                            isOver ? "outline outline-2 -outline-offset-2 outline-[#ff4e49]" : ""
-                          }`}
-                          onDragOver={(e) => handleCellDragOver(cellId, e)}
-                          onDragLeave={() =>
-                            setDropTarget((v) => (v === cellId ? null : v))
-                          }
-                          onDrop={cellDropHandlers.onDrop}
-                        >
-                          <div
-                            className="min-h-[2.5rem] space-y-1.5 p-2"
-                            onDragOver={(e) => handleCellDragOver(cellId, e)}
-                            onDrop={cellDropHandlers.onDrop}
-                          >
-                            {cellSources.map((source) => (
-                              <SourcePill
-                                key={source.id}
-                                source={source}
-                                variant="v2"
-                                layout="matrix"
-                                compact
-                                traceOnFieldClick={
-                                  Boolean(
-                                    onTraceSource && !isOutlineReferenceSource(source),
-                                  )
-                                }
-                                dragHandleAlwaysVisible={col.id === "insert"}
-                                matrixCellDrop={cellDropHandlers}
-                                matrixDrag={{
-                                  onDragStart: (event) => {
-                                    beginDrag(event, {
-                                      kind: "mapped",
-                                      fromBlockId: block.id,
-                                      sourceId: source.id,
-                                    });
-                                  },
-                                  onDragEnd: endDrag,
-                                }}
-                                isTraced={
-                                  tracedSource?.blockId === block.id &&
-                                  tracedSource?.sourceId === source.id
-                                }
-                                onChange={(next) => onUpdateSource(block.id, next)}
-                                onTrace={
-                                  onTraceSource && !isOutlineReferenceSource(source)
-                                    ? () => onTraceSource(block.id, source.id)
-                                    : undefined
-                                }
-                                onRemove={() => onRemoveSource(block.id, source.id)}
-                              />
-                            ))}
-                          </div>
-                        </td>
-                      );
-                    })}
+                    {renderMatrixCells(block.id, block.sources, (payload) =>
+                      payload.fromBlockId === block.id,
+                    )}
                   </tr>
                 );
               })}
