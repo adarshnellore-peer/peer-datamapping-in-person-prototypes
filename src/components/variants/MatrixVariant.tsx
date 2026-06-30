@@ -210,10 +210,7 @@ export function MatrixVariant({
                 if (block.type === "heading") {
                   return (
                     <tr key={block.id} className="group/heading">
-                      <td
-                        colSpan={MATRIX_COLUMNS.length + 1}
-                        className="sticky left-0 z-10 border-b border-[#d4ced3] bg-white px-2 py-1 align-top"
-                      >
+                      <td className="sticky left-0 z-10 border-b border-r border-[#d4ced3] bg-[#ececec] px-2 py-1 align-top">
                         <div
                           draggable
                           onDragStart={(event) => {
@@ -226,7 +223,7 @@ export function MatrixVariant({
                           }}
                           onDragEnd={endDrag}
                           title="Drag content heading as evidence to another row"
-                          className="flex cursor-grab items-center gap-1 px-2 py-0.5 touch-none active:cursor-grabbing"
+                          className="flex cursor-grab items-center gap-1 touch-none active:cursor-grabbing"
                         >
                           <GripVertical
                             size={12}
@@ -234,12 +231,24 @@ export function MatrixVariant({
                             className="shrink-0 text-[#bdbdbd]"
                             aria-hidden
                           />
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+                          <span className="text-[11px] font-semibold leading-snug text-[#5c5c5c]">
                             {block.number && <span>{block.number} </span>}
                             {block.title}
                           </span>
                         </div>
                       </td>
+                      {MATRIX_COLUMNS.map((col) => (
+                        <td
+                          key={col.id}
+                          className={`relative border-b border-r border-[#d4ced3] px-2 py-1 align-top ${col.cellTint}`}
+                        >
+                          <div
+                            className="pointer-events-none absolute inset-0 bg-[#302f2f]/[0.035]"
+                            aria-hidden
+                          />
+                          <div className="relative min-h-[1.25rem]" aria-hidden />
+                        </td>
+                      ))}
                     </tr>
                   );
                 }
@@ -288,7 +297,7 @@ export function MatrixVariant({
                       return (
                         <td
                           key={col.id}
-                          className={`group/cell border-b border-r border-[#d4ced3] align-top transition-colors ${col.cellTint} ${col.cellAccent} ${
+                          className={`group/cell border-b border-r border-[#d4ced3] align-top transition-colors ${col.cellTint} ${
                             isOver ? "outline outline-2 -outline-offset-2 outline-[#ff4e49]" : ""
                           }`}
                           onDragOver={(e) => handleCellDragOver(cellId, e)}

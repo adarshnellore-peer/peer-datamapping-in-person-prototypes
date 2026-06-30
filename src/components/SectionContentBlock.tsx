@@ -2,39 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { GripVertical, Pencil, Plus } from "lucide-react";
 import { GenerateAsSelect } from "./OutputTypeToggle";
 import { DuplicateDeleteActions } from "./SourceCard";
+import { KeyMessageFooter } from "./KeyMessageFooter";
 import { SectionMapper } from "./variants/SectionMapper";
 import type { ContentBlockData } from "../types";
 import type { RoadmapSource } from "../data/roadmap";
-
-function cleanPromptSegment(text: string): string {
-  return text
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\s+/g, " ")
-    .replace(/^[^\w(["']+/, "")
-    .trim();
-}
-
-function formatPromptForDisplay(prompt: string): string {
-  const text = prompt.trim();
-  if (!text) return "";
-
-  const contextMatch = text.match(
-    /\[CONTEXT FOR THE MODEL\]\s*([\s\S]*?)(?=\[REQUESTED TASK\]|$)/i,
-  );
-  const taskMatch = text.match(/\[REQUESTED TASK\]\s*([\s\S]*)/i);
-
-  const parts: string[] = [];
-  if (contextMatch?.[1]) parts.push(cleanPromptSegment(contextMatch[1]));
-  if (taskMatch?.[1]) parts.push(cleanPromptSegment(taskMatch[1]));
-
-  if (parts.length > 0) return parts.join("\n\n");
-
-  return cleanPromptSegment(
-    text
-      .replace(/\[CONTEXT FOR THE MODEL\]\s*/gi, "")
-      .replace(/\[REQUESTED TASK\]\s*/gi, ""),
-  );
-}
 
 function EditableTextSection({
   label,
@@ -194,18 +165,6 @@ export function SectionContentBlock({
         </div>
       </div>
 
-      <div className="border-b border-[#ececec] px-3 py-3 sm:px-4">
-        <EditableTextSection
-          label="System prompt"
-          value={block.prompt}
-          onChange={onPromptChange}
-          placeholder="Add system instructions for this section…"
-          formatDisplay={formatPromptForDisplay}
-          previewLines={4}
-          editingRows={10}
-        />
-      </div>
-
       <div className="px-3 py-3 sm:px-4">
         <p className="mb-2 text-[12px] font-medium text-[#636161]">Sources</p>
         <SectionMapper
@@ -236,6 +195,8 @@ export function SectionContentBlock({
           muted
         />
       </div>
+
+      <KeyMessageFooter value={block.prompt} onChange={onPromptChange} />
     </div>
   );
 }

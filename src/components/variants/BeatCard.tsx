@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from "react";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { type ReactNode } from "react";
+import { AlertTriangle } from "lucide-react";
 import type { ContentBlockData, DocumentBlock } from "../../types";
+import { KeyMessageFooter } from "../KeyMessageFooter";
 import { SectionMapper } from "./SectionMapper";
 
 /** Nearest preceding heading label for a content block. */
@@ -43,7 +44,6 @@ export function BeatCard({
 }) {
   const primaryCount = block.sources.filter((s) => s.role === "primary").length;
   const showGap = block.sources.length > 0 && primaryCount === 0;
-  const [showMessage, setShowMessage] = useState(false);
 
   return (
     <div
@@ -77,29 +77,7 @@ export function BeatCard({
       )}
 
       {onPromptChange && (
-        <div className="peer-card-footer">
-          <button
-            type="button"
-            aria-expanded={showMessage}
-            onClick={() => setShowMessage((v) => !v)}
-            className="flex items-center gap-1 text-[12px] font-medium text-[var(--peer-muted)] transition-colors hover:text-[var(--peer-text)]"
-          >
-            <ChevronRight
-              size={14}
-              className={`transition-transform ${showMessage ? "rotate-90" : ""}`}
-            />
-            Key message
-          </button>
-          {showMessage && (
-            <textarea
-              value={block.prompt}
-              onChange={(event) => onPromptChange(event.target.value)}
-              rows={4}
-              placeholder="Add system instructions for this section…"
-              className="mt-2 w-full resize-y rounded-md border border-[var(--peer-border)] bg-white px-3 py-2.5 text-[14px] leading-relaxed text-[var(--peer-text)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
-            />
-          )}
-        </div>
+        <KeyMessageFooter value={block.prompt} onChange={onPromptChange} />
       )}
     </div>
   );

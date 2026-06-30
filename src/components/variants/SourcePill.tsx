@@ -20,7 +20,7 @@ import {
 import {
   ARTIFACT_TYPE_CHIP,
   ROLE_BADGE,
-  ROLE_BADGE_SOFT,
+  ROLE_BADGE_PICKER,
   effectiveSourceRole,
   roleLabel,
   artifactTypeLabel,
@@ -34,6 +34,9 @@ const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   CONTENT: "Content",
   REFERENCE_SOURCE: "Reference source",
 };
+
+const ROLE_CHIP_BASE =
+  "inline-flex h-[18px] shrink-0 items-center rounded-full border px-1.5 text-[10px] font-semibold leading-none transition-colors";
 
 function SourceTypeAndRole({
   source,
@@ -51,15 +54,13 @@ function SourceTypeAndRole({
   onToggleRole: () => void;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      <div className="relative z-20">
-        <ArtifactTypeTag
+    <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+      <ArtifactTypeTag
           source={source}
           active={activeField === "sourceType"}
           allowSourceTypeChange={allowSourceTypeChange}
           onToggleType={onToggleType}
-        />
-      </div>
+      />
       <RoleBadge
         role={role}
         active={activeField === "role"}
@@ -82,7 +83,7 @@ function ArtifactTypeTag({
 }) {
   const artifact = ARTIFACT_TYPE_CHIP[source.sourceType];
   const typeLabel = artifactTypeLabel(source);
-  const className = `${artifact.badge} ${
+  const className = `${artifact.badge} inline-flex h-[18px] items-center ${
     active && allowSourceTypeChange ? "ring-2 ring-[var(--peer-primary)] ring-offset-1" : ""
   }`;
 
@@ -342,8 +343,11 @@ export function SourcePill({
         </>
       ) : isV2 ? (
         <>
-          <div className="peer-source-head">
-            {matrixDrag && (
+          <div
+            className={`peer-source-meta ${active === "role" || active === "sourceType" ? "is-expanded" : ""}`}
+          >
+            <div className="peer-source-head">
+              {matrixDrag && (
               <div
                 draggable
                 onDragStart={(event) => {
@@ -401,16 +405,17 @@ export function SourcePill({
                 <X size={13} strokeWidth={1.75} />
               </button>
             </div>
+            </div>
+            {active === "role" && (
+              <RolePickerInline role={displayRole} onSelectRole={setRole} />
+            )}
+            {allowSourceTypeChange && active === "sourceType" && (
+              <SourceTypePickerInline
+                source={source}
+                onSelectSourceType={selectSourceType}
+              />
+            )}
           </div>
-          {active === "role" && (
-            <RolePickerInline role={displayRole} onSelectRole={setRole} />
-          )}
-          {allowSourceTypeChange && active === "sourceType" && (
-            <SourceTypePickerInline
-              source={source}
-              onSelectSourceType={selectSourceType}
-            />
-          )}
           <div className={`peer-source-body ${compact ? "" : ""}`}>
             {source.sourceType === "DATA_SOURCE" ? (
               <>
@@ -620,7 +625,7 @@ function RoleBadge({
       aria-haspopup="listbox"
       aria-label={role ? `Section role: ${roleLabel(role)}` : "Set section role"}
       title={role ? `Section role: ${roleLabel(role)}` : "Set section role"}
-      className={`shrink-0 rounded-full border px-1.5 py-px text-[10px] font-semibold transition-colors ${
+      className={`${ROLE_CHIP_BASE} ${
         active
           ? "border-[var(--peer-primary)] bg-[var(--peer-primary-tint)] text-[var(--peer-text)]"
           : role
@@ -644,28 +649,28 @@ function RolePickerInline({
     <div
       role="listbox"
       aria-label="Section role"
-      className="peer-source-inline-picker border-b border-[#ececec] bg-[#fafafa] px-2 py-2"
+      className="peer-source-inline-picker"
       onClick={(event) => event.stopPropagation()}
     >
-      <div className="flex flex-wrap gap-1.5">
-        {SOURCE_ROLES.map((option) => {
-          const selected = role === option;
-          return (
-            <button
-              key={option}
-              type="button"
-              role="option"
-              aria-selected={selected}
-              onClick={() => onSelectRole(option)}
-              className={`rounded-full border px-2.5 py-1 text-[12px] transition-colors ${
-                selected ? ROLE_BADGE[option] : `${ROLE_BADGE_SOFT[option]} hover:opacity-100`
-              }`}
-            >
-              {roleLabel(option)}
-            </button>
-          );
-        })}
-      </div>
+      {SOURCE_ROLES.map((option) => {
+        const selected = role === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="option"
+            aria-selected={selected}
+            onClick={() => onSelectRole(option)}
+            className={`${ROLE_CHIP_BASE} ${
+              selected
+                ? ROLE_BADGE[option]
+                : `${ROLE_BADGE_PICKER[option]} hover:border-opacity-60 hover:bg-opacity-70`
+            }`}
+          >
+            {roleLabel(option)}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -679,7 +684,7 @@ function SourceTypePickerInline({
 }) {
   return (
     <div
-      className="peer-source-inline-picker border-b border-[#ececec] bg-[#fafafa] px-2 py-2"
+      className="peer-source-inline-picker peer-source-inline-picker--type"
       onClick={(event) => event.stopPropagation()}
     >
       <PillOptionPicker

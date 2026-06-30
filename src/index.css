@@ -277,6 +277,35 @@ html {
   opacity: 1;
 }
 
+.peer-source-meta {
+  border-bottom: 1px solid transparent;
+}
+
+.peer-source-meta.is-expanded {
+  border-bottom-color: #ececec;
+  background: rgba(250, 250, 250, 0.55);
+}
+
+.peer-source-meta .peer-source-head {
+  padding-bottom: 2px;
+}
+
+.peer-source-meta.is-expanded .peer-source-head {
+  padding-bottom: 0;
+}
+
+.peer-source-inline-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 6px;
+}
+
+.peer-source-inline-picker--type {
+  padding-top: 0;
+}
+
 .peer-source-head {
   display: flex;
   align-items: center;
@@ -330,17 +359,20 @@ html {
 }
 
 .peer-type-tag {
+  display: inline-flex;
   flex-shrink: 0;
+  align-items: center;
+  height: 18px;
   border-radius: 3px;
   border: 1px solid #e0e0e0;
   background: #f5f5f5;
-  padding: 1px 5px;
+  padding: 0 5px;
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #757575;
-  line-height: 1.35;
+  line-height: 1;
 }
 
 .peer-field-chip {

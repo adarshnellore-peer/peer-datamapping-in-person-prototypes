@@ -128,12 +128,13 @@ export const ROLE_BADGE: Record<SourceRole, string> = {
   reference: "border-[#d8b4fe] bg-[#f3e8ff] text-[#5b21b6] font-semibold",
 };
 
-/** Softer role chips in the role picker before selection. */
-export const ROLE_BADGE_SOFT: Record<SourceRole, string> = {
-  primary: "border-[var(--peer-primary-border)]/70 bg-[var(--peer-primary-tint)]/80 text-[#9a1c12] font-medium",
-  supporting: "border-[#bcd0ff]/70 bg-[#eef3ff]/80 text-[#2b5bd7] font-medium",
-  context: "border-[#dcdcdc]/70 bg-[#f3f3f3]/80 text-[#636161] font-medium",
-  reference: "border-[#d8b4fe]/70 bg-[#f3e8ff]/80 text-[#5b21b6] font-medium",
+/** Faded chips in the inline role picker (unselected). */
+export const ROLE_BADGE_PICKER: Record<SourceRole, string> = {
+  primary:
+    "border-[var(--peer-primary-border)]/30 bg-[var(--peer-primary-tint)]/35 text-[#9a1c12]/65",
+  supporting: "border-[#bcd0ff]/35 bg-[#eef3ff]/40 text-[#2b5bd7]/65",
+  context: "border-[#dcdcdc]/50 bg-[#f3f3f3]/50 text-[#636161]/65",
+  reference: "border-[#d8b4fe]/35 bg-[#f3e8ff]/40 text-[#5b21b6]/65",
 };
 
 export function roleLabel(role: SourceRole): string {
