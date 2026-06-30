@@ -26,12 +26,12 @@ export const VARIANTS: { id: VariantId; name: string; description: string }[] = 
   },
   {
     id: "connectors",
-    name: "V5 \u00b7 Connector map",
+    name: "V4 \u00b7 Connector map",
     description: "Sections and sources joined by lines; click to trace one",
   },
   {
     id: "sourceView",
-    name: "V6 \u00b7 Source view",
+    name: "V5 \u00b7 Source view",
     description: "Group by document; see every section a source feeds",
   },
 ];

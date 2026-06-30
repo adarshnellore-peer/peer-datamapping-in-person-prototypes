@@ -8,12 +8,12 @@ async function countConnectorStrokes(page) {
   ).count();
 }
 
-async function switchToV5(page) {
+async function switchToV4(page) {
   await page.getByRole("button", { name: /^Version V\d/ }).click();
-  await page.getByRole("menuitem", { name: /V5/i }).click();
+  await page.getByRole("menuitem", { name: /V4/i }).click();
   await page.waitForTimeout(500);
   await page.mouse.move(0, 0);
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(400);
 }
 
 async function main() {
@@ -27,7 +27,7 @@ async function main() {
 
   try {
     await page.goto(BASE, { waitUntil: "networkidle", timeout: 15000 });
-    await switchToV5(page);
+    await switchToV4(page);
 
     const outline = page.getByPlaceholder("Search outline");
     const sources = page.getByPlaceholder("Search sources");
@@ -45,28 +45,28 @@ async function main() {
 
     // Section hover
     await section.hover();
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(450);
     const pathsAfterSectionHover = await countConnectorStrokes(page);
     check("section hover shows connectors", pathsAfterSectionHover > 0);
 
     // Hover another section while first not selected — preview should still work
     if ((await section2.count()) > 0) {
       await section2.hover();
-      await page.waitForTimeout(350);
+      await page.waitForTimeout(450);
       const pathsAfterSecondHover = await countConnectorStrokes(page);
       check("second section hover shows connectors", pathsAfterSecondHover > 0);
     }
 
     // Section click selects and keeps connectors
     await section.click();
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(450);
     const pathsAfterClick = await countConnectorStrokes(page);
     check("section click shows connectors", pathsAfterClick > 0);
 
     // Hover source while section selected — selection should persist
     if ((await reference.count()) > 0) {
       await reference.hover();
-      await page.waitForTimeout(350);
+      await page.waitForTimeout(450);
       const pathsWhileSelectedHover = await countConnectorStrokes(page);
       check(
         "selection persists when hovering elsewhere",
@@ -139,21 +139,121 @@ async function main() {
     await page.waitForTimeout(400);
     const edgeHit = page.locator("[data-connector-edge-hit]").first();
     if ((await edgeHit.count()) > 0) {
-      await edgeHit.hover();
-      await page.waitForTimeout(250);
+      await edgeHit.click();
+      await page.waitForTimeout(350);
       const roleBtn = page
         .locator('[data-connector-edge-menu] button')
-        .filter({ hasText: /Insert|Interpret|Reference|Supporting|Data source/i })
+        .filter({ hasText: /Insert|Interpret|Reference|Supporting|Primary|Data source/i })
         .first();
       if ((await roleBtn.count()) > 0) {
         const beforeMenu = await countConnectorStrokes(page);
+        const roleBefore = (await roleBtn.textContent())?.trim() ?? "";
         await roleBtn.click();
         await page.waitForTimeout(250);
         const menu = page.locator('[data-connector-edge-menu]').filter({ has: page.locator("button", { hasText: /Insert|Interpret|Reference/i }) });
         check("role menu opens", (await menu.count()) > 0);
         const afterMenu = await countConnectorStrokes(page);
         check("connectors remain with menu open", afterMenu > 0 && afterMenu === beforeMenu);
+        const nextRole =
+          roleBefore === "Primary"
+            ? "Supporting"
+            : roleBefore === "Supporting"
+              ? "Reference"
+              : "Primary";
+        const roleOption = page
+          .locator("[data-connector-edge-menu] button")
+          .filter({ hasText: new RegExp(`^${nextRole}$`) })
+          .first();
+        if ((await roleOption.count()) > 0) {
+          await roleOption.click();
+          await page.waitForTimeout(400);
+          const roleAfter = (
+            await page
+              .locator("[data-connector-edge-menu] button, [data-connector-edge-menu] span")
+              .first()
+              .textContent()
+          )?.trim();
+          check(
+            "role switch updates edge tag",
+            roleAfter === nextRole,
+            `expected ${nextRole}, got ${roleAfter}`,
+          );
+        }
         await page.keyboard.press("Escape");
+      }
+    }
+
+    // Drag-connect: new mapping should stay visible immediately after role pick
+    const connectSection = page.locator('[data-node-kind="section"]').nth(7);
+    if ((await connectSection.count()) > 0) {
+      await page.locator('[data-node-kind="document"] button').first().click();
+      await page.waitForTimeout(200);
+      const connectRef = page.locator('[data-node-kind="reference"]').nth(6);
+      const refBox = await connectRef.boundingBox();
+      if (refBox) {
+        const handle = connectSection.locator("button").last();
+        await handle.hover();
+        await page.mouse.down();
+        await page.mouse.move(refBox.x + refBox.width / 2, refBox.y + refBox.height / 2, {
+          steps: 12,
+        });
+        await page.mouse.up();
+        await page.waitForTimeout(450);
+        const rolePick = page
+          .locator("[data-connector-edge-menu] button")
+          .filter({ hasText: /^Supporting$/ })
+          .first();
+        if ((await rolePick.count()) > 0) {
+          await rolePick.click();
+          await page.waitForTimeout(600);
+          const pathsAfterConnect = await countConnectorStrokes(page);
+          const staysSelected = await connectSection.evaluate((el) =>
+            el.classList.contains("is-selected"),
+          );
+          check(
+            "connect shows connectors after role pick",
+            pathsAfterConnect > 0 && staysSelected,
+            `paths ${pathsAfterConnect}, selected ${staysSelected}`,
+          );
+          check(
+            "section-to-source connect keeps section selected",
+            staysSelected,
+          );
+        }
+      }
+    }
+
+    // Reference-to-section: origin (reference) should stay selected after role pick
+    const connectRef = page.locator('[data-node-kind="reference"]').nth(8);
+    const connectSection2 = page.locator('[data-node-kind="section"]').nth(8);
+    if ((await connectRef.count()) > 0 && (await connectSection2.count()) > 0) {
+      const secBox = await connectSection2.boundingBox();
+      if (secBox) {
+        const refHandle = connectRef.locator("button").last();
+        await refHandle.hover();
+        await page.mouse.down();
+        await page.mouse.move(secBox.x + secBox.width / 2, secBox.y + secBox.height / 2, {
+          steps: 12,
+        });
+        await page.mouse.up();
+        await page.waitForTimeout(450);
+        const rolePick = page
+          .locator("[data-connector-edge-menu] button")
+          .filter({ hasText: /^Supporting$/ })
+          .first();
+        if ((await rolePick.count()) > 0) {
+          await rolePick.click();
+          await page.waitForTimeout(600);
+          const refStaysSelected = await connectRef.evaluate((el) =>
+            el.classList.contains("is-selected"),
+          );
+          const pathsFromRef = await countConnectorStrokes(page);
+          check(
+            "source-to-section connect keeps reference selected",
+            refStaysSelected && pathsFromRef > 0,
+            `selected ${refStaysSelected}, paths ${pathsFromRef}`,
+          );
+        }
       }
     }
 

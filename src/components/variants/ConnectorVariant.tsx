@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Search, ChevronRight, X } from "lucide-react";
+import { Search, ChevronRight, X, Plus } from "lucide-react";
 import { SOURCE_ROLES, type SourceRole } from "../../data/roadmap";
 import type { DocumentBlock } from "../../types";
 import type { OutlineRefPayload } from "../../utils/v2DragPayload";
@@ -10,9 +10,16 @@ import {
   type OutlineEdge,
   type ReferenceNode,
   type SectionNode,
+  type SourceCatalogGroup,
   type SourceDocNode,
 } from "./connectorGraph";
-import { CATEGORY_DOT, ROLE_BADGE, ROLE_BADGE_PICKER, roleLabel } from "./types";
+import {
+  CATEGORY_DOT,
+  ROLE_ACCENT,
+  ROLE_BADGE,
+  ROLE_BADGE_PICKER,
+  roleLabel,
+} from "./types";
 
 type LeftNodeKind = "section" | "heading";
 type NodeKind = LeftNodeKind | "reference";
@@ -48,13 +55,44 @@ type OutlineEdgePath = {
 
 type EdgePath = SourceEdgePath | OutlineEdgePath;
 
+const OUTLINE_STROKE = "#6366f1";
+const OUTLINE_STROKE_HOVER = "#4338ca";
+
+const ROLE_STROKE_HOVER: Record<SourceRole, string> = {
+  primary: "#e64641",
+  supporting: "#2b5bd7",
+  context: "#636161",
+  reference: "#5b21b6",
+};
+
+function pathEdgeRole(path: EdgePath): SourceRole {
+  if (path.kind === "outline") return path.edge.role ?? "reference";
+  return path.role ?? "primary";
+}
+
+function pathStroke(path: EdgePath, isHover: boolean): string {
+  if (path.kind === "outline") {
+    return isHover ? OUTLINE_STROKE_HOVER : OUTLINE_STROKE;
+  }
+  const role = pathEdgeRole(path);
+  return isHover ? ROLE_STROKE_HOVER[role] : ROLE_ACCENT[role].dotHex;
+}
+
 type PendingConnect =
-  | { kind: "source"; blockId: string; studySourceId: string; x: number; y: number }
+  | {
+      kind: "source";
+      blockId: string;
+      studySourceId: string;
+      origin: { type: "section" | "reference"; id: string };
+      x: number;
+      y: number;
+    }
   | {
       kind: "outline";
       toBlockId: string;
       refKind: "section" | "heading";
       refId: string;
+      origin: { type: "section" | "heading"; id: string };
       x: number;
       y: number;
     };
@@ -88,6 +126,18 @@ type ConnectState = {
   targetType: NodeKind | null;
 };
 
+/** Row hover: wait before showing so quick passes don't flash connectors. */
+const ROW_HOVER_SHOW_MS = 240;
+/** Row hover: brief grace period before hiding when the pointer leaves. */
+const ROW_HOVER_HIDE_MS = 160;
+/** Ignore row hover while columns are still settling after scroll. */
+const ROW_HOVER_SCROLL_SUPPRESS_MS = 400;
+/** Edge tag hover: slightly faster than rows but still debounced. */
+const EDGE_HOVER_SHOW_MS = 180;
+const EDGE_HOVER_HIDE_MS = 140;
+/** After drag-connect, ignore stray clicks that would clear the new selection. */
+const CONNECT_CLICK_SUPPRESS_MS = 600;
+
 function isLeftKind(kind: NodeKind): kind is LeftNodeKind {
   return kind === "section" || kind === "heading";
 }
@@ -113,6 +163,79 @@ function docEl(
   docRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>,
 ) {
   return docRefs.current[dataSource];
+}
+
+function firstStudySourceForDocument(
+  dataSource: string,
+  catalog: SourceCatalogGroup[],
+): string | null {
+  for (const group of catalog) {
+    for (const entry of group.entries) {
+      if (entry.kind === "document" && entry.doc.dataSource === dataSource) {
+        return entry.doc.references[0]?.studySourceId ?? null;
+      }
+    }
+  }
+  return null;
+}
+
+function connectEndpoint(
+  nodeType: NodeKind | "document",
+  nodeId: string,
+  end: "start" | "finish",
+  viewport: DOMRect,
+  secRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>,
+  headRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>,
+  refRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>,
+): { x: number; y: number } | null {
+  const el =
+    nodeType === "reference"
+      ? refRefs.current[nodeId]
+      : nodeType === "section"
+        ? secRefs.current[nodeId]
+        : nodeType === "heading"
+          ? headRefs.current[nodeId]
+          : null;
+  if (!el) return null;
+  const rect = el.getBoundingClientRect();
+  const y = rect.top + rect.height / 2 - viewport.top;
+  if (nodeType === "reference") {
+    return { x: rect.left - viewport.left, y };
+  }
+  if (nodeType === "section" || nodeType === "heading") {
+    const x = (end === "start" ? rect.right : rect.left) - viewport.left;
+    return { x, y };
+  }
+  return null;
+}
+
+function resolveConnectTarget(
+  fromType: NodeKind,
+  fromId: string,
+  el: Element,
+  catalog: SourceCatalogGroup[],
+): { targetType: NodeKind; targetId: string; expandDoc?: string } | null {
+  const kind = el.getAttribute("data-node-kind");
+  const nodeId = el.getAttribute("data-node-id");
+  if (!kind || !nodeId) return null;
+
+  if (fromType === "section" && kind === "reference") {
+    return { targetType: "reference", targetId: nodeId };
+  }
+  if (fromType === "reference" && kind === "section") {
+    return { targetType: "section", targetId: nodeId };
+  }
+  if (fromType === "section" && kind === "document") {
+    const studySourceId = firstStudySourceForDocument(nodeId, catalog);
+    if (!studySourceId) return null;
+    return { targetType: "reference", targetId: studySourceId, expandDoc: nodeId };
+  }
+  if (isLeftKind(fromType) && (kind === "section" || kind === "heading")) {
+    const targetType = kind;
+    if (fromType === targetType && fromId === nodeId) return null;
+    return { targetType, targetId: nodeId };
+  }
+  return null;
 }
 
 function consumerEl(
@@ -143,7 +266,27 @@ function roundPathCoord(n: number): number {
 function pathsAreEqual(a: EdgePath[], b: EdgePath[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (a[i].key !== b[i].key || a[i].d !== b[i].d) return false;
+    const left = a[i];
+    const right = b[i];
+    if (left.key !== right.key || left.d !== right.d) return false;
+    if (left.kind !== right.kind) return false;
+    if (left.kind === "source" && right.kind === "source") {
+      if (
+        left.role !== right.role ||
+        left.hasProposed !== right.hasProposed ||
+        left.refLabel !== right.refLabel
+      ) {
+        return false;
+      }
+    } else if (left.kind === "outline" && right.kind === "outline") {
+      if (
+        left.edge.role !== right.edge.role ||
+        left.edge.hasProposed !== right.edge.hasProposed ||
+        left.edge.refLabel !== right.edge.refLabel
+      ) {
+        return false;
+      }
+    }
   }
   return true;
 }
@@ -235,15 +378,14 @@ export function ConnectorVariant({
   onUnmapOutlineRef,
   onUpdateOutlineRefRole,
   onTracePlacement,
-  onTraceStudySource,
   onClearTrace,
 }: {
   blocks: DocumentBlock[];
   tracedPlacement?: { blockId: string; sourceId: string } | null;
-  onMapStudySource: (blockId: string, studySourceId: string, role: SourceRole) => void;
+  onMapStudySource: (blockId: string, studySourceId: string, role: SourceRole) => string | void;
   onUnmapPlacement: (blockId: string, sourceId: string) => void;
   onUpdatePlacementRole: (blockId: string, sourceId: string, role: SourceRole) => void;
-  onMapOutlineRef: (toBlockId: string, payload: OutlineRefPayload, role: SourceRole) => void;
+  onMapOutlineRef: (toBlockId: string, payload: OutlineRefPayload, role: SourceRole) => string | void;
   onUnmapOutlineRef: (toBlockId: string, sourceId: string) => void;
   onUpdateOutlineRefRole: (toBlockId: string, sourceId: string, role: SourceRole) => void;
   onTracePlacement: (blockId: string, sourceId: string) => void;
@@ -316,11 +458,21 @@ export function ConnectorVariant({
   const suppressRowClickRef = useRef(false);
   const suppressHoverRef = useRef(false);
   const suppressHoverTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const rowHoverEnterTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const rowHoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const edgeHoverEnterTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const edgeHoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const selectedRef = useRef<Focus>(null);
+  const isConnectingRef = useRef(false);
+  const connectRafRef = useRef<number | null>(null);
+  const connectDragExpandDocRef = useRef<string | null>(null);
   const suppressViewportClickRef = useRef(false);
   const suppressViewportClickTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [paths, setPaths] = useState<EdgePath[]>([]);
 
   const isConnecting = connect !== null;
+  selectedRef.current = selected;
+  isConnectingRef.current = isConnecting;
   const pathFocus = useMemo((): Focus => {
     if (connect) {
       return { type: connect.fromType, id: connect.fromId };
@@ -345,18 +497,6 @@ export function ConnectorVariant({
       : selected?.type === "reference"
         ? "source"
         : null;
-
-  useEffect(() => {
-    if (!tracedStudySourceId) return;
-    setSelected((prev) =>
-      prev?.type === "reference" && prev.id === tracedStudySourceId
-        ? prev
-        : { type: "reference", id: tracedStudySourceId },
-    );
-    setHovered(null);
-    setPinnedLink(null);
-    setEdgeMenuPathKey(null);
-  }, [tracedStudySourceId]);
 
   const outlineQ = outlineQuery.trim().toLowerCase();
   const sourceQ = sourceQuery.trim().toLowerCase();
@@ -484,37 +624,105 @@ export function ConnectorVariant({
     [expandedDocsEffective],
   );
 
-  const clearHoverUnlessInViewport = useCallback(
-    (event: React.MouseEvent) => {
-      if (isConnecting || suppressHoverRef.current) return;
-      const next = event.relatedTarget;
-      if (next instanceof Node && connectorViewportRef.current?.contains(next)) return;
-      setHovered(null);
+  const cancelRowHoverTimers = useCallback(() => {
+    if (rowHoverEnterTimerRef.current) clearTimeout(rowHoverEnterTimerRef.current);
+    if (rowHoverLeaveTimerRef.current) clearTimeout(rowHoverLeaveTimerRef.current);
+    rowHoverEnterTimerRef.current = undefined;
+    rowHoverLeaveTimerRef.current = undefined;
+  }, []);
+
+  const cancelEdgeHoverTimers = useCallback(() => {
+    if (edgeHoverEnterTimerRef.current) clearTimeout(edgeHoverEnterTimerRef.current);
+    if (edgeHoverLeaveTimerRef.current) clearTimeout(edgeHoverLeaveTimerRef.current);
+    edgeHoverEnterTimerRef.current = undefined;
+    edgeHoverLeaveTimerRef.current = undefined;
+  }, []);
+
+  const scheduleRowHover = useCallback(
+    (focus: NonNullable<Focus>) => {
+      if (isConnectingRef.current || suppressHoverRef.current || selectedRef.current) return;
+      cancelRowHoverTimers();
+      rowHoverEnterTimerRef.current = setTimeout(() => {
+        if (isConnectingRef.current || suppressHoverRef.current || selectedRef.current) return;
+        setHovered(focus);
+      }, ROW_HOVER_SHOW_MS);
     },
-    [isConnecting],
+    [cancelRowHoverTimers],
   );
+
+  const scheduleClearRowHover = useCallback(
+    (event?: React.MouseEvent) => {
+      if (isConnectingRef.current || suppressHoverRef.current || selectedRef.current) return;
+      if (event) {
+        const next = event.relatedTarget;
+        if (next instanceof Node && connectorViewportRef.current?.contains(next)) return;
+      }
+      cancelRowHoverTimers();
+      rowHoverLeaveTimerRef.current = setTimeout(() => {
+        if (suppressHoverRef.current || selectedRef.current) return;
+        setHovered(null);
+      }, ROW_HOVER_HIDE_MS);
+    },
+    [cancelRowHoverTimers],
+  );
+
+  const scheduleEdgeHover = useCallback(
+    (pathKey: string) => {
+      cancelEdgeHoverTimers();
+      edgeHoverEnterTimerRef.current = setTimeout(() => {
+        setHoverEdge(pathKey);
+      }, EDGE_HOVER_SHOW_MS);
+    },
+    [cancelEdgeHoverTimers],
+  );
+
+  const scheduleClearEdgeHover = useCallback(
+    (pathKey: string) => {
+      cancelEdgeHoverTimers();
+      edgeHoverLeaveTimerRef.current = setTimeout(() => {
+        setHoverEdge((current) => (current === pathKey ? null : current));
+      }, EDGE_HOVER_HIDE_MS);
+    },
+    [cancelEdgeHoverTimers],
+  );
+
+  useEffect(
+    () => () => {
+      cancelRowHoverTimers();
+      cancelEdgeHoverTimers();
+      if (connectRafRef.current !== null) cancelAnimationFrame(connectRafRef.current);
+    },
+    [cancelRowHoverTimers, cancelEdgeHoverTimers],
+  );
+
+  useEffect(() => {
+    if (!selected) return;
+    cancelRowHoverTimers();
+    setHovered(null);
+  }, [selected, cancelRowHoverTimers]);
+
+  const suppressNextViewportClick = useCallback((durationMs = 300) => {
+    suppressViewportClickRef.current = true;
+    if (suppressViewportClickTimerRef.current) clearTimeout(suppressViewportClickTimerRef.current);
+    suppressViewportClickTimerRef.current = setTimeout(() => {
+      suppressViewportClickRef.current = false;
+    }, durationMs);
+  }, []);
 
   const markColumnScrolling = useCallback(() => {
     suppressHoverRef.current = true;
-    suppressViewportClickRef.current = true;
+    suppressNextViewportClick();
+    cancelRowHoverTimers();
+    cancelEdgeHoverTimers();
     setHovered(null);
+    setHoverEdge(null);
     if (suppressHoverTimerRef.current) clearTimeout(suppressHoverTimerRef.current);
-    if (suppressViewportClickTimerRef.current) clearTimeout(suppressViewportClickTimerRef.current);
     suppressHoverTimerRef.current = setTimeout(() => {
       suppressHoverRef.current = false;
-    }, 150);
-    suppressViewportClickTimerRef.current = setTimeout(() => {
-      suppressViewportClickRef.current = false;
-    }, 300);
-  }, []);
+    }, ROW_HOVER_SCROLL_SUPPRESS_MS);
+  }, [suppressNextViewportClick, cancelRowHoverTimers, cancelEdgeHoverTimers]);
 
-  const setRowHover = useCallback(
-    (focus: NonNullable<Focus>) => {
-      if (isConnecting || suppressHoverRef.current || selected) return;
-      setHovered(focus);
-    },
-    [isConnecting, selected],
-  );
+  const setRowHover = scheduleRowHover;
 
   useLayoutEffect(() => {
     const viewport = connectorViewportRef.current;
@@ -753,35 +961,36 @@ export function ConnectorVariant({
     return false;
   };
 
-  const selectReferenceAndTrace = useCallback(
-    (studySourceId: string) => {
+  const pinSelect = useCallback(
+    (focus: NonNullable<Focus>) => {
       if (isConnecting) return;
-      setEdgeMenuPathKey(null);
-      if (selected?.type === "reference" && selected.id === studySourceId) {
-        setSelected(null);
-        setPinnedLink(null);
-        onClearTrace?.();
+      if (suppressRowClickRef.current) {
+        suppressRowClickRef.current = false;
         return;
       }
-      setSelected({ type: "reference", id: studySourceId });
-      onTraceStudySource(studySourceId, selectedSection ?? highlightSection ?? undefined);
+      setEdgeMenuPathKey(null);
+      setPinnedLink(null);
+      setSelected(focus);
+      setHovered(null);
     },
-    [isConnecting, onTraceStudySource, onClearTrace, selected, selectedSection, highlightSection],
+    [isConnecting],
   );
 
   const clearSelection = useCallback(() => {
+    if (connectRef.current || pendingConnect) return;
     setSelected(null);
     setHovered(null);
     setPinnedLink(null);
     setEdgeMenuPathKey(null);
     onClearTrace?.();
-  }, [onClearTrace]);
+  }, [onClearTrace, pendingConnect]);
 
   const shouldClearSelectionFromClick = useCallback((target: Element | null) => {
     if (!target) return false;
     if (target.closest("[data-node-id]")) return false;
     if (target.closest("[data-connector-edge-menu]")) return false;
     if (target.closest("[data-connector-edge-hit]")) return false;
+    if (target.closest("[data-connector-connect-handle]")) return false;
     if (target.closest("[data-connector-no-deselect]")) return false;
     return true;
   }, []);
@@ -802,31 +1011,12 @@ export function ConnectorVariant({
       return next;
     });
 
-  const toggleSelect = (focus: NonNullable<Focus>) => {
-    if (isConnecting) return;
-    if (suppressRowClickRef.current) {
-      suppressRowClickRef.current = false;
-      return;
-    }
-    setEdgeMenuPathKey(null);
-    setSelected((prev) => {
-      if (prev && prev.type === focus.type && prev.id === focus.id) {
-        if (prev.type === "reference") onClearTrace?.();
-        setPinnedLink(null);
-        return null;
-      }
-      return focus;
-    });
-  };
-
-  const toggleSelectDocument = (dataSource: string) => {
+  const pinSelectDocument = (dataSource: string) => {
     if (isConnecting) return;
     setEdgeMenuPathKey(null);
-    setSelected((prev) =>
-      prev?.type === "document" && prev.id === dataSource
-        ? null
-        : { type: "document", id: dataSource },
-    );
+    setPinnedLink(null);
+    setSelected({ type: "document", id: dataSource });
+    setHovered(null);
   };
 
   const startConnect = (
@@ -836,12 +1026,21 @@ export function ConnectorVariant({
   ) => {
     event.preventDefault();
     event.stopPropagation();
+    const handle = event.currentTarget;
     const viewport = connectorViewportRef.current;
     const nodeEl =
       type === "reference"
         ? referenceEl(id, refRefs)
         : leftNodeEl(type, id, secRefs, headRefs);
     if (!viewport || !nodeEl) return;
+
+    cancelRowHoverTimers();
+    cancelEdgeHoverTimers();
+    setHovered(null);
+    setEdgeMenuPathKey(null);
+    connectDragExpandDocRef.current = null;
+    setSelected({ type, id });
+
     const vr = viewport.getBoundingClientRect();
     const nr = nodeEl.getBoundingClientRect();
     const fromX = (type === "reference" ? nr.left : nr.right) - vr.left;
@@ -860,38 +1059,85 @@ export function ConnectorVariant({
     connectRef.current = initial;
     setConnect(initial);
 
+    try {
+      handle.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may fail in some browsers; drag still works via document listeners.
+    }
+
+    const flushConnect = () => {
+      connectRafRef.current = null;
+      const next = connectRef.current;
+      if (next) setConnect({ ...next });
+    };
+
+    const scheduleConnectFlush = () => {
+      if (connectRafRef.current !== null) return;
+      connectRafRef.current = requestAnimationFrame(flushConnect);
+    };
+
     const onMove = (ev: PointerEvent) => {
       const v = connectorViewportRef.current?.getBoundingClientRect();
-      if (!v) return;
-      const x = ev.clientX - v.left;
-      const y = ev.clientY - v.top;
+      if (!v || !connectRef.current) return;
+
+      let x = ev.clientX - v.left;
+      let y = ev.clientY - v.top;
       let targetId: string | null = null;
       let targetType: NodeKind | null = null;
+
       const el = (document.elementFromPoint(ev.clientX, ev.clientY) as Element | null)?.closest(
         "[data-node-id]",
       );
       if (el) {
-        const kind = el.getAttribute("data-node-kind") as NodeKind | null;
-        const nodeId = el.getAttribute("data-node-id");
-        if (kind && nodeId) {
-          const fromType = connectRef.current?.fromType;
-          if (!fromType) return;
-          if (fromType === "section" && kind === "reference") {
-            targetType = kind;
-            targetId = nodeId;
-          } else if (fromType === "reference" && kind === "section") {
-            targetType = kind;
-            targetId = nodeId;
+        const resolved = resolveConnectTarget(
+          connectRef.current.fromType,
+          connectRef.current.fromId,
+          el,
+          graph.sourceCatalog,
+        );
+        if (resolved) {
+          targetType = resolved.targetType;
+          targetId = resolved.targetId;
+          if (
+            resolved.expandDoc &&
+            connectDragExpandDocRef.current !== resolved.expandDoc
+          ) {
+            connectDragExpandDocRef.current = resolved.expandDoc;
+            setExpandedDocs((prev) => new Set(prev).add(resolved.expandDoc!));
+          }
+          const snap = connectEndpoint(
+            resolved.targetType,
+            resolved.targetId,
+            "finish",
+            v,
+            secRefs,
+            headRefs,
+            refRefs,
+          );
+          if (snap) {
+            x = snap.x;
+            y = snap.y;
           }
         }
       }
-      if (connectRef.current) {
-        connectRef.current = { ...connectRef.current, x, y, targetId, targetType };
-      }
-      setConnect((c) => (c ? { ...c, x, y, targetId, targetType } : c));
+
+      connectRef.current = { ...connectRef.current, x, y, targetId, targetType };
+      scheduleConnectFlush();
     };
 
-    const onUp = () => {
+    const finishConnect = (ev: PointerEvent) => {
+      if (connectRafRef.current !== null) {
+        cancelAnimationFrame(connectRafRef.current);
+        connectRafRef.current = null;
+      }
+      try {
+        if (handle.hasPointerCapture(ev.pointerId)) {
+          handle.releasePointerCapture(ev.pointerId);
+        }
+      } catch {
+        // ignore
+      }
+
       const info = connectRef.current;
       let droppedOnTarget = false;
       if (info?.targetId && info.targetType) {
@@ -911,6 +1157,10 @@ export function ConnectorVariant({
               toBlockId,
               refKind,
               refId,
+              origin:
+                info.fromType === "heading"
+                  ? { type: "heading", id: info.fromId }
+                  : { type: "section", id: info.fromId },
               x: info.x,
               y: info.y,
             });
@@ -929,7 +1179,17 @@ export function ConnectorVariant({
           const studySourceId = info.fromType === "section" ? info.targetId : info.fromId;
           const already = graph.sectionToStudySources.get(blockId)?.has(studySourceId) ?? false;
           if (!already) {
-            setPendingConnect({ kind: "source", blockId, studySourceId, x: info.x, y: info.y });
+            setPendingConnect({
+              kind: "source",
+              blockId,
+              studySourceId,
+              origin:
+                info.fromType === "section"
+                  ? { type: "section", id: info.fromId }
+                  : { type: "reference", id: info.fromId },
+              x: info.x,
+              y: info.y,
+            });
           }
           droppedOnTarget = true;
           if (info.fromType === "reference") {
@@ -941,15 +1201,22 @@ export function ConnectorVariant({
       }
       if (droppedOnTarget) {
         suppressRowClickRef.current = true;
+        suppressNextViewportClick(CONNECT_CLICK_SUPPRESS_MS);
+      } else {
+        // No valid drop — keep origin selected so existing connectors stay visible.
+        setSelected({ type: info?.fromType ?? type, id: info?.fromId ?? id });
       }
+      connectDragExpandDocRef.current = null;
       connectRef.current = null;
       setConnect(null);
       document.removeEventListener("pointermove", onMove);
-      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointerup", finishConnect);
+      document.removeEventListener("pointercancel", finishConnect);
     };
 
     document.addEventListener("pointermove", onMove);
-    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointerup", finishConnect);
+    document.addEventListener("pointercancel", finishConnect);
   };
 
   const visiblePaths = useMemo(() => {
@@ -1062,7 +1329,6 @@ export function ConnectorVariant({
       } else {
         onUpdateOutlineRefRole(path.edge.toBlockId, path.edge.sourceId, role);
       }
-      setEdgeMenuPathKey(null);
     },
     [onUpdatePlacementRole, onUpdateOutlineRefRole],
   );
@@ -1140,8 +1406,28 @@ export function ConnectorVariant({
 
   const commitPendingConnect = (role: SourceRole) => {
     if (!pendingConnect) return;
+    suppressNextViewportClick(CONNECT_CLICK_SUPPRESS_MS);
+    const { origin } = pendingConnect;
+    const keepOriginSelected = () => {
+      setSelected({ type: origin.type, id: origin.id });
+      setHovered(null);
+    };
     if (pendingConnect.kind === "source") {
-      onMapStudySource(pendingConnect.blockId, pendingConnect.studySourceId, role);
+      const { blockId, studySourceId } = pendingConnect;
+      const sourceId = onMapStudySource(blockId, studySourceId, role);
+      keepOriginSelected();
+      if (sourceId) {
+        setPinnedLink({ kind: "source", blockId, sourceId });
+      }
+      for (const group of graph.sourceCatalog) {
+        for (const entry of group.entries) {
+          if (entry.kind === "document") {
+            if (entry.doc.references.some((ref) => ref.studySourceId === studySourceId)) {
+              setExpandedDocs((prev) => new Set(prev).add(entry.doc.dataSource));
+            }
+          }
+        }
+      }
     } else {
       const label =
         pendingConnect.refKind === "section"
@@ -1165,10 +1451,26 @@ export function ConnectorVariant({
           ? { fromBlockId: pendingConnect.refId }
           : { fromHeadingId: pendingConnect.refId }),
       };
-      onMapOutlineRef(pendingConnect.toBlockId, payload, role);
+      const placementId = onMapOutlineRef(pendingConnect.toBlockId, payload, role);
+      keepOriginSelected();
+      if (placementId) {
+        setPinnedLink({
+          kind: "outline",
+          toBlockId: pendingConnect.toBlockId,
+          refKind: pendingConnect.refKind,
+          refId: pendingConnect.refId,
+        });
+      }
     }
     setPendingConnect(null);
   };
+
+  useEffect(() => {
+    if (!pendingConnect) return;
+    suppressNextViewportClick(CONNECT_CLICK_SUPPRESS_MS);
+    setSelected({ type: pendingConnect.origin.type, id: pendingConnect.origin.id });
+    setHovered(null);
+  }, [pendingConnect, suppressNextViewportClick]);
 
   const blockTitle = useCallback(
     (blockId: string) => {
@@ -1183,7 +1485,10 @@ export function ConnectorVariant({
   );
 
   return (
-    <div className="connector-variant flex h-full min-h-0 w-full flex-col pt-4">
+    <div
+      className="connector-variant flex h-full min-h-0 w-full flex-col pt-4"
+      data-connecting={isConnecting ? "true" : undefined}
+    >
       {activeLink && (
         <div className="connector-toolbar mb-4 shrink-0 px-6 lg:px-10">
           <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-[#ece8ea] bg-white px-3 py-2 shadow-sm">
@@ -1272,14 +1577,7 @@ export function ConnectorVariant({
           <g className="pointer-events-none">
             {visiblePaths.map((path) => {
               const isHover = hoverEdge === path.key || edgeMenuPathKey === path.key;
-              const isOutline = path.kind === "outline";
-              const stroke = isOutline
-                ? isHover
-                  ? "#4338ca"
-                  : "#6366f1"
-                : isHover
-                  ? "#e64641"
-                  : "#ff4e49";
+              const stroke = pathStroke(path, isHover);
               const proposed =
                 path.kind === "source" ? path.hasProposed : path.edge.hasProposed;
               return (
@@ -1296,35 +1594,41 @@ export function ConnectorVariant({
               );
             })}
 
-            {visiblePaths.map((path) => (
-              <g key={`dot-${path.key}`}>
-                <circle
-                  cx={path.x1}
-                  cy={path.y1}
-                  r={3}
-                  fill={path.kind === "outline" ? "#6366f1" : "#ff4e49"}
-                />
-                <circle
-                  cx={path.x2}
-                  cy={path.y2}
-                  r={3}
-                  fill={path.kind === "outline" ? "#6366f1" : "#ff4e49"}
-                />
-              </g>
-            ))}
+            {visiblePaths.map((path) => {
+              const dotFill = pathStroke(path, false);
+              return (
+                <g key={`dot-${path.key}`}>
+                  <circle cx={path.x1} cy={path.y1} r={3} fill={dotFill} />
+                  <circle cx={path.x2} cy={path.y2} r={3} fill={dotFill} />
+                </g>
+              );
+            })}
 
             {connect && (
               <path
                 d={`M${connect.fromX},${connect.fromY} C${
-                  connect.fromX + (connect.x - connect.fromX) / 2
+                  connect.fromX + Math.max(48, (connect.x - connect.fromX) / 2)
                 },${connect.fromY} ${
-                  connect.x - (connect.x - connect.fromX) / 2
+                  connect.x - Math.max(48, (connect.x - connect.fromX) / 2)
                 },${connect.y} ${connect.x},${connect.y}`}
                 fill="none"
-                stroke={isLeftKind(connect.fromType) && connect.targetType && isLeftKind(connect.targetType) ? "#6366f1" : "#ff4e49"}
-                strokeWidth={2}
+                stroke={
+                  connect.targetId
+                    ? isLeftKind(connect.fromType) &&
+                      connect.targetType &&
+                      isLeftKind(connect.targetType)
+                      ? "#4338ca"
+                      : "#e64641"
+                    : isLeftKind(connect.fromType) &&
+                        connect.targetType &&
+                        isLeftKind(connect.targetType)
+                      ? "#6366f1"
+                      : "#ff4e49"
+                }
+                strokeWidth={connect.targetId ? 2.5 : 2}
                 strokeLinecap="round"
-                strokeDasharray="5 4"
+                strokeDasharray={connect.targetId ? undefined : "6 4"}
+                strokeOpacity={connect.targetId ? 1 : 0.8}
               />
             )}
           </g>
@@ -1343,10 +1647,10 @@ export function ConnectorVariant({
                 strokeWidth={14}
                 className="pointer-events-auto"
                 style={{ cursor: "pointer" }}
-                onMouseEnter={() => setHoverEdge(path.key)}
+                onMouseEnter={() => scheduleEdgeHover(path.key)}
                 onMouseLeave={() => {
                   if (edgeMenuPathKey === path.key) return;
-                  setHoverEdge((key) => (key === path.key ? null : key));
+                  scheduleClearEdgeHover(path.key);
                 }}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -1359,13 +1663,7 @@ export function ConnectorVariant({
         </svg>
 
         {visiblePaths.map((path) => {
-          if (edgeMenuPathKey && edgeMenuPathKey !== path.key) return null;
-          const showTag =
-            hoverEdge === path.key ||
-            edgeMenuPathKey === path.key ||
-            pathMatchesPinned(path, pinnedLink);
-          if (!showTag) return null;
-          const role = path.kind === "source" ? path.role : path.edge.role;
+          const role = pathEdgeRole(path);
           const mx = (path.x1 + path.x2) / 2;
           const my = (path.y1 + path.y2) / 2;
           return (
@@ -1375,7 +1673,11 @@ export function ConnectorVariant({
               anchorY={my}
               role={role}
               menuOpen={edgeMenuPathKey === path.key}
-              elevated={edgeMenuPathKey === path.key}
+              elevated={
+                edgeMenuPathKey === path.key ||
+                hoverEdge === path.key ||
+                pathMatchesPinned(path, pinnedLink)
+              }
               onToggleMenu={() => {
                 if (edgeMenuPathKey === path.key) {
                   setEdgeMenuPathKey(null);
@@ -1456,12 +1758,16 @@ export function ConnectorVariant({
                             connect?.targetType === "heading" &&
                             connect.targetId === group.heading.headingId
                           }
+                          isDragSource={
+                            connect?.fromType === "heading" &&
+                            connect.fromId === group.heading.headingId
+                          }
                           onEnter={() =>
                             setRowHover({ type: "heading", id: group.heading!.headingId })
                           }
-                          onLeave={clearHoverUnlessInViewport}
+                          onLeave={scheduleClearRowHover}
                           onClick={() =>
-                            toggleSelect({ type: "heading", id: group.heading!.headingId })
+                            pinSelect({ type: "heading", id: group.heading!.headingId })
                           }
                           onConnectStart={(event) =>
                             startConnect("heading", group.heading!.headingId, event)
@@ -1483,9 +1789,12 @@ export function ConnectorVariant({
                           isTarget={
                             connect?.targetType === "section" && connect.targetId === node.blockId
                           }
+                          isDragSource={
+                            connect?.fromType === "section" && connect.fromId === node.blockId
+                          }
                           onEnter={() => setRowHover({ type: "section", id: node.blockId })}
-                          onLeave={clearHoverUnlessInViewport}
-                          onClick={() => toggleSelect({ type: "section", id: node.blockId })}
+                          onLeave={scheduleClearRowHover}
+                          onClick={() => pinSelect({ type: "section", id: node.blockId })}
                           onConnectStart={(event) => startConnect("section", node.blockId, event)}
                         />
                       ))}
@@ -1569,11 +1878,15 @@ export function ConnectorVariant({
                                 connect?.targetType === "reference" &&
                                 connect.targetId === entry.ref.studySourceId
                               }
+                              isDragSource={
+                                connect?.fromType === "reference" &&
+                                connect.fromId === entry.ref.studySourceId
+                              }
                               onEnter={() =>
                                 setRowHover({ type: "reference", id: entry.ref.studySourceId })
                               }
-                              onLeave={clearHoverUnlessInViewport}
-                              onClick={() => selectReferenceAndTrace(entry.ref.studySourceId)}
+                              onLeave={scheduleClearRowHover}
+                              onClick={() => pinSelect({ type: "reference", id: entry.ref.studySourceId })}
                               onConnectStart={(event) =>
                                 startConnect("reference", entry.ref.studySourceId, event)
                               }
@@ -1597,9 +1910,9 @@ export function ConnectorVariant({
                               onEnter={() =>
                                 setRowHover({ type: "document", id: entry.doc.dataSource })
                               }
-                              onLeave={clearHoverUnlessInViewport}
+                              onLeave={scheduleClearRowHover}
                               onToggle={() => toggleDocExpanded(entry.doc.dataSource)}
-                              onSelect={() => toggleSelectDocument(entry.doc.dataSource)}
+                              onSelect={() => pinSelectDocument(entry.doc.dataSource)}
                             />
                             {expanded &&
                               visibleRefs.map((ref) => (
@@ -1622,11 +1935,15 @@ export function ConnectorVariant({
                                     connect?.targetType === "reference" &&
                                     connect.targetId === ref.studySourceId
                                   }
+                                  isDragSource={
+                                    connect?.fromType === "reference" &&
+                                    connect.fromId === ref.studySourceId
+                                  }
                                   onEnter={() =>
                                     setRowHover({ type: "reference", id: ref.studySourceId })
                                   }
-                                  onLeave={clearHoverUnlessInViewport}
-                                  onClick={() => selectReferenceAndTrace(ref.studySourceId)}
+                                  onLeave={scheduleClearRowHover}
+                                  onClick={() => pinSelect({ type: "reference", id: ref.studySourceId })}
                                   onConnectStart={(event) =>
                                     startConnect("reference", ref.studySourceId, event)
                                   }
@@ -1874,7 +2191,11 @@ function ConnectorRolePicker({
           <button
             key={option}
             type="button"
-            onClick={() => onSelectRole(option)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectRole(option);
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
             className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition-colors ${
               selected
                 ? ROLE_BADGE[option]
@@ -1906,27 +2227,45 @@ function CountBadge({ n, proposed }: { n: number; proposed: number }) {
 function ConnectHandle({
   side,
   connecting,
+  handleVisible = false,
+  isDragSource = false,
   tone = "source",
   onPointerDown,
 }: {
   side: "left" | "right";
   connecting: boolean;
+  handleVisible?: boolean;
+  isDragSource?: boolean;
   tone?: "source" | "outline";
   onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
 }) {
-  const color = tone === "outline" ? "bg-[#6366f1]" : "bg-[#ff4e49]";
+  const outline = tone === "outline";
+  const show = connecting || handleVisible || isDragSource;
   return (
     <button
       type="button"
-      onPointerDown={onPointerDown}
+      data-connector-connect-handle=""
+      data-connector-no-deselect=""
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        onPointerDown(event);
+      }}
       onClick={(event) => event.stopPropagation()}
       aria-label="Drag to connect"
-      title="Drag to connect"
+      title="Drag + to connect"
       style={{ touchAction: "none" }}
-      className={`absolute top-1/2 z-10 h-3 w-3 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-white ${color} shadow transition-opacity ${
-        side === "right" ? "-right-1.5" : "-left-1.5"
-      } ${connecting ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-    />
+      className={`connector-connect-handle absolute top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 cursor-crosshair items-center justify-center rounded-full border-2 bg-white shadow transition-[opacity,transform,box-shadow] duration-150 ${
+        outline
+          ? "border-indigo-500 text-indigo-600"
+          : "border-[#ff4e49] text-[#ff4e49]"
+      } ${side === "right" ? "-right-2" : "-left-2"} ${
+        show ? "scale-100 opacity-100" : "scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100"
+      } ${handleVisible ? "connector-connect-handle--selected" : ""} ${
+        isDragSource ? "connector-connect-handle--dragging" : ""
+      }`}
+    >
+      <Plus size={12} strokeWidth={2.5} />
+    </button>
   );
 }
 
@@ -1939,6 +2278,7 @@ function HeadingRow({
   selected,
   isTarget,
   isTraced,
+  isDragSource = false,
   onEnter,
   onLeave,
   onClick,
@@ -1952,6 +2292,7 @@ function HeadingRow({
   selected: boolean;
   isTarget: boolean;
   isTraced: boolean;
+  isDragSource?: boolean;
   onEnter: () => void;
   onLeave: (event: React.MouseEvent) => void;
   onClick: () => void;
@@ -1981,6 +2322,8 @@ function HeadingRow({
       <ConnectHandle
         side="right"
         connecting={connecting}
+        handleVisible={selected || highlighted || isTarget}
+        isDragSource={isDragSource}
         tone="outline"
         onPointerDown={onConnectStart}
       />
@@ -1997,6 +2340,7 @@ function SectionRow({
   selected,
   isTarget,
   isTraced,
+  isDragSource = false,
   onEnter,
   onLeave,
   onClick,
@@ -2010,6 +2354,7 @@ function SectionRow({
   selected: boolean;
   isTarget: boolean;
   isTraced: boolean;
+  isDragSource?: boolean;
   onEnter: () => void;
   onLeave: (event: React.MouseEvent) => void;
   onClick: () => void;
@@ -2036,7 +2381,13 @@ function SectionRow({
         {node.title}
       </span>
       <CountBadge n={linkCount} proposed={node.proposedCount} />
-      <ConnectHandle side="right" connecting={connecting} onPointerDown={onConnectStart} />
+      <ConnectHandle
+        side="right"
+        connecting={connecting}
+        handleVisible={selected || highlighted || isTarget}
+        isDragSource={isDragSource}
+        onPointerDown={onConnectStart}
+      />
     </div>
   );
 }
@@ -2120,6 +2471,7 @@ function ReferenceRow({
   selected,
   isTarget,
   isTraced,
+  isDragSource = false,
   nested = false,
   onEnter,
   onLeave,
@@ -2134,6 +2486,7 @@ function ReferenceRow({
   selected: boolean;
   isTarget: boolean;
   isTraced: boolean;
+  isDragSource?: boolean;
   nested?: boolean;
   onEnter: () => void;
   onLeave: (event: React.MouseEvent) => void;
@@ -2163,7 +2516,13 @@ function ReferenceRow({
         )}
       </span>
       <CountBadge n={node.sectionCount} proposed={node.proposedCount} />
-      <ConnectHandle side="left" connecting={connecting} onPointerDown={onConnectStart} />
+      <ConnectHandle
+        side="left"
+        connecting={connecting}
+        handleVisible={selected || highlighted || isTarget}
+        isDragSource={isDragSource}
+        onPointerDown={onConnectStart}
+      />
     </div>
   );
 }

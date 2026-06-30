@@ -438,9 +438,9 @@ export function RoadmapPage() {
     blockId: string,
     studySourceId: string,
     role: SourceRole,
-  ) => {
+  ): string | undefined => {
     const entry = findStudySourceById(studySourceId);
-    if (!entry) return;
+    if (!entry) return undefined;
     const created = {
       ...studySourceToRoadmapSource(entry),
       id: crypto.randomUUID(),
@@ -459,31 +459,32 @@ export function RoadmapPage() {
       }),
     );
     setToast("Source mapped");
+    return created.id;
   };
 
   const mapOutlineRefToSectionWithRole = useCallback(
-    (toBlockId: string, payload: OutlineRefPayload, role: SourceRole) => {
-      if (payload.fromBlockId === toBlockId) return;
+    (toBlockId: string, payload: OutlineRefPayload, role: SourceRole): string | undefined => {
+      if (payload.fromBlockId === toBlockId) return undefined;
+      const base = createSourceForType(payload.sourceType, {
+        content: payload.label,
+        status: "confirmed",
+      });
+      const created =
+        payload.sourceType === "SUBCONTENT"
+          ? {
+              ...base,
+              referencedBlockId: payload.fromBlockId,
+              role,
+            }
+          : {
+              ...base,
+              referencedHeadingId: payload.fromHeadingId,
+              role,
+            };
       setBlocks((prev) =>
         prev.map((block) => {
           if (block.id !== toBlockId) return block;
           if (block.type !== "content" && block.type !== "heading") return block;
-          const base = createSourceForType(payload.sourceType, {
-            content: payload.label,
-            status: "confirmed",
-          });
-          const created =
-            payload.sourceType === "SUBCONTENT"
-              ? {
-                  ...base,
-                  referencedBlockId: payload.fromBlockId,
-                  role,
-                }
-              : {
-                  ...base,
-                  referencedHeadingId: payload.fromHeadingId,
-                  role,
-                };
           const sources = block.type === "content" ? block.sources : (block.sources ?? []);
           return { ...block, sources: [...sources, created] };
         }),
@@ -493,6 +494,7 @@ export function RoadmapPage() {
           ? "Subcontent linked as evidence"
           : "Content linked as evidence",
       );
+      return created.id;
     },
     [],
   );
