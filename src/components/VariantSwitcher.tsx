@@ -3,7 +3,6 @@ import { DropdownMenu, MenuItem } from "./EditRoadmapPanel";
 
 export type VariantId =
   | "baseline"
-  | "outline"
   | "twoColumn"
   | "matrix"
   | "spine"
@@ -15,11 +14,6 @@ export const VARIANTS: { id: VariantId; name: string; description: string }[] = 
     id: "baseline",
     name: "V1 \u00b7 Current",
     description: "Inline source cards in the document",
-  },
-  {
-    id: "outline",
-    name: "V2 \u00b7 Expandable outline",
-    description: "Scan every section's sources, expand to edit",
   },
   {
     id: "twoColumn",
@@ -34,7 +28,7 @@ export const VARIANTS: { id: VariantId; name: string; description: string }[] = 
   {
     id: "spine",
     name: "V5 \u00b7 Narrative spine",
-    description: "Each section is a claim with evidence on a timeline",
+    description: "Sections with sources expanded; key message optional",
   },
   {
     id: "sourceView",

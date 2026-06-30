@@ -141,7 +141,7 @@ export function SourceCardPillFields({
                 <PillOptionPicker
                   value={source.dataSource}
                   options={DATA_SOURCES}
-                  searchPlaceholder="Search data sources"
+                  searchThreshold={Number.POSITIVE_INFINITY}
                   onSelect={(dataSource) => {
                     onChange({
                       ...source,

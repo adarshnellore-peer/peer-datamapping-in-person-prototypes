@@ -1,5 +1,5 @@
-import { useRef } from "react";
-import { AlertTriangle } from "lucide-react";
+import { useRef, useState } from "react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import type { ContentBlockData, DocumentBlock } from "../../types";
 import { SectionMapper } from "./SectionMapper";
 import { mappingStatus, type MappingState, type VariantProps } from "./types";
@@ -115,8 +115,9 @@ export function SpineVariant({
             Roadmap storyline
           </h1>
           <p className="mb-6 mt-1 text-[13px] text-[#9e9e9e]">
-            Read the document as a sequence of key messages. Each message draws on
-            evidence you map below it; mark how load-bearing each source is.
+            Each section shows its mapped evidence up front — mark how load-bearing
+            each source is. Expand “Key message” at the foot of a card to state the
+            claim it supports.
           </p>
 
           {blocks.map((block) => {
@@ -204,6 +205,7 @@ function BeatCard({
   const hex = NODE_HEX[state];
   const primaryCount = block.sources.filter((s) => s.role === "primary").length;
   const showGap = block.sources.length > 0 && primaryCount === 0;
+  const [showMessage, setShowMessage] = useState(false);
 
   return (
     <div className="flex gap-4">
@@ -232,24 +234,7 @@ function BeatCard({
           <span className="text-[14px] font-semibold text-[#302f2f]">{block.title}</span>
         </div>
 
-        <p className="mb-1 mt-3 text-[10.5px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
-          Key message
-        </p>
-        {onPromptChange ? (
-          <textarea
-            value={block.prompt}
-            onChange={(event) => onPromptChange(event.target.value)}
-            rows={2}
-            placeholder="State the claim this section makes…"
-            className="w-full resize-y rounded-md border border-[#e4e4e4] bg-white px-3 py-2 text-[14px] font-medium leading-relaxed text-[#302f2f] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
-          />
-        ) : (
-          <p className="text-[14px] font-medium leading-relaxed text-[#302f2f]">
-            {block.prompt || "—"}
-          </p>
-        )}
-
-        <div className="mb-2 mt-4 flex items-center gap-2">
+        <div className="mb-2 mt-3 flex items-center gap-2">
           <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
             Evidence
           </span>
@@ -275,6 +260,39 @@ function BeatCard({
             source as primary before filing.
           </div>
         )}
+
+        {/* Key message: collapsed by default, anchored at the bottom of the card. */}
+        <div className="mt-4 border-t border-[#f0f0f0] pt-3">
+          <button
+            type="button"
+            aria-expanded={showMessage}
+            onClick={() => setShowMessage((v) => !v)}
+            className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-[#9e9e9e] transition-colors hover:text-[#636161]"
+          >
+            <ChevronRight
+              size={13}
+              className={`transition-transform ${showMessage ? "rotate-90" : ""}`}
+            />
+            Key message
+          </button>
+          {showMessage && (
+            <div className="mt-2">
+              {onPromptChange ? (
+                <textarea
+                  value={block.prompt}
+                  onChange={(event) => onPromptChange(event.target.value)}
+                  rows={2}
+                  placeholder="State the claim this section makes…"
+                  className="w-full resize-y rounded-md border border-[#e4e4e4] bg-white px-3 py-2 text-[14px] font-medium leading-relaxed text-[#302f2f] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
+                />
+              ) : (
+                <p className="text-[14px] font-medium leading-relaxed text-[#302f2f]">
+                  {block.prompt || "—"}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

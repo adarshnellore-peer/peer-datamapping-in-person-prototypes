@@ -25,7 +25,6 @@ import { SectionContentBlock } from "./SectionContentBlock";
 import { DataSourcePanel } from "./DataSourcePanel";
 import { TableOfContents } from "./TableOfContents";
 import { VariantSwitcher, type VariantId } from "./VariantSwitcher";
-import { OutlineVariant } from "./variants/OutlineVariant";
 import { TwoColumnVariant } from "./variants/TwoColumnVariant";
 import { SourceViewVariant } from "./variants/SourceViewVariant";
 import { ConnectorVariant } from "./variants/ConnectorVariant";
@@ -216,19 +215,14 @@ export function RoadmapPage() {
     if (window.innerWidth < 768) setTocOpen(false);
   }, []);
 
-  // TOC clicks behave per variant: baseline scrolls the document, outline
-  // expands+scrolls the matching row (via activeTocId -> focusId). The
-  // two-column board hides the global TOC entirely.
+  // TOC clicks scroll the baseline document to the matching block. Other
+  // variants render their own navigation and hide the global TOC.
   const handleTocNavigate = useCallback(
     (id: string) => {
       setActiveTocId(id);
-      if (variant === "outline") {
-        if (window.innerWidth < 768) setTocOpen(false);
-        return;
-      }
       scrollToBlock(id);
     },
-    [variant, scrollToBlock],
+    [scrollToBlock],
   );
 
   const moveBlockFromToc = useCallback((blockId: string, dropFlatIndex: number) => {
@@ -580,7 +574,7 @@ export function RoadmapPage() {
 
   // V3/V4/V5 own their full-bleed layout (their own section nav), so the global
   // TOC rail is only shown for the document-style variants.
-  const showGlobalToc = variant === "baseline" || variant === "outline";
+  const showGlobalToc = variant === "baseline";
 
   const tracedSource = traceState ? findSourceInBlocks(blocks, traceState) : null;
   const tracedBlockSources = traceState
@@ -898,22 +892,6 @@ export function RoadmapPage() {
                 )}
               </div>
             </div>
-          )}
-
-          {variant === "outline" && (
-            <OutlineVariant
-              blocks={blocks}
-              focusId={activeTocId}
-              tracedSource={
-                traceState
-                  ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
-                  : null
-              }
-              onTraceSource={openTrace}
-              onUpdateSource={updateSourceInBlock}
-              onRemoveSource={removeSourceFromBlock}
-              onAddSource={addSourceToSection}
-            />
           )}
 
           {variant === "twoColumn" && (
