@@ -157,10 +157,27 @@ function createContentBlock(): ContentBlockData {
   };
 }
 
+const ROADMAP_BLOCKS_STORAGE_KEY = "peer-roadmap-blocks-v1";
+
+function loadRoadmapBlocks(): DocumentBlock[] {
+  try {
+    const raw = localStorage.getItem(ROADMAP_BLOCKS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed as DocumentBlock[];
+      }
+    }
+  } catch {
+    // Ignore corrupt storage and fall back to seed document.
+  }
+  return structuredClone(DOCUMENT_BLOCKS);
+}
+
 export function RoadmapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("roadmap");
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [blocks, setBlocks] = useState<DocumentBlock[]>(DOCUMENT_BLOCKS);
+  const [blocks, setBlocks] = useState<DocumentBlock[]>(loadRoadmapBlocks);
   const [variant, setVariant] = useState<VariantId>("baseline");
   const [tocOpen, setTocOpen] = useState(true);
   const [activeTocId, setActiveTocId] = useState<string | null>("c-1-3");
@@ -179,6 +196,14 @@ export function RoadmapPage() {
   const blockRefs = useRef<Record<string, HTMLElement | null>>({});
   const dragStateRef = useRef(dragState);
   dragStateRef.current = dragState;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ROADMAP_BLOCKS_STORAGE_KEY, JSON.stringify(blocks));
+    } catch {
+      // Ignore quota / private-mode errors.
+    }
+  }, [blocks]);
 
   const startBlockDrag = useCallback((blockId: string) => {
     const index = blocks.findIndex((b) => b.id === blockId);
