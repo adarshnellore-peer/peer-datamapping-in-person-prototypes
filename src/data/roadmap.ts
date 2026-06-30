@@ -14,6 +14,38 @@ export const DATA_SOURCES = [
   "Clinical Study Report",
   "C4591001 Protocol Amendment 9",
   "C4591001 Final Statistical Analysis Plan",
+  // Additional study documents — a real CSR commonly references 30-40+ sources.
+  "247HV101 Protocol Version 1",
+  "247HV101 Protocol Version 2",
+  "247HV101 Protocol Amendment 1",
+  "247HV101 Protocol Amendment 2",
+  "Investigator's Brochure Edition 7",
+  "Investigator's Brochure Edition 8",
+  "247HV101 SAP Version 2",
+  "247HV101 SAP Amendment 1",
+  "TLF Package — Efficacy (Tables)",
+  "TLF Package — Efficacy (Figures)",
+  "TLF Package — Efficacy (Listings)",
+  "TLF Package — Safety (Tables)",
+  "TLF Package — Safety (Figures)",
+  "TLF Package — Safety (Listings)",
+  "TLF Package — Disposition & Demographics",
+  "TLF Package — Pharmacokinetics",
+  "Safety Tables — Treatment-Emergent AEs",
+  "Safety Tables — Serious AEs",
+  "Safety Tables — Laboratory Abnormalities",
+  "ADaM Define.xml",
+  "SDTM Annotated CRF",
+  "Data Management Plan",
+  "Clinical Data Review Listing",
+  "Pharmacokinetic Analysis Report",
+  "Bioanalytical Report",
+  "DSUR 2024",
+  "Risk Management Plan",
+  "ICH E3 Reporting Guidance",
+  "FDA Guidance — Clinical Study Reports",
+  "EMA Guideline on Clinical Study Reports",
+  "CSR Style Guide",
 ] as const;
 
 export const DATA_SOURCE_CATEGORIES: Record<string, string> = {
@@ -23,6 +55,37 @@ export const DATA_SOURCE_CATEGORIES: Record<string, string> = {
   "Clinical Study Report": "CSR",
   "C4591001 Protocol Amendment 9": "Protocol",
   "C4591001 Final Statistical Analysis Plan": "SAP",
+  "247HV101 Protocol Version 1": "Protocol",
+  "247HV101 Protocol Version 2": "Protocol",
+  "247HV101 Protocol Amendment 1": "Protocol",
+  "247HV101 Protocol Amendment 2": "Protocol",
+  "Investigator's Brochure Edition 7": "IB",
+  "Investigator's Brochure Edition 8": "IB",
+  "247HV101 SAP Version 2": "SAP",
+  "247HV101 SAP Amendment 1": "SAP",
+  "TLF Package — Efficacy (Tables)": "TLF",
+  "TLF Package — Efficacy (Figures)": "TLF",
+  "TLF Package — Efficacy (Listings)": "TLF",
+  "TLF Package — Safety (Tables)": "TLF",
+  "TLF Package — Safety (Figures)": "TLF",
+  "TLF Package — Safety (Listings)": "TLF",
+  "TLF Package — Disposition & Demographics": "TLF",
+  "TLF Package — Pharmacokinetics": "TLF",
+  "Safety Tables — Treatment-Emergent AEs": "TLF",
+  "Safety Tables — Serious AEs": "TLF",
+  "Safety Tables — Laboratory Abnormalities": "TLF",
+  "ADaM Define.xml": "Data",
+  "SDTM Annotated CRF": "Data",
+  "Data Management Plan": "Data",
+  "Clinical Data Review Listing": "Data",
+  "Pharmacokinetic Analysis Report": "Report",
+  "Bioanalytical Report": "Report",
+  "DSUR 2024": "Report",
+  "Risk Management Plan": "Report",
+  "ICH E3 Reporting Guidance": "Reference",
+  "FDA Guidance — Clinical Study Reports": "Reference",
+  "EMA Guideline on Clinical Study Reports": "Reference",
+  "CSR Style Guide": "Reference",
 };
 
 export const SUBCONTENT_OPTIONS = [
@@ -111,9 +174,21 @@ export const OUTPUT_TYPES = [
 export const DEFAULT_PROMPT =
   "Generate the CSR Title-Page table. Use the exact two-column structure provided below; the left column labels must remain verbatim. Populate the right-hand cells with values extracted from the Protocol Title Page / Synopsis and the Sponsor corporate roster. If a value is missing, insert the text 'TBD.'";
 
+export const SOURCE_ROLES = ["primary", "supporting", "context"] as const;
+
+export type SourceRole = (typeof SOURCE_ROLES)[number];
+
+export const SOURCE_ROLE_LABELS: Record<SourceRole, string> = {
+  primary: "Primary",
+  supporting: "Supporting",
+  context: "Context",
+};
+
 type RoadmapSourceBase = {
   id: string;
   status?: "proposed" | "confirmed";
+  /** How the source is used in this section: primary / supporting / context. */
+  role?: SourceRole;
 };
 
 export type DataSourceRoadmapSource = RoadmapSourceBase & {

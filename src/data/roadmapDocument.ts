@@ -1,5 +1,5 @@
 import type { DocumentBlock, TocItem } from "../types";
-import type { DataSourceRoadmapSource, RoadmapSource } from "./roadmap";
+import type { DataSourceRoadmapSource, RoadmapSource, SourceRole } from "./roadmap";
 
 function src(
   id: string,
@@ -8,10 +8,12 @@ function src(
   sectionName: string,
   documentCategory: string,
   status: "proposed" | "confirmed" = "confirmed",
+  role: SourceRole = "primary",
 ): DataSourceRoadmapSource {
   return {
     id,
     status,
+    role,
     sourceType: "DATA_SOURCE",
     dataSource,
     referenceKey,
@@ -54,6 +56,8 @@ const SOURCES_1_5: RoadmapSource[] = [
     "Section 1: 17-34",
     "Section 1",
     "Protocol",
+    "confirmed",
+    "supporting",
   ),
   src(
     "s-1-5-3",
@@ -62,6 +66,7 @@ const SOURCES_1_5: RoadmapSource[] = [
     "CSR Intro Sections",
     "CSR",
     "proposed",
+    "context",
   ),
 ];
 
@@ -98,6 +103,8 @@ const SOURCES_1_6_DEMOGRAPHICS: RoadmapSource[] = [
     "Analysis Populations: 6-14",
     "Analysis Populations",
     "SAP",
+    "confirmed",
+    "supporting",
   ),
   src(
     "s-1-6d-3",
@@ -106,6 +113,7 @@ const SOURCES_1_6_DEMOGRAPHICS: RoadmapSource[] = [
     "Study Design and Objectives",
     "CSR",
     "proposed",
+    "context",
   ),
 ];
 
@@ -186,6 +194,8 @@ const SOURCES_1_9: RoadmapSource[] = [
     "Secondary Efficacy Endpoints: 69-88",
     "Secondary Efficacy Endpoints",
     "SAP",
+    "confirmed",
+    "supporting",
   ),
   src(
     "s-1-9-3",
@@ -193,6 +203,8 @@ const SOURCES_1_9: RoadmapSource[] = [
     "Efficacy Results — Primary Endpoint: 198-224",
     "Efficacy Results — Primary Endpoint",
     "CSR",
+    "confirmed",
+    "supporting",
   ),
   src(
     "s-1-9-4",
@@ -201,6 +213,7 @@ const SOURCES_1_9: RoadmapSource[] = [
     "Analysis Populations",
     "SAP",
     "proposed",
+    "context",
   ),
 ];
 
@@ -307,6 +320,137 @@ const PROMPT_1_11 =
 
 const PROMPT_1_12 =
   "[CONTEXT FOR THE MODEL] You are preparing a \"Where can I learn more about this trial?\" section for a Plain Language Summary aimed at a general public audience. This section should clearly direct readers to additional sources of information about the trial, such as clinical trial registries, published reports, or official websites. [REQUESTED TASK] After reading the CSR text that I will append below, produce a final output in valid markdown format that: 1. In plain language, explains that readers can find more details about the trial at the websites provided. 2. Lists the relevant websites or online resources as bullet points.";
+
+function h(id: string, level: 1 | 2 | 3, number: string, title: string): DocumentBlock {
+  return { id, type: "heading", level, number, title };
+}
+
+function c(
+  id: string,
+  title: string,
+  outputType: string,
+  sources: RoadmapSource[],
+): DocumentBlock {
+  return { id, type: "content", title, previewText: "", prompt: "", outputType, sources };
+}
+
+/**
+ * Full CSR body (ICH E3 structure) so the section list reflects a realistic
+ * document — dozens of sections, each mapped to several of the study's sources.
+ */
+const CSR_BODY: DocumentBlock[] = [
+  h("h-2", 1, "2", "Synopsis"),
+  c("c-2-1", "Study synopsis", "OUTPUT_TYPE_SUMMARY", [
+    src("s-2-1-1", "Clinical Study Report", "Synopsis: 3-13", "Synopsis", "CSR"),
+    src("s-2-1-2", "247HV101 Protocol Version 3", "Protocol Title Page: 1-1", "Protocol Title Page", "Protocol"),
+  ]),
+
+  h("h-3", 1, "3", "Introduction"),
+  c("c-3-1", "Background and rationale", "OUTPUT_TYPE_SUMMARY", [
+    src("s-3-1-1", "247HV101 Protocol Version 3", "Section 1: 17-34", "Section 1", "Protocol"),
+    src("s-3-1-2", "Investigator's Brochure Edition 8", "Nonclinical Summary: 22-61", "Nonclinical Summary", "IB"),
+    src("s-3-1-3", "247HV101 Protocol Version 1", "Section 1: 15-30", "Section 1", "Protocol", "proposed"),
+  ]),
+
+  h("h-4", 1, "4", "Study Objectives"),
+  c("c-4-1", "Primary and secondary objectives", "OUTPUT_TYPE_SUMMARY", [
+    src("s-4-1-1", "247HV101 Protocol Version 3", "Section 3: 41-46", "Section 3", "Protocol"),
+    src("s-4-1-2", "247HV101 SAP Version 2", "Objectives and Endpoints: 8-19", "Objectives and Endpoints", "SAP"),
+  ]),
+
+  h("h-5", 1, "5", "Investigational Plan"),
+  c("c-5-1", "Overall study design", "OUTPUT_TYPE_SUMMARY", [
+    src("s-5-1-1", "247HV101 Protocol Version 3", "Section 8: 84-102", "Section 8", "Protocol"),
+    src("s-5-1-2", "Clinical Study Report", "Study Design and Objectives: 84-112", "Study Design and Objectives", "CSR"),
+  ]),
+  c("c-5-2", "Selection of study population", "OUTPUT_TYPE_SUMMARY", [
+    src("s-5-2-1", "247HV101 Protocol Version 3", "Section 7: 70-83", "Section 7", "Protocol"),
+    src("s-5-2-2", "247HV101 SAP Version 2", "Analysis Populations: 20-28", "Analysis Populations", "SAP"),
+  ]),
+  c("c-5-3", "Treatments administered", "OUTPUT_TYPE_SUMMARY", [
+    src("s-5-3-1", "247HV101 Protocol Version 3", "Section 6: 55-69", "Section 6", "Protocol"),
+    src("s-5-3-2", "Investigator's Brochure Edition 8", "Pharmaceutical Information: 88-104", "Pharmaceutical Information", "IB", "proposed"),
+  ]),
+  c("c-5-4", "Efficacy and safety variables", "OUTPUT_TYPE_SUMMARY", [
+    src("s-5-4-1", "247HV101 SAP Version 2", "Efficacy Variables: 29-44", "Efficacy Variables", "SAP"),
+    src("s-5-4-2", "TLF Package — Efficacy (Tables)", "Endpoint Definitions: 2-9", "Endpoint Definitions", "TLF"),
+  ]),
+  c("c-5-5", "Statistical methods", "OUTPUT_TYPE_SUMMARY", [
+    src("s-5-5-1", "247HV101 SAP Version 2", "Statistical Methods: 45-72", "Statistical Methods", "SAP"),
+    src("s-5-5-2", "247HV101 SAP Amendment 1", "Changes to Planned Analyses: 3-11", "Changes to Planned Analyses", "SAP", "proposed"),
+  ]),
+
+  h("h-6", 1, "6", "Study Patients"),
+  c("c-6-1", "Disposition of patients", "OUTPUT_TYPE_TABLE", [
+    src("s-6-1-1", "TLF Package — Disposition & Demographics", "Table 14.1.1 Disposition: 1-4", "Table 14.1.1 Disposition", "TLF"),
+    src("s-6-1-2", "Clinical Data Review Listing", "Subject Disposition Listing: 12-40", "Subject Disposition Listing", "Data"),
+  ]),
+  c("c-6-2", "Protocol deviations", "OUTPUT_TYPE_TABLE", [
+    src("s-6-2-1", "Clinical Data Review Listing", "Protocol Deviation Listing: 41-58", "Protocol Deviation Listing", "Data"),
+    src("s-6-2-2", "Data Management Plan", "Deviation Handling: 18-24", "Deviation Handling", "Data", "proposed"),
+  ]),
+
+  h("h-7", 1, "7", "Efficacy Evaluation"),
+  c("c-7-1", "Primary endpoint results", "OUTPUT_TYPE_TABLE", [
+    src("s-7-1-1", "TLF Package — Efficacy (Tables)", "Table 14.2.1 Primary Endpoint: 5-12", "Table 14.2.1 Primary Endpoint", "TLF"),
+    src("s-7-1-2", "Clinical Study Report", "Efficacy Results — Primary Endpoint: 198-224", "Efficacy Results — Primary Endpoint", "CSR", "confirmed", "supporting"),
+    src("s-7-1-3", "247HV101 SAP Version 2", "Primary Analysis: 50-58", "Primary Analysis", "SAP", "confirmed", "context"),
+  ]),
+  c("c-7-2", "Secondary endpoint results", "OUTPUT_TYPE_TABLE", [
+    src("s-7-2-1", "TLF Package — Efficacy (Figures)", "Figure 14.2.4 Secondary Endpoints: 1-8", "Figure 14.2.4 Secondary Endpoints", "TLF"),
+    src("s-7-2-2", "247HV101 SAP Version 2", "Secondary Analyses: 59-67", "Secondary Analyses", "SAP"),
+  ]),
+  c("c-7-3", "Subgroup analyses", "OUTPUT_TYPE_TABLE", [
+    src("s-7-3-1", "TLF Package — Efficacy (Listings)", "Listing 16.2.6 Subgroups: 30-72", "Listing 16.2.6 Subgroups", "TLF", "proposed"),
+    src("s-7-3-2", "247HV101 SAP Version 2", "Subgroup Analyses: 68-71", "Subgroup Analyses", "SAP"),
+  ]),
+  c("c-7-4", "Pharmacokinetic results", "OUTPUT_TYPE_TABLE", [
+    src("s-7-4-1", "TLF Package — Pharmacokinetics", "Table 14.3.1 PK Parameters: 1-6", "Table 14.3.1 PK Parameters", "TLF"),
+    src("s-7-4-2", "Pharmacokinetic Analysis Report", "Summary of PK Parameters: 14-39", "Summary of PK Parameters", "Report"),
+    src("s-7-4-3", "Bioanalytical Report", "Assay Validation: 5-22", "Assay Validation", "Report", "proposed"),
+  ]),
+
+  h("h-8", 1, "8", "Safety Evaluation"),
+  c("c-8-1", "Extent of exposure", "OUTPUT_TYPE_TABLE", [
+    src("s-8-1-1", "TLF Package — Safety (Tables)", "Table 14.3.1 Exposure: 1-5", "Table 14.3.1 Exposure", "TLF"),
+    src("s-8-1-2", "Safety Tables — Treatment-Emergent AEs", "Exposure Summary: 1-3", "Exposure Summary", "TLF"),
+  ]),
+  c("c-8-2", "Adverse events", "OUTPUT_TYPE_TABLE", [
+    src("s-8-2-1", "Safety Tables — Treatment-Emergent AEs", "TEAE by System Organ Class: 4-28", "TEAE by System Organ Class", "TLF"),
+    src("s-8-2-2", "Clinical Study Report", "Safety Summary — Adverse Events: 312-348", "Safety Summary — Adverse Events", "CSR", "confirmed", "supporting"),
+  ]),
+  c("c-8-3", "Serious adverse events and deaths", "OUTPUT_TYPE_TABLE", [
+    src("s-8-3-1", "Safety Tables — Serious AEs", "SAE Summary: 1-14", "SAE Summary", "TLF"),
+    src("s-8-3-2", "DSUR 2024", "Cumulative SAE Review: 22-46", "Cumulative SAE Review", "Report", "proposed"),
+  ]),
+  c("c-8-4", "Clinical laboratory evaluation", "OUTPUT_TYPE_TABLE", [
+    src("s-8-4-1", "Safety Tables — Laboratory Abnormalities", "Lab Shift Tables: 1-19", "Lab Shift Tables", "TLF"),
+    src("s-8-4-2", "TLF Package — Safety (Listings)", "Listing 16.2.8 Lab Abnormalities: 80-140", "Listing 16.2.8 Lab Abnormalities", "TLF"),
+  ]),
+  c("c-8-5", "Vital signs and physical findings", "OUTPUT_TYPE_SUMMARY", [
+    src("s-8-5-1", "TLF Package — Safety (Figures)", "Figure 14.3.7 Vital Signs: 9-15", "Figure 14.3.7 Vital Signs", "TLF"),
+  ]),
+
+  h("h-9", 1, "9", "Discussion and Overall Conclusions"),
+  c("c-9-1", "Benefit-risk discussion", "OUTPUT_TYPE_SUMMARY", [
+    src("s-9-1-1", "Clinical Study Report", "Discussion and Conclusions: 410-438", "Discussion and Conclusions", "CSR"),
+    src("s-9-1-2", "Risk Management Plan", "Benefit-Risk Summary: 30-52", "Benefit-Risk Summary", "Report", "proposed"),
+  ]),
+
+  h("h-10", 1, "10", "Reference List"),
+  c("c-10-1", "References", "OUTPUT_TYPE_SUMMARY", [
+    src("s-10-1-1", "ICH E3 Reporting Guidance", "Full Guidance: 1-48", "Full Guidance", "Reference"),
+    src("s-10-1-2", "FDA Guidance — Clinical Study Reports", "Full Guidance: 1-22", "Full Guidance", "Reference"),
+    src("s-10-1-3", "EMA Guideline on Clinical Study Reports", "Full Guideline: 1-30", "Full Guideline", "Reference", "proposed"),
+  ]),
+
+  h("h-11", 1, "11", "Appendices"),
+  c("c-11-1", "Study information appendix", "OUTPUT_TYPE_SUMMARY", [
+    src("s-11-1-1", "ADaM Define.xml", "Dataset Definitions: 1-60", "Dataset Definitions", "Data"),
+    src("s-11-1-2", "SDTM Annotated CRF", "Annotated CRF: 1-44", "Annotated CRF", "Data"),
+    src("s-11-1-3", "CSR Style Guide", "Formatting Conventions: 4-12", "Formatting Conventions", "Reference", "proposed"),
+  ]),
+];
 
 export const DOCUMENT_BLOCKS: DocumentBlock[] = [
   {
@@ -478,13 +622,7 @@ export const DOCUMENT_BLOCKS: DocumentBlock[] = [
     outputType: "OUTPUT_TYPE_SUMMARY",
     sources: SOURCES_1_12,
   },
-  {
-    id: "h-2",
-    type: "heading",
-    level: 1,
-    number: "2",
-    title: "Table of Contents",
-  },
+  ...CSR_BODY,
 ];
 
 export const TOC_ITEMS: TocItem[] = DOCUMENT_BLOCKS.filter(

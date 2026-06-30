@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+import { Search } from "lucide-react";
+
 const pillBase =
   "rounded-full border px-3 py-1.5 text-left text-[13px] leading-snug transition-colors";
 const pillEditing =
@@ -65,12 +68,29 @@ export function PillOptionPicker({
   options,
   onSelect,
   getLabel = (option) => option,
+  /** Above this many options, switch to a searchable list (studies often have 30-40+ sources). */
+  searchThreshold = 12,
+  searchPlaceholder = "Search…",
 }: {
   value: string;
   options: readonly string[];
   onSelect: (value: string) => void;
   getLabel?: (value: string) => string;
+  searchThreshold?: number;
+  searchPlaceholder?: string;
 }) {
+  if (options.length > searchThreshold) {
+    return (
+      <PillSearchPicker
+        value={value}
+        options={options}
+        onSelect={onSelect}
+        getLabel={getLabel}
+        placeholder={searchPlaceholder}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((option) => {
@@ -87,6 +107,86 @@ export function PillOptionPicker({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Searchable option list for fields with many options (e.g. the study's
+ * 30-40+ data sources). Renders a filter input above a scrollable list so the
+ * writer searches instead of scanning a huge pill cloud.
+ */
+export function PillSearchPicker({
+  value,
+  options,
+  onSelect,
+  getLabel = (option) => option,
+  placeholder = "Search…",
+}: {
+  value: string;
+  options: readonly string[];
+  onSelect: (value: string) => void;
+  getLabel?: (value: string) => string;
+  placeholder?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const normalized = query.trim().toLowerCase();
+  const filtered = normalized
+    ? options.filter((option) => getLabel(option).toLowerCase().includes(normalized))
+    : options;
+
+  return (
+    <div className="rounded-md border border-[#d4ced3] bg-white p-1.5">
+      <div className="relative">
+        <Search
+          size={14}
+          strokeWidth={2}
+          className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[#9e9e9e]"
+          aria-hidden
+        />
+        <input
+          ref={inputRef}
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={`${placeholder} (${options.length})`}
+          aria-label="Search options"
+          className="mb-1 w-full rounded bg-black/[0.04] py-1.5 pl-7 pr-2 text-[13px] text-[#302f2f] placeholder:text-[#9e9e9e] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#d4ced3]"
+        />
+      </div>
+      <div className="max-h-[200px] overflow-y-auto">
+        {filtered.length === 0 ? (
+          <p className="px-2 py-3 text-center text-[12px] text-[#9e9e9e]">No matches</p>
+        ) : (
+          <ul className="space-y-0.5">
+            {filtered.map((option) => {
+              const isCurrent = option === value;
+              return (
+                <li key={option}>
+                  <button
+                    type="button"
+                    aria-pressed={isCurrent}
+                    onClick={() => onSelect(option)}
+                    className={`block w-full rounded px-2 py-1.5 text-left text-[13px] leading-snug transition-colors ${
+                      isCurrent
+                        ? "bg-[#fedbda] font-medium text-[#302f2f]"
+                        : "text-[#454545] hover:bg-[#f5f5f5]"
+                    }`}
+                  >
+                    {getLabel(option)}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

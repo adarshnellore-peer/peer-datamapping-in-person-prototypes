@@ -24,9 +24,16 @@ import {
 import { SectionContentBlock } from "./SectionContentBlock";
 import { DataSourcePanel } from "./DataSourcePanel";
 import { TableOfContents } from "./TableOfContents";
+import { VariantSwitcher, type VariantId } from "./VariantSwitcher";
+import { OutlineVariant } from "./variants/OutlineVariant";
+import { TwoColumnVariant } from "./variants/TwoColumnVariant";
+import { SourceViewVariant } from "./variants/SourceViewVariant";
+import { ConnectorVariant } from "./variants/ConnectorVariant";
+import { MatrixVariant } from "./variants/MatrixVariant";
+import { SpineVariant } from "./variants/SpineVariant";
 // import { SourceLibraryOverlay } from "./SourceLibraryOverlay";
 import { DOCUMENT_BLOCKS } from "../data/roadmapDocument";
-import type { RoadmapSource } from "../data/roadmap";
+import { createSourceForType, type RoadmapSource, type SourceRole } from "../data/roadmap";
 // import { getDefaultSectionForDocument } from "../data/documentPreview";
 import type { ContentBlockData, DocumentBlock, HeadingBlock, ViewMode } from "../types";
 import {
@@ -130,6 +137,7 @@ export function RoadmapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("roadmap");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [blocks, setBlocks] = useState<DocumentBlock[]>(DOCUMENT_BLOCKS);
+  const [variant, setVariant] = useState<VariantId>("baseline");
   const [tocOpen, setTocOpen] = useState(true);
   const [activeTocId, setActiveTocId] = useState<string | null>("h-1-3");
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
@@ -207,6 +215,21 @@ export function RoadmapPage() {
     setActiveTocId(id);
     if (window.innerWidth < 768) setTocOpen(false);
   }, []);
+
+  // TOC clicks behave per variant: baseline scrolls the document, outline
+  // expands+scrolls the matching row (via activeTocId -> focusId). The
+  // two-column board hides the global TOC entirely.
+  const handleTocNavigate = useCallback(
+    (id: string) => {
+      setActiveTocId(id);
+      if (variant === "outline") {
+        if (window.innerWidth < 768) setTocOpen(false);
+        return;
+      }
+      scrollToBlock(id);
+    },
+    [variant, scrollToBlock],
+  );
 
   const moveBlockFromToc = useCallback((blockId: string, dropFlatIndex: number) => {
     setBlocks((prev) => moveDocumentBlockFromTocDrop(prev, blockId, dropFlatIndex));
@@ -290,6 +313,125 @@ export function RoadmapPage() {
     setExpandedSource((prev) =>
       prev?.blockId === blockId && prev.sourceId === sourceId ? null : prev,
     );
+  };
+
+  // Used by the lo-fi mapping variants: append a pre-filled data source.
+  const addSourceToSection = (blockId: string) => {
+    setBlocks((prev) =>
+      prev.map((block) =>
+        block.type === "content" && block.id === blockId
+          ? { ...block, sources: [...block.sources, createSourceForType("DATA_SOURCE")] }
+          : block,
+      ),
+    );
+    setToast("Source added");
+  };
+
+  // Used by the V4 usage matrix: append a source pre-tagged with a usage role.
+  const addSourceToSectionRole = (blockId: string, role: SourceRole) => {
+    setBlocks((prev) =>
+      prev.map((block) =>
+        block.type === "content" && block.id === blockId
+          ? {
+              ...block,
+              sources: [...block.sources, { ...createSourceForType("DATA_SOURCE"), role }],
+            }
+          : block,
+      ),
+    );
+    setToast("Source added");
+  };
+
+  // V3 board / V6 source view: map a specific library document onto a section,
+  // optionally pre-filling its usage role (V6 "Add to section").
+  const mapDataSourceToSection = (
+    blockId: string,
+    dataSource: string,
+    role?: RoadmapSource["role"],
+  ) => {
+    setBlocks((prev) =>
+      prev.map((block) => {
+        if (block.type !== "content" || block.id !== blockId) return block;
+        const created = createSourceForType("DATA_SOURCE", { dataSource });
+        return {
+          ...block,
+          sources: [...block.sources, role ? { ...created, role } : created],
+        };
+      }),
+    );
+    setToast("Source mapped");
+  };
+
+  // V7 connector map: remove every placement of a document within one section
+  // (detaches the whole connector, not the document elsewhere).
+  const unmapDataSourceFromSection = (blockId: string, dataSource: string) => {
+    setBlocks((prev) =>
+      prev.map((block) =>
+        block.type === "content" && block.id === blockId
+          ? {
+              ...block,
+              sources: block.sources.filter(
+                (s) => !(s.sourceType === "DATA_SOURCE" && s.dataSource === dataSource),
+              ),
+            }
+          : block,
+      ),
+    );
+    setTraceState((prev) => (prev?.blockId === blockId ? null : prev));
+    setToast("Mapping removed");
+  };
+
+  // V6 source view: accept all proposed placements of one document at once.
+  const confirmAllForDataSource = (dataSource: string) => {
+    setBlocks((prev) =>
+      prev.map((block) =>
+        block.type === "content"
+          ? {
+              ...block,
+              sources: block.sources.map((s) =>
+                s.sourceType === "DATA_SOURCE" &&
+                s.dataSource === dataSource &&
+                s.status === "proposed"
+                  ? { ...s, status: "confirmed" }
+                  : s,
+              ),
+            }
+          : block,
+      ),
+    );
+    setToast("Placements confirmed");
+  };
+
+  // V3 board: move an existing mapped source from one section to another.
+  const moveSourceToSection = (
+    fromBlockId: string,
+    sourceId: string,
+    toBlockId: string,
+  ) => {
+    if (fromBlockId === toBlockId) return;
+    setBlocks((prev) => {
+      const fromBlock = prev.find(
+        (b): b is ContentBlockData => b.type === "content" && b.id === fromBlockId,
+      );
+      const moved = fromBlock?.sources.find((s) => s.id === sourceId);
+      if (!moved) return prev;
+      return prev.map((block) => {
+        if (block.type !== "content") return block;
+        if (block.id === fromBlockId) {
+          return { ...block, sources: block.sources.filter((s) => s.id !== sourceId) };
+        }
+        if (block.id === toBlockId) {
+          return { ...block, sources: [...block.sources, moved] };
+        }
+        return block;
+      });
+    });
+    setTraceState((prev) =>
+      prev?.blockId === fromBlockId && prev.sourceId === sourceId
+        ? { ...prev, blockId: toBlockId }
+        : prev,
+    );
+    setToast("Source moved");
   };
 
   /* PROTOTYPE_DISABLED: study library add flow
@@ -435,6 +577,10 @@ export function RoadmapPage() {
     setExpandedSource(target);
     if (window.innerWidth < 768) setTocOpen(false);
   }, [blocks, traceState]);
+
+  // V3/V4/V5 own their full-bleed layout (their own section nav), so the global
+  // TOC rail is only shown for the document-style variants.
+  const showGlobalToc = variant === "baseline" || variant === "outline";
 
   const tracedSource = traceState ? findSourceInBlocks(blocks, traceState) : null;
   const tracedBlockSources = traceState
@@ -592,32 +738,40 @@ export function RoadmapPage() {
 
       {/* Toolbar row */}
       <div className="relative flex h-10 shrink-0 items-center border-b border-[#d4ced3] bg-white px-3 sm:px-4">
-        <button
-          type="button"
-          onClick={() => setTocOpen((v) => !v)}
-          aria-pressed={tocOpen}
-          className={`flex h-8 w-8 items-center justify-center rounded-md border border-[#d4ced3] bg-white transition-colors ${
-            tocOpen ? "border-[#fe9591] bg-[#fedbda]" : "hover:bg-[#fafafa]"
-          }`}
-          aria-label={tocOpen ? "Close table of contents" : "Open table of contents"}
-          title={tocOpen ? "Close table of contents" : "Open table of contents"}
-        >
-          <List size={18} strokeWidth={1.75} />
-        </button>
-
-        <div className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 items-center gap-2 md:flex">
-          <div className="pointer-events-auto flex h-8 items-center gap-2 rounded-md border border-[#d4ced3] bg-white px-3 text-[14px] text-[#9e9e9e]">
-            <span>Heading 2</span>
-            <ChevronDown size={14} />
-          </div>
+        {showGlobalToc && (
           <button
             type="button"
-            className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded hover:bg-[#f5f5f5]"
-            aria-label="Copy formatting"
+            onClick={() => setTocOpen((v) => !v)}
+            aria-pressed={tocOpen}
+            className={`mr-2 flex h-8 w-8 items-center justify-center rounded-md border border-[#d4ced3] bg-white transition-colors ${
+              tocOpen ? "border-[#fe9591] bg-[#fedbda]" : "hover:bg-[#fafafa]"
+            }`}
+            aria-label={tocOpen ? "Close table of contents" : "Open table of contents"}
+            title={tocOpen ? "Close table of contents" : "Open table of contents"}
           >
-            <Copy size={16} strokeWidth={1.75} color="#636161" />
+            <List size={18} strokeWidth={1.75} />
           </button>
+        )}
+
+        <div>
+          <VariantSwitcher variant={variant} onChange={setVariant} />
         </div>
+
+        {variant === "baseline" && (
+          <div className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 items-center gap-2 md:flex">
+            <div className="pointer-events-auto flex h-8 items-center gap-2 rounded-md border border-[#d4ced3] bg-white px-3 text-[14px] text-[#9e9e9e]">
+              <span>Heading 2</span>
+              <ChevronDown size={14} />
+            </div>
+            <button
+              type="button"
+              className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded hover:bg-[#f5f5f5]"
+              aria-label="Copy formatting"
+            >
+              <Copy size={16} strokeWidth={1.75} color="#636161" />
+            </button>
+          </div>
+        )}
 
         <div className="ml-auto flex items-center gap-1">
           {/* PROTOTYPE_DISABLED: study library
@@ -665,7 +819,7 @@ export function RoadmapPage() {
       </div>
 
       <div className="relative flex min-h-0 flex-1">
-        {tocOpen && (
+        {tocOpen && showGlobalToc && (
           <button
             type="button"
             aria-label="Close table of contents"
@@ -673,12 +827,12 @@ export function RoadmapPage() {
             onClick={() => setTocOpen(false)}
           />
         )}
-        {tocOpen && (
+        {tocOpen && showGlobalToc && (
           <aside className="fixed inset-y-0 left-0 z-40 flex w-[min(90vw,260px)] shrink-0 flex-col border-r border-[#e8e8e8] bg-[#fafafa] shadow-lg md:relative md:z-0 md:w-[240px] md:shadow-none">
             <TableOfContents
               blocks={blocks}
               activeId={activeTocId}
-              onNavigate={scrollToBlock}
+              onNavigate={handleTocNavigate}
               onMoveBlock={moveBlockFromToc}
               onAddHeadingAfter={addHeadingAfter}
               onAddContentAfter={addContentAfter}
@@ -688,63 +842,153 @@ export function RoadmapPage() {
           </aside>
         )}
 
-        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-          {/* PROTOTYPE_DISABLED: document view — roadmap only for now */}
-          <div className="roadmap-blocks relative mx-auto w-full min-w-0 max-w-[680px] overflow-visible pb-12">
-            {blocks.map((block, index) => (
-              <Fragment key={block.id}>
-                {dragState?.dropIndex === index && dragState.blockId && (
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+          {variant === "baseline" && (
+            <div className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+              <div className="roadmap-blocks relative mx-auto w-full min-w-0 max-w-[680px] overflow-visible pb-12">
+                {blocks.map((block, index) => (
+                  <Fragment key={block.id}>
+                    {dragState?.dropIndex === index && dragState.blockId && (
+                      <div
+                        className="pointer-events-none relative z-20 -my-1 h-0.5 rounded-full bg-[#ff4e49]"
+                        aria-hidden
+                      />
+                    )}
+                    <BlockRenderer
+                      block={block}
+                      blockRefs={blockRefs}
+                      isDragging={dragState?.blockId === block.id}
+                      tracedSourceId={
+                        traceState?.blockId === block.id ? traceState.sourceId : null
+                      }
+                      expandedSourceId={
+                        expandedSource?.blockId === block.id ? expandedSource.sourceId : null
+                      }
+                      onSourceCardClick={(sourceId) => handleSourceCardClick(block.id, sourceId)}
+                      onDragHandlePointerDown={
+                        block.type === "content"
+                          ? (event) => handleDragHandlePointerDown(block.id, event)
+                          : undefined
+                      }
+                      onUpdateSource={(source) => updateSourceInBlock(block.id, source)}
+                      onRemoveSource={(sourceId) => removeSourceFromBlock(block.id, sourceId)}
+                      onDuplicateSource={(sourceId) => duplicateSourceInBlock(block.id, sourceId)}
+                      onAddSource={() =>
+                        setToast("Study library is disabled in this prototype")
+                      }
+                      onPromptChange={(prompt) => updatePrompt(block.id, prompt)}
+                      onAdditionalContextChange={(additionalContext) =>
+                        updateAdditionalContext(block.id, additionalContext)
+                      }
+                      onOutputTypeChange={(outputType) =>
+                        updateOutputType(block.id, outputType)
+                      }
+                      onDuplicate={duplicateBlock}
+                      onDelete={deleteContentBlock}
+                      onAddHeadingAfter={addHeadingAfter}
+                      onAddContentAfter={addContentAfter}
+                    />
+                  </Fragment>
+                ))}
+                {dragState && dragState.dropIndex === blocks.length && (
                   <div
-                    className="pointer-events-none relative z-20 -my-1 h-0.5 rounded-full bg-[#ff4e49]"
+                    className="pointer-events-none relative z-20 h-0.5 rounded-full bg-[#ff4e49]"
                     aria-hidden
                   />
                 )}
-                <BlockRenderer
-                  block={block}
-                  blockRefs={blockRefs}
-                  isDragging={dragState?.blockId === block.id}
-                  tracedSourceId={
-                    traceState?.blockId === block.id ? traceState.sourceId : null
-                  }
-                  expandedSourceId={
-                    expandedSource?.blockId === block.id ? expandedSource.sourceId : null
-                  }
-                  onSourceCardClick={(sourceId) => handleSourceCardClick(block.id, sourceId)}
-                  onDragHandlePointerDown={
-                    block.type === "content"
-                      ? (event) => handleDragHandlePointerDown(block.id, event)
-                      : undefined
-                  }
-                  onUpdateSource={(source) => updateSourceInBlock(block.id, source)}
-                  onRemoveSource={(sourceId) => removeSourceFromBlock(block.id, sourceId)}
-                  onDuplicateSource={(sourceId) => duplicateSourceInBlock(block.id, sourceId)}
-                  onAddSource={() =>
-                    setToast("Study library is disabled in this prototype")
-                  }
-                  onPromptChange={(prompt) => updatePrompt(block.id, prompt)}
-                  onAdditionalContextChange={(additionalContext) =>
-                    updateAdditionalContext(block.id, additionalContext)
-                  }
-                  onOutputTypeChange={(outputType) =>
-                    updateOutputType(block.id, outputType)
-                  }
-                  onDuplicate={duplicateBlock}
-                  onDelete={deleteContentBlock}
-                  onAddHeadingAfter={addHeadingAfter}
-                  onAddContentAfter={addContentAfter}
-                />
-              </Fragment>
-            ))}
-            {dragState && dragState.dropIndex === blocks.length && (
-              <div
-                className="pointer-events-none relative z-20 h-0.5 rounded-full bg-[#ff4e49]"
-                aria-hidden
-              />
-            )}
-          </div>
-          {/* viewMode === "document" ? (
-            <DocumentView blocks={blocks} blockRefs={blockRefs} />
-          ) : null */}
+              </div>
+            </div>
+          )}
+
+          {variant === "outline" && (
+            <OutlineVariant
+              blocks={blocks}
+              focusId={activeTocId}
+              tracedSource={
+                traceState
+                  ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
+                  : null
+              }
+              onTraceSource={openTrace}
+              onUpdateSource={updateSourceInBlock}
+              onRemoveSource={removeSourceFromBlock}
+              onAddSource={addSourceToSection}
+            />
+          )}
+
+          {variant === "twoColumn" && (
+            <TwoColumnVariant
+              blocks={blocks}
+              tracedSource={
+                traceState
+                  ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
+                  : null
+              }
+              onTraceSource={openTrace}
+              onUpdateSource={updateSourceInBlock}
+              onRemoveSource={removeSourceFromBlock}
+              onAddSource={addSourceToSection}
+              onMapDataSource={mapDataSourceToSection}
+              onMoveSource={moveSourceToSection}
+            />
+          )}
+
+          {variant === "matrix" && (
+            <MatrixVariant
+              blocks={blocks}
+              tracedSource={
+                traceState
+                  ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
+                  : null
+              }
+              onTraceSource={openTrace}
+              onUpdateSource={updateSourceInBlock}
+              onRemoveSource={removeSourceFromBlock}
+              onAddSource={addSourceToSection}
+              onAddSourceWithRole={addSourceToSectionRole}
+            />
+          )}
+
+          {variant === "spine" && (
+            <SpineVariant
+              blocks={blocks}
+              tracedSource={
+                traceState
+                  ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
+                  : null
+              }
+              onTraceSource={openTrace}
+              onUpdateSource={updateSourceInBlock}
+              onRemoveSource={removeSourceFromBlock}
+              onAddSource={addSourceToSection}
+              onPromptChange={updatePrompt}
+            />
+          )}
+
+          {variant === "sourceView" && (
+            <SourceViewVariant
+              blocks={blocks}
+              tracedSource={
+                traceState
+                  ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
+                  : null
+              }
+              onTraceSource={openTrace}
+              onUpdateSource={updateSourceInBlock}
+              onRemoveSource={removeSourceFromBlock}
+              onAddSource={addSourceToSection}
+              onMapDataSource={mapDataSourceToSection}
+              onConfirmAllForDataSource={confirmAllForDataSource}
+            />
+          )}
+
+          {variant === "connectors" && (
+            <ConnectorVariant
+              blocks={blocks}
+              onMapDataSource={mapDataSourceToSection}
+              onUnmapDataSource={unmapDataSourceFromSection}
+            />
+          )}
         </main>
 
         {activePanel?.type === "version" && (
