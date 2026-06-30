@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { SourceRole } from "../../data/roadmap";
 import type { DocumentBlock } from "../../types";
@@ -36,11 +36,11 @@ type ConnectState = {
 };
 
 /**
- * V7 - Connector map. A bipartite view: every section once on the left, every
- * document once on the right. Connectors are revealed on demand - hover or
- * select a node to see just its lines (a "Show all" toggle exposes the full web
- * when wanted). Drag a node's handle onto the other column to map; click a
- * connector to remove it.
+ * V6 - Connector map. A bipartite view: every section once on the left, every
+ * document once on the right. Each column scrolls independently; selecting a
+ * node pins that column while the other stays scrollable. Connectors redraw on
+ * scroll. Drag a node's handle onto the other column to map; click a connector
+ * to remove it.
  */
 export function ConnectorVariant({
   blocks,
@@ -63,7 +63,9 @@ export function ConnectorVariant({
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [connect, setConnect] = useState<ConnectState | null>(null);
 
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const connectorViewportRef = useRef<HTMLDivElement>(null);
+  const sectionsScrollRef = useRef<HTMLDivElement>(null);
+  const sourcesScrollRef = useRef<HTMLDivElement>(null);
   const secRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const srcRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const connectRef = useRef<ConnectState | null>(null);
@@ -73,6 +75,8 @@ export function ConnectorVariant({
   const active = !isConnecting ? selected ?? hovered : null;
   const activeSection = active?.type === "section" ? active.id : null;
   const activeSource = active?.type === "source" ? active.id : null;
+  const sectionsFrozen = selected?.type === "section";
+  const sourcesFrozen = selected?.type === "source";
 
   const q = query.trim().toLowerCase();
 
@@ -82,13 +86,16 @@ export function ConnectorVariant({
     return true;
   };
 
-  // Measure node anchors and build bezier paths; redraw on layout/filter change.
+  // Measure node anchors relative to the connector viewport; redraw on scroll,
+  // resize, or when a column is pinned.
   useLayoutEffect(() => {
-    const wrap = wrapperRef.current;
-    if (!wrap) return;
+    const viewport = connectorViewportRef.current;
+    const sectionsEl = sectionsScrollRef.current;
+    const sourcesEl = sourcesScrollRef.current;
+    if (!viewport) return;
 
     const measure = () => {
-      const wrect = wrap.getBoundingClientRect();
+      const vrect = viewport.getBoundingClientRect();
       const next: EdgePath[] = [];
       for (const edge of graph.edges) {
         if (!isSourceVisible(edge.dataSource)) continue;
@@ -97,10 +104,10 @@ export function ConnectorVariant({
         if (!sEl || !tEl) continue;
         const sr = sEl.getBoundingClientRect();
         const tr = tEl.getBoundingClientRect();
-        const x1 = sr.right - wrect.left;
-        const y1 = sr.top + sr.height / 2 - wrect.top;
-        const x2 = tr.left - wrect.left;
-        const y2 = tr.top + tr.height / 2 - wrect.top;
+        const x1 = sr.right - vrect.left;
+        const y1 = sr.top + sr.height / 2 - vrect.top;
+        const x2 = tr.left - vrect.left;
+        const y2 = tr.top + tr.height / 2 - vrect.top;
         const dx = Math.max(40, (x2 - x1) / 2);
         next.push({
           key: `${edge.blockId}|${edge.dataSource}`,
@@ -115,18 +122,45 @@ export function ConnectorVariant({
         });
       }
       setPaths(next);
+
+      // Keep drag-to-connect anchor synced when either column scrolls.
+      const pending = connectRef.current;
+      if (pending) {
+        const nodeEl = (pending.fromType === "section" ? secRefs : srcRefs).current[pending.fromId];
+        if (nodeEl) {
+          const nr = nodeEl.getBoundingClientRect();
+          const fromX = (pending.fromType === "section" ? nr.right : nr.left) - vrect.left;
+          const fromY = nr.top + nr.height / 2 - vrect.top;
+          connectRef.current = { ...pending, fromX, fromY };
+          setConnect((c) => (c ? { ...c, fromX, fromY } : c));
+        }
+      }
     };
 
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(wrap);
+    ro.observe(viewport);
+    sectionsEl?.addEventListener("scroll", measure, { passive: true });
+    sourcesEl?.addEventListener("scroll", measure, { passive: true });
     window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
+      sectionsEl?.removeEventListener("scroll", measure);
+      sourcesEl?.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, visibleCategories, query]);
+  }, [graph, visibleCategories, query, sectionsFrozen, sourcesFrozen]);
+
+  // Scroll the pinned node into view before its column freezes.
+  useEffect(() => {
+    if (!selected) return;
+    const el =
+      selected.type === "section"
+        ? secRefs.current[selected.id]
+        : srcRefs.current[selected.id];
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selected]);
 
   const edgeTouchesActive = (blockId: string, dataSource: string) => {
     if (!active) return false;
@@ -174,13 +208,13 @@ export function ConnectorVariant({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    const wrap = wrapperRef.current;
+    const viewport = connectorViewportRef.current;
     const nodeEl = (type === "section" ? secRefs : srcRefs).current[id];
-    if (!wrap || !nodeEl) return;
-    const wr = wrap.getBoundingClientRect();
+    if (!viewport || !nodeEl) return;
+    const vr = viewport.getBoundingClientRect();
     const nr = nodeEl.getBoundingClientRect();
-    const fromX = (type === "section" ? nr.right : nr.left) - wr.left;
-    const fromY = nr.top + nr.height / 2 - wr.top;
+    const fromX = (type === "section" ? nr.right : nr.left) - vr.left;
+    const fromY = nr.top + nr.height / 2 - vr.top;
 
     const initial: ConnectState = {
       fromType: type,
@@ -196,10 +230,10 @@ export function ConnectorVariant({
     setConnect(initial);
 
     const onMove = (ev: PointerEvent) => {
-      const w = wrapperRef.current?.getBoundingClientRect();
-      if (!w) return;
-      const x = ev.clientX - w.left;
-      const y = ev.clientY - w.top;
+      const v = connectorViewportRef.current?.getBoundingClientRect();
+      if (!v) return;
+      const x = ev.clientX - v.left;
+      const y = ev.clientY - v.top;
       let targetId: string | null = null;
       let targetType: NodeKind | null = null;
       const el = (document.elementFromPoint(ev.clientX, ev.clientY) as Element | null)?.closest(
@@ -258,45 +292,48 @@ export function ConnectorVariant({
   const showHint = !showAll && !active && !isConnecting;
 
   return (
-    <div className="mx-auto w-full max-w-[1100px] px-4 py-6">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[13px] text-[#9e9e9e]">
-          Hover or select a node to trace its connections. Drag a node's dot onto the other
-          column to map; click a connector to remove it.
-        </p>
-        <div className="flex items-center gap-2">
-          {selected && (
-            <span className="rounded-md bg-[#fedbda] px-2 py-1 text-[12px] font-medium text-[#302f2f]">
-              {activeDegree} connection{activeDegree === 1 ? "" : "s"}
-            </span>
-          )}
-          {selected && (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mx-auto w-full max-w-[1100px] shrink-0 px-4 pt-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[13px] text-[#9e9e9e]">
+            Hover or select a node to trace its connections. Selecting pins that column
+            so you can scroll the other to find more links. Drag a node&apos;s dot onto the
+            other column to map; click a connector to remove it.
+          </p>
+          <div className="flex items-center gap-2">
+            {selected && (
+              <span className="rounded-md bg-[#fedbda] px-2 py-1 text-[12px] font-medium text-[#302f2f]">
+                {activeDegree} connection{activeDegree === 1 ? "" : "s"}
+              </span>
+            )}
+            {selected && (
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="flex items-center gap-1 rounded-md border border-[#d4ced3] bg-white px-2 py-1 text-[12px] font-medium text-[#636161] hover:bg-[#fafafa]"
+              >
+                <X size={13} /> Clear
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setSelected(null)}
-              className="flex items-center gap-1 rounded-md border border-[#d4ced3] bg-white px-2 py-1 text-[12px] font-medium text-[#636161] hover:bg-[#fafafa]"
+              aria-pressed={showAll}
+              onClick={() => setShowAll((v) => !v)}
+              className={`rounded-md border px-2.5 py-1 text-[12px] font-medium transition-colors ${
+                showAll
+                  ? "border-[#fe9591] bg-[#fedbda] text-[#302f2f]"
+                  : "border-[#d4ced3] bg-white text-[#636161] hover:bg-[#fafafa]"
+              }`}
             >
-              <X size={13} /> Clear
+              Show all connections
             </button>
-          )}
-          <button
-            type="button"
-            aria-pressed={showAll}
-            onClick={() => setShowAll((v) => !v)}
-            className={`rounded-md border px-2.5 py-1 text-[12px] font-medium transition-colors ${
-              showAll
-                ? "border-[#fe9591] bg-[#fedbda] text-[#302f2f]"
-                : "border-[#d4ced3] bg-white text-[#636161] hover:bg-[#fafafa]"
-            }`}
-          >
-            Show all connections
-          </button>
+          </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[180px]">
+      <div className="mx-auto mb-3 flex w-full max-w-[1100px] shrink-0 flex-wrap items-center gap-2 px-4">
+        <div className="relative min-w-[180px] flex-1">
           <Search
             size={14}
             className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9e9e9e]"
@@ -336,81 +373,84 @@ export function ConnectorVariant({
         </div>
       </div>
 
-      {/* Bipartite canvas */}
-      <div
-        ref={wrapperRef}
-        className={`relative flex gap-[120px] sm:gap-[160px] ${isConnecting ? "select-none" : ""}`}
-        onClick={(event) => {
-          if (event.target === event.currentTarget) setSelected(null);
-        }}
-      >
-        {/* Connector layer */}
-        <svg className="pointer-events-none absolute inset-0 h-full w-full">
-          {visiblePaths.map((p) => {
-            const hot = isHot(p);
-            const isHoverEdge = hoverEdge === p.key;
-            return (
-              <path
-                key={p.key}
-                d={p.d}
-                fill="none"
-                strokeLinecap="round"
-                stroke={hot || isHoverEdge ? "#ff4e49" : "#c9c2c8"}
-                strokeWidth={hot || isHoverEdge ? 2 : 1}
-                strokeOpacity={hot || isHoverEdge ? 1 : 0.18}
-                strokeDasharray={p.hasProposed ? "5 3" : undefined}
-              />
-            );
-          })}
+      {/* Bipartite canvas — independently scrollable columns */}
+      <div className="mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 px-4 pb-4">
+        <div
+          ref={connectorViewportRef}
+          className={`relative flex min-h-0 flex-1 gap-[80px] sm:gap-[120px] ${
+            isConnecting ? "select-none" : ""
+          }`}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setSelected(null);
+          }}
+        >
+          {/* Connector layer — coordinates track column scroll */}
+          <svg className="absolute inset-0 z-0 h-full w-full overflow-visible">
+            <g className="pointer-events-none">
+              {visiblePaths.map((p) => {
+                const hot = isHot(p);
+                const isHoverEdge = hoverEdge === p.key;
+                return (
+                  <path
+                    key={p.key}
+                    d={p.d}
+                    fill="none"
+                    strokeLinecap="round"
+                    stroke={hot || isHoverEdge ? "#ff4e49" : "#c9c2c8"}
+                    strokeWidth={hot || isHoverEdge ? 2 : 1}
+                    strokeOpacity={hot || isHoverEdge ? 1 : 0.18}
+                    strokeDasharray={p.hasProposed ? "5 3" : undefined}
+                  />
+                );
+              })}
 
-          {/* Endpoint dots anchor the focused connectors. */}
-          {visiblePaths.map((p) =>
-            isHot(p) ? (
-              <g key={`dot-${p.key}`}>
-                <circle cx={p.x1} cy={p.y1} r={3} fill="#ff4e49" />
-                <circle cx={p.x2} cy={p.y2} r={3} fill="#ff4e49" />
-              </g>
-            ) : null,
-          )}
+              {visiblePaths.map((p) =>
+                isHot(p) ? (
+                  <g key={`dot-${p.key}`}>
+                    <circle cx={p.x1} cy={p.y1} r={3} fill="#ff4e49" />
+                    <circle cx={p.x2} cy={p.y2} r={3} fill="#ff4e49" />
+                  </g>
+                ) : null,
+              )}
 
-          {/* Invisible wide hit paths for click-to-remove (visible edges only). */}
-          {!isConnecting &&
-            visiblePaths.map((p) => (
-              <path
-                key={`hit-${p.key}`}
-                d={p.d}
-                fill="none"
-                stroke="transparent"
-                strokeWidth={14}
-                style={{ pointerEvents: "stroke", cursor: "pointer" }}
-                onMouseEnter={() => setHoverEdge(p.key)}
-                onMouseLeave={() => setHoverEdge((k) => (k === p.key ? null : k))}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onUnmapDataSource(p.blockId, p.dataSource);
-                  setHoverEdge(null);
-                }}
-              >
-                <title>Click to remove this mapping</title>
-              </path>
-            ))}
+              {connect && (
+                <path
+                  d={`M${connect.fromX},${connect.fromY} C${
+                    connect.fromX + (connect.x - connect.fromX) / 2
+                  },${connect.fromY} ${
+                    connect.x - (connect.x - connect.fromX) / 2
+                  },${connect.y} ${connect.x},${connect.y}`}
+                  fill="none"
+                  stroke="#ff4e49"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeDasharray="5 4"
+                />
+              )}
+            </g>
 
-          {/* Pending connector while dragging. */}
-          {connect && (
-            <path
-              d={`M${connect.fromX},${connect.fromY} C${
-                connect.fromX + (connect.x - connect.fromX) / 2
-              },${connect.fromY} ${
-                connect.x - (connect.x - connect.fromX) / 2
-              },${connect.y} ${connect.x},${connect.y}`}
-              fill="none"
-              stroke="#ff4e49"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeDasharray="5 4"
-            />
-          )}
-        </svg>
+            {/* Wide hit paths for click-to-remove */}
+            {!isConnecting &&
+              visiblePaths.map((p) => (
+                <path
+                  key={`hit-${p.key}`}
+                  d={p.d}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={14}
+                  style={{ pointerEvents: "stroke", cursor: "pointer" }}
+                  onMouseEnter={() => setHoverEdge(p.key)}
+                  onMouseLeave={() => setHoverEdge((k) => (k === p.key ? null : k))}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onUnmapDataSource(p.blockId, p.dataSource);
+                    setHoverEdge(null);
+                  }}
+                >
+                  <title>Click to remove this mapping</title>
+                </path>
+              ))}
+          </svg>
 
         {/* On-demand hint in the empty gap */}
         {showHint && (
@@ -422,11 +462,18 @@ export function ConnectorVariant({
         )}
 
         {/* Left: sections */}
-        <div className="relative z-[1] min-w-0 flex-1 space-y-1">
+        <div
+          ref={sectionsScrollRef}
+          className={`relative z-[1] min-h-0 min-w-0 flex-1 ${
+            sectionsFrozen ? "overflow-hidden" : "overflow-y-auto"
+          }`}
+        >
           <ColumnHeader
             label="Sections"
             count={graph.leftItems.filter((i) => i.kind === "section").length}
+            pinned={sectionsFrozen}
           />
+          <div className="space-y-1 pb-2">
           {graph.leftItems.map((item) =>
             item.kind === "heading" ? (
               <p
@@ -454,17 +501,25 @@ export function ConnectorVariant({
               />
             ),
           )}
+          </div>
         </div>
 
         {/* Right: sources */}
-        <div className="relative z-[1] min-w-0 flex-1 space-y-1">
+        <div
+          ref={sourcesScrollRef}
+          className={`relative z-[1] min-h-0 min-w-0 flex-1 ${
+            sourcesFrozen ? "overflow-hidden" : "overflow-y-auto"
+          }`}
+        >
           <ColumnHeader
             label="Sources"
             count={graph.sourceGroups.reduce(
               (n, g) => n + g.sources.filter((s) => isSourceVisible(s.dataSource)).length,
               0,
             )}
+            pinned={sourcesFrozen}
           />
+          <div className="space-y-1 pb-2">
           {graph.sourceGroups.map((group) => {
             const visible = group.sources.filter((s) => isSourceVisible(s.dataSource));
             if (visible.length === 0) return null;
@@ -497,17 +552,32 @@ export function ConnectorVariant({
               </div>
             );
           })}
+          </div>
+        </div>
         </div>
       </div>
     </div>
   );
 }
 
-function ColumnHeader({ label, count }: { label: string; count: number }) {
+function ColumnHeader({
+  label,
+  count,
+  pinned = false,
+}: {
+  label: string;
+  count: number;
+  pinned?: boolean;
+}) {
   return (
-    <div className="mb-1 flex items-center justify-between border-b border-[#ececec] pb-1">
-      <span className="text-[12px] font-semibold uppercase tracking-wide text-[#757575]">
+    <div className="sticky top-0 z-10 mb-1 flex items-center justify-between border-b border-[#ececec] bg-white pb-1 pt-0.5">
+      <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#757575]">
         {label}
+        {pinned && (
+          <span className="rounded bg-[#fedbda] px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-[#302f2f]">
+            Pinned
+          </span>
+        )}
       </span>
       <span className="text-[11px] text-[#b0b0b0]">{count}</span>
     </div>

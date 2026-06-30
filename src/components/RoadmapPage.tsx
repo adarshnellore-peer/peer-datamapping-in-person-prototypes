@@ -7,6 +7,8 @@ import {
   Info,
   List,
   Moon,
+  PanelLeft,
+  PanelLeftClose,
   // Pencil,
   Play,
   Plus,
@@ -23,6 +25,7 @@ import {
 } from "./EditRoadmapPanel";
 import { SectionContentBlock } from "./SectionContentBlock";
 import { DataSourcePanel } from "./DataSourcePanel";
+import { StudyDataSourcesList } from "./StudyDataSourcesList";
 import { TableOfContents } from "./TableOfContents";
 import { VariantSwitcher, type VariantId } from "./VariantSwitcher";
 import { TwoColumnVariant } from "./variants/TwoColumnVariant";
@@ -33,6 +36,7 @@ import { SpineVariant } from "./variants/SpineVariant";
 // import { SourceLibraryOverlay } from "./SourceLibraryOverlay";
 import { DOCUMENT_BLOCKS } from "../data/roadmapDocument";
 import { createSourceForType, type RoadmapSource, type SourceRole } from "../data/roadmap";
+import { findStudySourceById, studySourceToRoadmapSource } from "../data/studyDataSources";
 // import { getDefaultSectionForDocument } from "../data/documentPreview";
 import type { ContentBlockData, DocumentBlock, HeadingBlock, ViewMode } from "../types";
 import {
@@ -141,6 +145,7 @@ export function RoadmapPage() {
   const [activeTocId, setActiveTocId] = useState<string | null>("h-1-3");
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [traceState, setTraceState] = useState<TraceState>(null);
+  const [v2DataPanelOpen, setV2DataPanelOpen] = useState(true);
   const [expandedSource, setExpandedSource] = useState<ExpandedSourceState>(null);
   const [toast, setToast] = useState<string | null>(null);
   // const [libraryMode, setLibraryMode] = useState<LibraryMode | null>(null);
@@ -215,14 +220,18 @@ export function RoadmapPage() {
     if (window.innerWidth < 768) setTocOpen(false);
   }, []);
 
-  // TOC clicks scroll the baseline document to the matching block. Other
-  // variants render their own navigation and hide the global TOC.
+  // TOC clicks scroll to the target block. V1 uses document block refs; V2
+  // scrolls the mapping board's section column via focusId.
   const handleTocNavigate = useCallback(
     (id: string) => {
       setActiveTocId(id);
+      if (variant === "twoColumn") {
+        if (window.innerWidth < 768) setTocOpen(false);
+        return;
+      }
       scrollToBlock(id);
     },
-    [scrollToBlock],
+    [variant, scrollToBlock],
   );
 
   const moveBlockFromToc = useCallback((blockId: string, dropFlatIndex: number) => {
@@ -336,7 +345,38 @@ export function RoadmapPage() {
     setToast("Source added");
   };
 
-  // V3 board / V6 source view: map a specific library document onto a section,
+  // V2 board: drag a study-library row onto a section (document + pages pre-filled).
+  const mapStudySourceToSection = (blockId: string, studySourceId: string) => {
+    const entry = findStudySourceById(studySourceId);
+    if (!entry) return;
+    const created = { ...studySourceToRoadmapSource(entry), id: crypto.randomUUID() };
+    setBlocks((prev) =>
+      prev.map((block) =>
+        block.type === "content" && block.id === blockId
+          ? { ...block, sources: [...block.sources, created] }
+          : block,
+      ),
+    );
+    setToast("Source mapped");
+  };
+
+  // V2 board: drag an outline row (TOC) onto a section as subcontent or content.
+  const mapOutlineToSection = (
+    blockId: string,
+    sourceType: "SUBCONTENT" | "CONTENT",
+    label: string,
+  ) => {
+    setBlocks((prev) =>
+      prev.map((block) => {
+        if (block.type !== "content" || block.id !== blockId) return block;
+        const created = createSourceForType(sourceType, { content: label });
+        return { ...block, sources: [...block.sources, created] };
+      }),
+    );
+    setToast("Outline mapped");
+  };
+
+  // V2 board / V6 source view: map a specific library document onto a section,
   // optionally pre-filling its usage role (V6 "Add to section").
   const mapDataSourceToSection = (
     blockId: string,
@@ -396,36 +436,36 @@ export function RoadmapPage() {
     setToast("Placements confirmed");
   };
 
-  // V3 board: move an existing mapped source from one section to another.
+  // V2 board: move or reorder a mapped source within / across sections.
   const moveSourceToSection = (
     fromBlockId: string,
     sourceId: string,
     toBlockId: string,
+    toIndex?: number,
   ) => {
-    if (fromBlockId === toBlockId) return;
     setBlocks((prev) => {
-      const fromBlock = prev.find(
-        (b): b is ContentBlockData => b.type === "content" && b.id === fromBlockId,
-      );
-      const moved = fromBlock?.sources.find((s) => s.id === sourceId);
-      if (!moved) return prev;
-      return prev.map((block) => {
+      let moved: RoadmapSource | null = null;
+      const stripped = prev.map((block) => {
         if (block.type !== "content") return block;
-        if (block.id === fromBlockId) {
-          return { ...block, sources: block.sources.filter((s) => s.id !== sourceId) };
-        }
-        if (block.id === toBlockId) {
-          return { ...block, sources: [...block.sources, moved] };
-        }
-        return block;
+        const found = block.sources.find((s) => s.id === sourceId);
+        if (!found) return block;
+        moved = found;
+        return { ...block, sources: block.sources.filter((s) => s.id !== sourceId) };
+      });
+      if (!moved) return prev;
+
+      return stripped.map((block) => {
+        if (block.type !== "content" || block.id !== toBlockId) return block;
+        const sources = [...block.sources];
+        const insertAt = toIndex ?? sources.length;
+        sources.splice(insertAt, 0, moved!);
+        return { ...block, sources };
       });
     });
     setTraceState((prev) =>
-      prev?.blockId === fromBlockId && prev.sourceId === sourceId
-        ? { ...prev, blockId: toBlockId }
-        : prev,
+      prev?.sourceId === sourceId ? { ...prev, blockId: toBlockId } : prev,
     );
-    setToast("Source moved");
+    setToast(fromBlockId === toBlockId ? "Source reordered" : "Source moved");
   };
 
   /* PROTOTYPE_DISABLED: study library add flow
@@ -520,6 +560,7 @@ export function RoadmapPage() {
   const closeTrace = useCallback(() => {
     setTraceState(null);
     setExpandedSource(null);
+    setV2DataPanelOpen(true);
   }, []);
 
   const openTrace = useCallback(
@@ -556,6 +597,23 @@ export function RoadmapPage() {
   }, [expandedSource]);
 
   const toggleTracePanel = useCallback(() => {
+    if (variant === "twoColumn") {
+      if (traceState?.view === "detail") {
+        setTraceState(null);
+        setExpandedSource(null);
+        setV2DataPanelOpen(true);
+        return;
+      }
+      if (traceState) {
+        setTraceState(null);
+        setExpandedSource(null);
+        setV2DataPanelOpen(true);
+        return;
+      }
+      setV2DataPanelOpen((open) => !open);
+      if (window.innerWidth < 768) setTocOpen(false);
+      return;
+    }
     if (traceState) {
       setTraceState(null);
       setExpandedSource(null);
@@ -570,11 +628,14 @@ export function RoadmapPage() {
     setTraceState({ ...target, view: "list" });
     setExpandedSource(target);
     if (window.innerWidth < 768) setTocOpen(false);
-  }, [blocks, traceState]);
+  }, [blocks, traceState, variant]);
 
-  // V3/V4/V5 own their full-bleed layout (their own section nav), so the global
-  // TOC rail is only shown for the document-style variants.
-  const showGlobalToc = variant === "baseline";
+  useEffect(() => {
+    if (variant === "twoColumn") setV2DataPanelOpen(true);
+  }, [variant]);
+
+  // Global TOC for document-style variants (V1 inline doc, V2 mapping board).
+  const showGlobalToc = variant === "baseline" || variant === "twoColumn";
 
   const tracedSource = traceState ? findSourceInBlocks(blocks, traceState) : null;
   const tracedBlockSources = traceState
@@ -797,14 +858,24 @@ export function RoadmapPage() {
             type="button"
             data-trace-toggle=""
             onClick={toggleTracePanel}
-            aria-pressed={traceState !== null}
+            aria-pressed={
+              variant === "twoColumn"
+                ? v2DataPanelOpen || traceState !== null
+                : traceState !== null
+            }
             aria-label={
-              traceState
-                ? "Exit trace to datasource view"
-                : "Enter trace to datasource view"
+              variant === "twoColumn"
+                ? v2DataPanelOpen || traceState
+                  ? "Hide data sources panel"
+                  : "Show data sources panel"
+                : traceState
+                  ? "Exit trace to datasource view"
+                  : "Enter trace to datasource view"
             }
             className={`flex h-8 w-8 items-center justify-center rounded hover:bg-[#f5f5f5] ${
-              traceState ? "bg-[#fedbda]" : ""
+              (variant === "twoColumn" ? v2DataPanelOpen || traceState : traceState)
+                ? "bg-[#fedbda]"
+                : ""
             }`}
           >
             <FileSearch size={18} strokeWidth={1.75} color="#636161" />
@@ -821,8 +892,29 @@ export function RoadmapPage() {
             onClick={() => setTocOpen(false)}
           />
         )}
-        {tocOpen && showGlobalToc && (
+        {showGlobalToc && tocOpen && (
           <aside className="fixed inset-y-0 left-0 z-40 flex w-[min(90vw,260px)] shrink-0 flex-col border-r border-[#e8e8e8] bg-[#fafafa] shadow-lg md:relative md:z-0 md:w-[240px] md:shadow-none">
+            <div className="flex shrink-0 flex-col border-b border-[#d8d8d8] px-3 py-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+                  Outline
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTocOpen(false)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-[#9e9e9e] hover:bg-[#dcdcdc] hover:text-[#302f2f]"
+                  aria-label="Collapse outline"
+                  title="Collapse outline"
+                >
+                  <PanelLeftClose size={16} strokeWidth={1.75} />
+                </button>
+              </div>
+              {variant === "twoColumn" && (
+                <p className="mt-1 text-[10px] leading-snug text-[#8a8a8a]">
+                  Drag rows onto sections to map subcontent / content
+                </p>
+              )}
+            </div>
             <TableOfContents
               blocks={blocks}
               activeId={activeTocId}
@@ -832,11 +924,30 @@ export function RoadmapPage() {
               onAddContentAfter={addContentAfter}
               onDeleteHeading={deleteHeading}
               onDeleteContent={deleteContentBlock}
+              outlineMappingDrag={variant === "twoColumn"}
+              hideAddActions={variant === "twoColumn"}
             />
           </aside>
         )}
+        {showGlobalToc && !tocOpen && (
+          <div className="hidden shrink-0 border-r border-[#e8e8e8] bg-[#fafafa] md:flex md:w-9 md:flex-col md:items-center md:pt-2">
+            <button
+              type="button"
+              onClick={() => setTocOpen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#9e9e9e] hover:bg-[#f0f0f0] hover:text-[#302f2f]"
+              aria-label="Expand outline"
+              title="Expand outline"
+            >
+              <PanelLeft size={18} strokeWidth={1.75} />
+            </button>
+          </div>
+        )}
 
-        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <main
+          className={`min-w-0 flex-1 overflow-x-hidden ${
+            variant === "baseline" ? "overflow-y-auto" : "overflow-y-hidden"
+          }`}
+        >
           {variant === "baseline" && (
             <div className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
               <div className="roadmap-blocks relative mx-auto w-full min-w-0 max-w-[680px] overflow-visible pb-12">
@@ -897,6 +1008,7 @@ export function RoadmapPage() {
           {variant === "twoColumn" && (
             <TwoColumnVariant
               blocks={blocks}
+              focusId={activeTocId}
               tracedSource={
                 traceState
                   ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
@@ -905,8 +1017,8 @@ export function RoadmapPage() {
               onTraceSource={openTrace}
               onUpdateSource={updateSourceInBlock}
               onRemoveSource={removeSourceFromBlock}
-              onAddSource={addSourceToSection}
-              onMapDataSource={mapDataSourceToSection}
+              onMapStudySource={mapStudySourceToSection}
+              onMapOutlineToSection={mapOutlineToSection}
               onMoveSource={moveSourceToSection}
             />
           )}
@@ -981,7 +1093,7 @@ export function RoadmapPage() {
           </>
         )}
 
-        {tracedSource && traceState && (
+        {tracedSource && traceState ? (
           <>
             <button
               type="button"
@@ -999,6 +1111,29 @@ export function RoadmapPage() {
               onClose={closeTrace}
             />
           </>
+        ) : (
+          variant === "twoColumn" &&
+          v2DataPanelOpen && (
+            <aside
+              data-datasource-panel=""
+              className="fixed inset-y-0 right-0 z-40 flex w-[min(90vw,360px)] shrink-0 flex-col border-l border-[#e8e8e8] bg-[#fafafa] shadow-lg md:relative md:z-0 md:w-[360px] md:shadow-none"
+            >
+              <header className="flex shrink-0 items-center justify-end border-b border-[#ececec] bg-white px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setV2DataPanelOpen(false)}
+                  aria-label="Close data sources panel"
+                  className="rounded p-1 text-[#636161] hover:bg-[#e0e0e0]"
+                >
+                  <X size={18} />
+                </button>
+              </header>
+              <StudyDataSourcesList
+                enableMappingDrag
+                onSelect={() => {}}
+              />
+            </aside>
+          )
         )}
 
       </div>

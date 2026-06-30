@@ -56,6 +56,7 @@ export const ROLE_BADGE: Record<SourceRole, string> = {
   primary: "border-[#fe9591] bg-[#fedbda] text-[#b3261e]",
   supporting: "border-[#bcd0ff] bg-[#eef3ff] text-[#2b5bd7]",
   context: "border-[#dcdcdc] bg-[#f3f3f3] text-[#636161]",
+  reference: "border-[#d8b4fe] bg-[#f3e8ff] text-[#5b21b6]",
 };
 
 export function roleLabel(role: SourceRole): string {
@@ -67,6 +68,7 @@ export const ROLE_HINT: Record<SourceRole, string> = {
   primary: "Drafted from directly \u2014 load-bearing.",
   supporting: "Reinforces or contextualizes the section.",
   context: "Background / cross-check only; not drafted from.",
+  reference: "Bibliographic citation; not drafted from directly.",
 };
 
 /** Accent classes per usage role, used by the matrix columns and spine nodes. */
@@ -77,15 +79,41 @@ export const ROLE_ACCENT: Record<
   primary: { text: "text-[#b3261e]", cellTint: "bg-[#fff6f5]", dotHex: "#fe9591" },
   supporting: { text: "text-[#2b5bd7]", cellTint: "bg-[#f6f9ff]", dotHex: "#7ea2f0" },
   context: { text: "text-[#636161]", cellTint: "bg-[#f8f8f8]", dotHex: "#bdbdbd" },
+  reference: { text: "text-[#5b21b6]", cellTint: "bg-[#faf5ff]", dotHex: "#c084fc" },
+};
+
+/** V2 pill badge for mapped source origin type. */
+export const SOURCE_KIND_BADGE: Record<
+  "DATA_SOURCE" | "SUBCONTENT" | "CONTENT",
+  { label: string; className: string }
+> = {
+  DATA_SOURCE: {
+    label: "Document",
+    className: "border-[#bcd0ff] bg-[#eef3ff] text-[#2b5bd7]",
+  },
+  SUBCONTENT: {
+    label: "Subcontent",
+    className: "border-[#cbd5e1] bg-[#f1f5f9] text-[#475569]",
+  },
+  CONTENT: {
+    label: "Content",
+    className: "border-[#a7f3d0] bg-[#ecfdf5] text-[#047857]",
+  },
 };
 
 /** Derived mapping state for a section, from its sources' status + usage roles. */
 export type MappingState = "ready" | "review" | "needsPrimary" | "empty";
 
+export function effectiveSourceRole(source: RoadmapSource): SourceRole | undefined {
+  if (source.role) return source.role;
+  if (source.isReference || source.sourceType === "REFERENCE_SOURCE") return "reference";
+  return undefined;
+}
+
 export function mappingStatus(sources: RoadmapSource[]): MappingState {
   if (sources.length === 0) return "empty";
   if (sources.some((s) => s.status === "proposed")) return "review";
-  if (!sources.some((s) => s.role === "primary")) return "needsPrimary";
+  if (!sources.some((s) => effectiveSourceRole(s) === "primary")) return "needsPrimary";
   return "ready";
 }
 

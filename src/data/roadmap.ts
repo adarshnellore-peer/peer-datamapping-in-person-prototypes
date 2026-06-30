@@ -174,7 +174,7 @@ export const OUTPUT_TYPES = [
 export const DEFAULT_PROMPT =
   "Generate the CSR Title-Page table. Use the exact two-column structure provided below; the left column labels must remain verbatim. Populate the right-hand cells with values extracted from the Protocol Title Page / Synopsis and the Sponsor corporate roster. If a value is missing, insert the text 'TBD.'";
 
-export const SOURCE_ROLES = ["primary", "supporting", "context"] as const;
+export const SOURCE_ROLES = ["primary", "supporting", "context", "reference"] as const;
 
 export type SourceRole = (typeof SOURCE_ROLES)[number];
 
@@ -182,6 +182,7 @@ export const SOURCE_ROLE_LABELS: Record<SourceRole, string> = {
   primary: "Primary",
   supporting: "Supporting",
   context: "Context",
+  reference: "Reference",
 };
 
 type RoadmapSourceBase = {
@@ -189,6 +190,8 @@ type RoadmapSourceBase = {
   status?: "proposed" | "confirmed";
   /** How the source is used in this section: primary / supporting / context. */
   role?: SourceRole;
+  /** Bibliographic / citation reference — orthogonal to usage role. */
+  isReference?: boolean;
 };
 
 export type DataSourceRoadmapSource = RoadmapSourceBase & {
@@ -280,7 +283,12 @@ export function getReferenceKeysForDataSource(dataSource: string): string[] {
 
 export function createSourceForType(
   sourceType: SourceType = "DATA_SOURCE",
-  options?: { status?: "proposed" | "confirmed"; dataSource?: string },
+  options?: {
+    status?: "proposed" | "confirmed";
+    dataSource?: string;
+    content?: string;
+    referenceSource?: string;
+  },
 ): RoadmapSource {
   const id = crypto.randomUUID();
   const status = options?.status ?? "proposed";
@@ -298,11 +306,26 @@ export function createSourceForType(
       });
     }
     case "SUBCONTENT":
-      return { id, status, sourceType: "SUBCONTENT", content: "" };
+      return {
+        id,
+        status,
+        sourceType: "SUBCONTENT",
+        content: options?.content ?? "",
+      };
     case "CONTENT":
-      return { id, status, sourceType: "CONTENT", content: "" };
+      return {
+        id,
+        status,
+        sourceType: "CONTENT",
+        content: options?.content ?? "",
+      };
     case "REFERENCE_SOURCE":
-      return { id, status, sourceType: "REFERENCE_SOURCE", referenceSource: "" };
+      return {
+        id,
+        status,
+        sourceType: "REFERENCE_SOURCE",
+        referenceSource: options?.referenceSource ?? "",
+      };
   }
 }
 

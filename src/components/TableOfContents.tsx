@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ChevronRight,
+  GripVertical,
   Plus,
   Search,
   Trash2,
@@ -9,7 +10,8 @@ import {
 import { getSourceHeaderParts } from "../data/sourceHelpers";
 import { buildTocFlatList, type TocFlatItem } from "../utils/documentBlocks";
 import type { DocumentBlock, HeadingBlock } from "../types";
-import type { RoadmapSource } from "../data/roadmap";
+import type { RoadmapSource, SourceType } from "../data/roadmap";
+import { setV2DragData } from "../utils/v2DragPayload";
 
 function headingLabel(heading: HeadingBlock): string {
   return heading.number ? `${heading.number} ${heading.title}` : heading.title;
@@ -118,6 +120,9 @@ function TocRow({
   onToggleCollapse,
   onNavigate,
   onDragPointerDown,
+  outlineMappingDrag = false,
+  outlineDragLabel,
+  onOutlineDragStart,
   label,
   actions,
 }: {
@@ -129,21 +134,42 @@ function TocRow({
   onToggleCollapse?: () => void;
   onNavigate: () => void;
   onDragPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
+  outlineMappingDrag?: boolean;
+  outlineDragLabel?: string;
+  onOutlineDragStart?: (event: React.DragEvent<HTMLButtonElement>) => void;
   label: ReactNode;
   actions?: ReactNode;
 }) {
-  const indent = 6 + depth * 12;
+  const indent = outlineMappingDrag ? 4 + depth * 10 : 6 + depth * 12;
+  const isHeading = depth === 0;
 
   return (
     <div
       onPointerDown={onDragPointerDown}
-      className={`group/toc-row flex min-h-[28px] items-start rounded-md pr-1 transition-colors ${
+      className={`group/toc-row flex min-h-[30px] items-start rounded-md pr-1 transition-colors ${
         onDragPointerDown ? "cursor-grab touch-none active:cursor-grabbing" : ""
       } ${isDragging ? "opacity-40" : ""} ${
-        isActive ? "bg-[#fedbda]" : "hover:bg-black/[0.04]"
+        isActive
+          ? "bg-[#fedbda]"
+          : isHeading
+            ? "hover:bg-black/[0.03]"
+            : "border-l-2 border-transparent hover:border-[#d4ced3] hover:bg-white/80"
       }`}
       style={{ paddingLeft: `${indent}px` }}
     >
+      {outlineMappingDrag ? (
+        <button
+          type="button"
+          draggable
+          onDragStart={onOutlineDragStart}
+          title={`Drag to map ${outlineDragLabel ?? "outline"}`}
+          aria-label={`Drag to map ${outlineDragLabel ?? "outline"}`}
+          className="mr-0.5 mt-1 flex h-[22px] w-[16px] shrink-0 cursor-grab items-center justify-center rounded text-[#c4c4c4] hover:bg-black/[0.05] hover:text-[#757575] active:cursor-grabbing"
+        >
+          <GripVertical size={12} strokeWidth={2} />
+        </button>
+      ) : null}
+
       <button
         type="button"
         data-toc-no-drag
@@ -174,11 +200,11 @@ function TocRow({
             onNavigate();
           }
         }}
-        className={`min-w-0 flex-1 py-1 text-left leading-snug ${
-          depth === 0
-            ? "text-[13px] font-semibold text-[#302f2f]"
+        className={`min-w-0 flex-1 py-1.5 text-left leading-snug ${
+          isHeading
+            ? "text-[12px] font-semibold uppercase tracking-wide text-[#636161]"
             : depth === 1
-              ? "text-[13px] font-medium text-[#454545]"
+              ? "text-[13px] font-medium text-[#302f2f]"
               : "text-[12px] font-normal text-[#636161]"
         } ${isActive ? "text-[#302f2f]" : ""}`}
       >
@@ -203,6 +229,8 @@ export function TableOfContents({
   onAddContentAfter,
   onDeleteHeading,
   onDeleteContent,
+  outlineMappingDrag = false,
+  hideAddActions = false,
 }: {
   blocks: DocumentBlock[];
   activeId: string | null;
@@ -212,6 +240,9 @@ export function TableOfContents({
   onAddContentAfter: (contentId: string) => void;
   onDeleteHeading: (headingId: string) => void;
   onDeleteContent: (blockId: string) => void;
+  /** V2: drag outline rows onto section mapping targets. */
+  outlineMappingDrag?: boolean;
+  hideAddActions?: boolean;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
@@ -348,9 +379,45 @@ export function TableOfContents({
     return highlightMatch(item.block.title, searchQuery);
   };
 
+  const renderOutlineDragStart = (item: TocFlatItem) => {
+    if (!outlineMappingDrag) return undefined;
+    return (event: React.DragEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      const sourceType: SourceType = item.kind === "heading" ? "SUBCONTENT" : "CONTENT";
+      const label =
+        item.kind === "heading" ? headingLabel(item.heading) : item.block.title;
+      setV2DragData(event.dataTransfer, { kind: "toc", sourceType, label });
+    };
+  };
+
+  const outlineDragMeta = (item: TocFlatItem) => {
+    if (!outlineMappingDrag) return { label: undefined, badge: null as ReactNode };
+    const isHeading = item.kind === "heading";
+    return {
+      label: isHeading ? "subcontent" : "content",
+      badge: (
+        <span
+          className={`ml-1.5 shrink-0 rounded border px-1 py-px text-[9px] font-semibold uppercase tracking-wide ${
+            isHeading
+              ? "border-[#cbd5e1] bg-[#f1f5f9] text-[#475569]"
+              : "border-[#a7f3d0] bg-[#ecfdf5] text-[#047857]"
+          }`}
+        >
+          {isHeading ? "Sub" : "Sec"}
+        </span>
+      ),
+    };
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#fafafa]">
-      <div className="shrink-0 px-2 py-2">
+      <div className="shrink-0 border-b border-[#ececec] px-2 py-2">
+        {outlineMappingDrag && (
+          <p className="mb-2 px-0.5 text-[10px] leading-snug text-[#9e9e9e]">
+            <GripVertical size={10} className="mr-0.5 inline -mt-px" />
+            Drag grip onto a section to map outline
+          </p>
+        )}
         <div className="relative">
           <Search
             size={14}
@@ -392,16 +459,26 @@ export function TableOfContents({
               const showDropBefore =
                 tocDrag !== null && tocDrag.dropFlatIndex === index && tocDrag.blockId !== item.id;
 
+              const dragMeta = outlineDragMeta(item);
               const rowProps = {
                 depth: item.depth,
                 isActive,
                 isDragging,
                 onNavigate: () => onNavigate(item.id),
-                onDragPointerDown: normalizedQuery
-                  ? undefined
-                  : (event: React.PointerEvent<HTMLDivElement>) =>
-                      handleRowPointerDown(item.id, event),
-                label: renderLabel(item),
+                onDragPointerDown:
+                  outlineMappingDrag || normalizedQuery
+                    ? undefined
+                    : (event: React.PointerEvent<HTMLDivElement>) =>
+                        handleRowPointerDown(item.id, event),
+                outlineMappingDrag,
+                outlineDragLabel: dragMeta.label,
+                onOutlineDragStart: renderOutlineDragStart(item),
+                label: (
+                  <span className="flex min-w-0 items-center">
+                    <span className="min-w-0 truncate">{renderLabel(item)}</span>
+                    {dragMeta.badge}
+                  </span>
+                ),
               };
 
               return (
@@ -425,13 +502,7 @@ export function TableOfContents({
                       isCollapsed={collapsedIds.has(item.id)}
                       onToggleCollapse={() => toggleCollapse(item.id)}
                       actions={
-                        <>
-                          <TocActionButton
-                            label="Add heading"
-                            onClick={() => onAddHeadingAfter(item.id)}
-                          >
-                            <Plus size={12} strokeWidth={2} />
-                          </TocActionButton>
+                        hideAddActions ? (
                           <TocActionButton
                             label="Delete heading"
                             variant="danger"
@@ -439,20 +510,30 @@ export function TableOfContents({
                           >
                             <Trash2 size={12} strokeWidth={2} />
                           </TocActionButton>
-                        </>
+                        ) : (
+                          <>
+                            <TocActionButton
+                              label="Add heading"
+                              onClick={() => onAddHeadingAfter(item.id)}
+                            >
+                              <Plus size={12} strokeWidth={2} />
+                            </TocActionButton>
+                            <TocActionButton
+                              label="Delete heading"
+                              variant="danger"
+                              onClick={() => onDeleteHeading(item.id)}
+                            >
+                              <Trash2 size={12} strokeWidth={2} />
+                            </TocActionButton>
+                          </>
+                        )
                       }
                     />
                   ) : (
                     <TocRow
                       {...rowProps}
                       actions={
-                        <>
-                          <TocActionButton
-                            label="Add section below"
-                            onClick={() => onAddContentAfter(item.id)}
-                          >
-                            <Plus size={12} strokeWidth={2} />
-                          </TocActionButton>
+                        hideAddActions ? (
                           <TocActionButton
                             label="Delete section"
                             variant="danger"
@@ -460,7 +541,23 @@ export function TableOfContents({
                           >
                             <Trash2 size={12} strokeWidth={2} />
                           </TocActionButton>
-                        </>
+                        ) : (
+                          <>
+                            <TocActionButton
+                              label="Add section below"
+                              onClick={() => onAddContentAfter(item.id)}
+                            >
+                              <Plus size={12} strokeWidth={2} />
+                            </TocActionButton>
+                            <TocActionButton
+                              label="Delete section"
+                              variant="danger"
+                              onClick={() => onDeleteContent(item.id)}
+                            >
+                              <Trash2 size={12} strokeWidth={2} />
+                            </TocActionButton>
+                          </>
+                        )
                       }
                     />
                   )}

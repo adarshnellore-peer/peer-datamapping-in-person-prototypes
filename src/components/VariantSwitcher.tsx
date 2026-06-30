@@ -6,8 +6,8 @@ export type VariantId =
   | "twoColumn"
   | "matrix"
   | "spine"
-  | "sourceView"
-  | "connectors";
+  | "connectors"
+  | "sourceView";
 
 export const VARIANTS: { id: VariantId; name: string; description: string }[] = [
   {
@@ -17,28 +17,28 @@ export const VARIANTS: { id: VariantId; name: string; description: string }[] = 
   },
   {
     id: "twoColumn",
-    name: "V3 \u00b7 Two-column",
-    description: "Section list left, its sources right",
+    name: "V2 \u00b7 Two-column",
+    description: "Drag from outline and data sources onto sections",
   },
   {
     id: "matrix",
-    name: "V4 \u00b7 Usage matrix",
+    name: "V3 \u00b7 Usage matrix",
     description: "Sections \u00d7 usage; drag sources between Primary/Supporting/Context",
   },
   {
     id: "spine",
-    name: "V5 \u00b7 Narrative spine",
+    name: "V4 \u00b7 Narrative spine",
     description: "Sections with sources expanded; key message optional",
+  },
+  {
+    id: "connectors",
+    name: "V5 \u00b7 Connector map",
+    description: "Sections and sources joined by lines; click to trace one",
   },
   {
     id: "sourceView",
     name: "V6 \u00b7 Source view",
     description: "Group by document; see every section a source feeds",
-  },
-  {
-    id: "connectors",
-    name: "V7 \u00b7 Connector map",
-    description: "Sections and sources joined by lines; click to trace one",
   },
 ];
 

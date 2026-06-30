@@ -1,26 +1,19 @@
-import { useMemo, useState } from "react";
-import { GripVertical, Search } from "lucide-react";
-import {
-  DATA_SOURCES,
-  DATA_SOURCE_CATEGORIES,
-  getDocumentCategory,
-} from "../../data/roadmap";
-import type { ContentBlockData, DocumentBlock } from "../../types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { GripVertical } from "lucide-react";
 import { SourcePill } from "./SourcePill";
-import { CATEGORY_DOT, CATEGORY_ORDER, type VariantProps } from "./types";
+import { type VariantProps } from "./types";
+import {
+  hasV2DragType,
+  readV2DragData,
+  setV2DragData,
+  type V2DragPayload,
+} from "../../utils/v2DragPayload";
 
-type Drag =
-  | { kind: "library"; dataSource: string }
-  | { kind: "mapped"; fromBlockId: string; sourceId: string };
-
-function firstContentId(blocks: DocumentBlock[]): string | null {
-  return blocks.find((b) => b.type === "content")?.id ?? null;
-}
+type MappedDrag = { kind: "mapped"; fromBlockId: string; sourceId: string };
 
 /**
- * V3 - Two-column mapping board. Left = every section as a drop zone holding
- * its mapped sources; right = the full data-source library (grouped +
- * searchable, each doc draggable). Drag a document onto a section to map it.
+ * V2 - Section mapping board. Drag study documents from the Data sources panel
+ * (right) or outline rows from the TOC (left) onto section drop zones.
  */
 export function TwoColumnVariant({
   blocks,
@@ -28,82 +21,163 @@ export function TwoColumnVariant({
   onTraceSource,
   onUpdateSource,
   onRemoveSource,
-  onMapDataSource,
+  onMapStudySource,
+  onMapOutlineToSection,
   onMoveSource,
-}: VariantProps & {
-  onMapDataSource: (blockId: string, dataSource: string) => void;
-  onMoveSource?: (fromBlockId: string, sourceId: string, toBlockId: string) => void;
+  focusId,
+}: Omit<VariantProps, "onAddSource"> & {
+  onMapStudySource: (blockId: string, studySourceId: string) => void;
+  onMapOutlineToSection: (
+    blockId: string,
+    sourceType: "SUBCONTENT" | "CONTENT",
+    label: string,
+  ) => void;
+  onMoveSource?: (
+    fromBlockId: string,
+    sourceId: string,
+    toBlockId: string,
+    toIndex?: number,
+  ) => void;
+  focusId?: string | null;
 }) {
-  const [drag, setDrag] = useState<Drag | null>(null);
+  const [mappedDrag, setMappedDrag] = useState<MappedDrag | null>(null);
+  const [externalDrag, setExternalDrag] = useState(false);
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null);
-  const [activeBlockId, setActiveBlockId] = useState<string | null>(() =>
-    firstContentId(blocks),
-  );
-  const [query, setQuery] = useState("");
+  const [hoverInsert, setHoverInsert] = useState<{
+    blockId: string;
+    index: number;
+  } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef<Record<string, HTMLElement | null>>({});
+  const skipScrollRef = useRef(false);
 
-  const activeTitle = useMemo(() => {
-    const block = blocks.find(
-      (b): b is ContentBlockData => b.type === "content" && b.id === activeBlockId,
-    );
-    return block?.title ?? null;
-  }, [blocks, activeBlockId]);
+  const isDragging = mappedDrag !== null || externalDrag;
 
-  const groups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const filtered = DATA_SOURCES.filter((name) =>
-      q ? name.toLowerCase().includes(q) : true,
-    );
-    const order = [...CATEGORY_ORDER] as string[];
-    return order
-      .map((category) => ({
-        category,
-        items: filtered.filter((name) => getDocumentCategory(name) === category),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [query]);
+  useEffect(() => {
+    if (!focusId || skipScrollRef.current || isDragging) return;
+    const block = blocks.find((b) => b.id === focusId);
+    if (!block) return;
+    rowRefs.current[focusId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusId, blocks, isDragging]);
 
-  const clearDrag = () => {
-    setDrag(null);
-    setHoverBlockId(null);
-  };
+  useEffect(() => {
+    const onDragStart = (event: DragEvent) => {
+      if (hasV2DragType(event.dataTransfer)) {
+        setExternalDrag(true);
+        skipScrollRef.current = true;
+      }
+    };
+    const onDragEnd = () => {
+      setExternalDrag(false);
+      skipScrollRef.current = false;
+    };
+    document.addEventListener("dragstart", onDragStart);
+    document.addEventListener("dragend", onDragEnd);
+    return () => {
+      document.removeEventListener("dragstart", onDragStart);
+      document.removeEventListener("dragend", onDragEnd);
+    };
+  }, []);
 
-  const dropOnSection = (blockId: string) => {
-    if (!drag) return;
-    if (drag.kind === "library") {
-      onMapDataSource(blockId, drag.dataSource);
-    } else if (drag.kind === "mapped" && onMoveSource) {
-      onMoveSource(drag.fromBlockId, drag.sourceId, blockId);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (isDragging) {
+      el.style.overflow = "hidden";
+      el.style.overscrollBehavior = "none";
+    } else {
+      el.style.overflow = "";
+      el.style.overscrollBehavior = "";
     }
-    clearDrag();
+  }, [isDragging]);
+
+  const clearDrag = useCallback(() => {
+    setMappedDrag(null);
+    setHoverBlockId(null);
+    setHoverInsert(null);
+    setExternalDrag(false);
+    skipScrollRef.current = false;
+  }, []);
+
+  const applyPayload = useCallback(
+    (toBlockId: string, payload: V2DragPayload, toIndex?: number) => {
+      switch (payload.kind) {
+        case "study-source":
+          onMapStudySource(toBlockId, payload.studySourceId);
+          break;
+        case "toc":
+          onMapOutlineToSection(toBlockId, payload.sourceType, payload.label);
+          break;
+        case "mapped":
+          onMoveSource?.(payload.fromBlockId, payload.sourceId, toBlockId, toIndex);
+          break;
+      }
+    },
+    [onMapOutlineToSection, onMapStudySource, onMoveSource],
+  );
+
+  const dropAt = (blockId: string, dataTransfer: DataTransfer, toIndex?: number) => {
+    const payload = readV2DragData(dataTransfer);
+    if (payload) {
+      applyPayload(blockId, payload, toIndex);
+      clearDrag();
+      return;
+    }
+    if (mappedDrag) {
+      applyPayload(blockId, mappedDrag, toIndex);
+      clearDrag();
+    }
   };
 
-  const addToActive = (dataSource: string) => {
-    if (activeBlockId) onMapDataSource(activeBlockId, dataSource);
+  const handleSectionDragOver = (event: React.DragEvent, blockId: string) => {
+    if (!isDragging && !hasV2DragType(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = mappedDrag ? "move" : "copy";
+    if (hoverBlockId !== blockId) setHoverBlockId(blockId);
   };
 
-  const isDragging = drag !== null;
+  const handleInsertDragOver = (
+    event: React.DragEvent,
+    blockId: string,
+    index: number,
+  ) => {
+    if (!isDragging && !hasV2DragType(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    setHoverBlockId(blockId);
+    setHoverInsert({ blockId, index });
+  };
 
   return (
     <div className="flex h-full min-h-0">
-      {/* Left column: sections as drop zones */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-white">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#e8e8e8] bg-white px-4 py-3">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
+      <div
+        ref={scrollRef}
+        className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-[#e8e8e8]"
+      >
+        <div className="sticky top-0 z-10 border-b border-[#d8d8d8] bg-[#e8e8e8]/95 px-4 py-3 backdrop-blur-sm">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-[#757575]">
             Sections
           </p>
-          <span className="text-[11px] text-[#b0b0b0]">Drag documents in from the right</span>
+          <p className="mt-0.5 text-[11px] text-[#8a8a8a]">
+            Drag onto a section — click a mapped row to preview in Data sources
+          </p>
         </div>
-        <div className="space-y-1 px-3 py-3">
+        <div className="space-y-4 px-4 py-4">
           {blocks.map((block) => {
             if (block.type === "heading") {
               return (
                 <p
                   key={block.id}
-                  className={`px-1 pb-1 pt-4 font-semibold text-[#757575] first:pt-1 ${
+                  ref={(el) => {
+                    rowRefs.current[block.id] = el;
+                  }}
+                  className={`px-1 pb-0.5 pt-4 font-semibold text-[#5c5c5c] first:pt-1 ${
                     block.level === 1
                       ? "text-[12px] uppercase tracking-wide"
                       : "text-[12px]"
-                  }`}
+                  } ${focusId === block.id ? "text-[#ff4e49]" : ""}`}
                 >
                   {block.number && <span>{block.number} </span>}
                   {block.title}
@@ -113,186 +187,155 @@ export function TwoColumnVariant({
             if (block.type !== "content") return null;
 
             const isHover = hoverBlockId === block.id;
-            const isActive = activeBlockId === block.id;
+            const isTocFocus = focusId === block.id;
             const tracedSourceId =
               tracedSource?.blockId === block.id ? tracedSource.sourceId : null;
 
             return (
               <div
                 key={block.id}
-                onClick={() => setActiveBlockId(block.id)}
-                onDragOver={(event) => {
-                  if (!drag) return;
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect =
-                    drag.kind === "mapped" ? "move" : "copy";
-                  if (hoverBlockId !== block.id) setHoverBlockId(block.id);
+                ref={(el) => {
+                  rowRefs.current[block.id] = el;
                 }}
-                onDragLeave={() =>
-                  setHoverBlockId((current) => (current === block.id ? null : current))
-                }
+                onDragOver={(event) => handleSectionDragOver(event, block.id)}
+                onDragLeave={() => {
+                  setHoverBlockId((current) => (current === block.id ? null : current));
+                  setHoverInsert((current) =>
+                    current?.blockId === block.id ? null : current,
+                  );
+                }}
                 onDrop={(event) => {
                   event.preventDefault();
-                  dropOnSection(block.id);
+                  event.stopPropagation();
+                  dropAt(block.id, event.dataTransfer);
                 }}
-                className={`rounded-md border px-3 py-2.5 transition-colors ${
+                className={`rounded-md border px-2 py-2 transition-colors ${
                   isHover
-                    ? "border-[#ff4e49] bg-[#fff5f5]"
-                    : isActive
-                      ? "border-[#fe9591] bg-white"
-                      : isDragging
-                        ? "border-dashed border-[#d4ced3] bg-white"
-                        : "border-[#ececec] bg-white hover:border-[#d4ced3]"
+                    ? "border-[#ff4e49]/40 bg-[#f4f4f4] ring-2 ring-[#ff4e49]/20"
+                    : isTocFocus
+                      ? "border-[#ff4e49]/20 bg-[#f2f2f2]"
+                      : "border-[#dcdcdc] bg-[#efefef]"
                 }`}
               >
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#302f2f]">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#302f2f]">
                     {block.title}
                   </span>
-                  <span className="shrink-0 rounded-full bg-[#f3f3f3] px-1.5 py-0.5 text-[11px] font-medium text-[#9e9e9e]">
-                    {block.sources.length}
-                  </span>
+                  {block.sources.length > 0 && (
+                    <span className="shrink-0 text-[11px] tabular-nums text-[#8a8a8a]">
+                      {block.sources.length}
+                    </span>
+                  )}
                 </div>
 
                 {block.sources.length === 0 ? (
-                  <p
-                    className={`rounded-md border border-dashed py-2 text-center text-[12px] ${
-                      isHover
-                        ? "border-[#ff4e49] text-[#ff4e49]"
-                        : "border-[#e4e4e4] text-[#b0b0b0]"
-                    }`}
-                  >
-                    Drop a source here
-                  </p>
+                  isDragging ? (
+                    <p
+                      className={`rounded-md border border-dashed py-2 text-center text-[12px] ${
+                        isHover
+                          ? "border-[#ff4e49] text-[#ff4e49]"
+                          : "border-[#c8c8c8] text-[#9e9e9e]"
+                      }`}
+                    >
+                      Release to map source
+                    </p>
+                  ) : null
                 ) : (
-                  <div className="space-y-1.5">
-                    {block.sources.map((source) => (
-                      <div key={source.id} className="flex items-start gap-1">
-                        {onMoveSource && (
-                          <button
-                            type="button"
-                            draggable
-                            onDragStart={(event) => {
-                              setDrag({
-                                kind: "mapped",
-                                fromBlockId: block.id,
-                                sourceId: source.id,
-                              });
-                              event.dataTransfer.effectAllowed = "move";
-                            }}
-                            onDragEnd={clearDrag}
-                            aria-label="Drag to move source to another section"
-                            title="Drag to move to another section"
-                            className="mt-2 shrink-0 cursor-grab text-[#c4c4c4] hover:text-[#9e9e9e] active:cursor-grabbing"
-                          >
-                            <GripVertical size={14} strokeWidth={1.75} />
-                          </button>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <SourcePill
-                            source={source}
-                            isTraced={tracedSourceId === source.id}
-                            onChange={(next) => onUpdateSource(block.id, next)}
-                            onTrace={
-                              onTraceSource
-                                ? () => onTraceSource(block.id, source.id)
-                                : undefined
+                  <div className="space-y-0">
+                    {block.sources.map((source, index) => {
+                      const showLine =
+                        hoverInsert?.blockId === block.id &&
+                        hoverInsert.index === index;
+                      return (
+                        <div key={source.id}>
+                          <div
+                            onDragOver={(event) =>
+                              handleInsertDragOver(event, block.id, index)
                             }
-                            onRemove={() => onRemoveSource(block.id, source.id)}
-                          />
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              dropAt(block.id, event.dataTransfer, index);
+                            }}
+                            className={`relative h-1 transition-all ${
+                              showLine ? "h-1.5" : ""
+                            }`}
+                          >
+                            {showLine && (
+                              <div className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-[#ff4e49]" />
+                            )}
+                          </div>
+                          <div className="flex items-start gap-1">
+                            {onMoveSource && (
+                              <button
+                                type="button"
+                                draggable
+                                onDragStart={(event) => {
+                                  const mapped: MappedDrag = {
+                                    kind: "mapped",
+                                    fromBlockId: block.id,
+                                    sourceId: source.id,
+                                  };
+                                  setMappedDrag(mapped);
+                                  setV2DragData(event.dataTransfer, {
+                                    ...mapped,
+                                    kind: "mapped",
+                                  });
+                                  event.dataTransfer.effectAllowed = "move";
+                                  skipScrollRef.current = true;
+                                }}
+                                onDragEnd={clearDrag}
+                                aria-label="Drag to reorder or move"
+                                title="Drag to reorder or move"
+                                className="mt-2.5 shrink-0 cursor-grab rounded p-0.5 text-[#a0a0a0] hover:bg-[#e0e0e0] hover:text-[#757575] active:cursor-grabbing"
+                              >
+                                <GripVertical size={14} strokeWidth={1.75} />
+                              </button>
+                            )}
+                            <div className="min-w-0 flex-1 py-0.5">
+                              <SourcePill
+                                source={source}
+                                variant="v2"
+                                isTraced={tracedSourceId === source.id}
+                                onChange={(next) => onUpdateSource(block.id, next)}
+                                onTrace={
+                                  onTraceSource
+                                    ? () => onTraceSource(block.id, source.id)
+                                    : undefined
+                                }
+                                onRemove={() => onRemoveSource(block.id, source.id)}
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
+                    <div
+                      onDragOver={(event) =>
+                        handleInsertDragOver(event, block.id, block.sources.length)
+                      }
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        dropAt(block.id, event.dataTransfer, block.sources.length);
+                      }}
+                      className={`relative h-1 ${
+                        hoverInsert?.blockId === block.id &&
+                        hoverInsert.index === block.sources.length
+                          ? "h-1.5"
+                          : ""
+                      }`}
+                    >
+                      {hoverInsert?.blockId === block.id &&
+                        hoverInsert.index === block.sources.length && (
+                          <div className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-[#ff4e49]" />
+                        )}
+                    </div>
                   </div>
                 )}
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Right column: data-source library */}
-      <div className="flex w-[360px] shrink-0 flex-col overflow-hidden border-l border-[#d4ced3] bg-[#fafafa]">
-        <div className="shrink-0 border-b border-[#e8e8e8] bg-[#fafafa] px-4 py-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
-              Data sources
-            </p>
-            <span className="text-[11px] text-[#b0b0b0]">{DATA_SOURCES.length}</span>
-          </div>
-          <p className="mt-1 truncate text-[11px] text-[#b0b0b0]">
-            {activeTitle ? (
-              <>
-                Click adds to: <span className="text-[#636161]">{activeTitle}</span>
-              </>
-            ) : (
-              "Click a section to set the click-to-add target"
-            )}
-          </p>
-          <div className="relative mt-2">
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9e9e9e]"
-            />
-            <input
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search documents"
-              className="w-full rounded-md border border-[#d4ced3] bg-white py-1.5 pl-8 pr-2 text-[13px] text-[#302f2f] placeholder:text-[#9e9e9e] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
-            />
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-          {groups.length === 0 ? (
-            <p className="py-6 text-center text-[13px] text-[#9e9e9e]">No documents match.</p>
-          ) : (
-            groups.map((group) => (
-              <div key={group.category} className="mb-3 last:mb-0">
-                <div className="mb-1 flex items-center gap-1.5 px-1">
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      CATEGORY_DOT[group.category] ?? "bg-[#bdbdbd]"
-                    }`}
-                  />
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
-                    {group.category}
-                  </span>
-                  <span className="text-[11px] text-[#c4c4c4]">{group.items.length}</span>
-                </div>
-                <div className="space-y-1">
-                  {group.items.map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      draggable
-                      onDragStart={(event) => {
-                        setDrag({ kind: "library", dataSource: name });
-                        event.dataTransfer.effectAllowed = "copy";
-                      }}
-                      onDragEnd={clearDrag}
-                      onClick={() => addToActive(name)}
-                      title={
-                        activeTitle
-                          ? `Drag onto a section, or click to add to "${activeTitle}"`
-                          : "Drag onto a section to map it"
-                      }
-                      className="flex w-full cursor-grab items-center gap-2 rounded-md border border-[#e4e4e4] bg-white px-2.5 py-2 text-left text-[13px] text-[#454545] transition-colors hover:border-[#bdbdbd] hover:bg-[#fff5f5] active:cursor-grabbing"
-                    >
-                      <span
-                        className={`h-2 w-2 shrink-0 rounded-full ${
-                          CATEGORY_DOT[DATA_SOURCE_CATEGORIES[name] ?? "Document"] ??
-                          "bg-[#bdbdbd]"
-                        }`}
-                      />
-                      <span className="truncate">{name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
         </div>
       </div>
     </div>

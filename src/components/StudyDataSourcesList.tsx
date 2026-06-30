@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChevronRight, Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { ChevronRight, GripVertical, Search } from "lucide-react";
 import { getDocumentCategory } from "../data/roadmap";
 import type { StudyDataSource } from "../data/studyDataSources";
 import { STUDY_DATA_SOURCES } from "../data/studyDataSources";
+import { setV2DragData } from "../utils/v2DragPayload";
 
 const CATEGORY_ORDER = ["Protocol", "SAP", "CSR", "Template", "Figures", "Listings", "Document"];
 
@@ -102,6 +103,35 @@ function StatusDot({ processed }: { processed: boolean }) {
   );
 }
 
+function startStudySourceDrag(entry: StudyDataSource, event: DragEvent) {
+  setV2DragData(event.dataTransfer, { kind: "study-source", studySourceId: entry.id });
+}
+
+function DragGrip({
+  entry,
+  enableMappingDrag,
+}: {
+  entry: StudyDataSource;
+  enableMappingDrag: boolean;
+}) {
+  if (!enableMappingDrag) return <span className="w-1 shrink-0" aria-hidden />;
+  return (
+    <button
+      type="button"
+      draggable
+      onDragStart={(event) => {
+        event.stopPropagation();
+        startStudySourceDrag(entry, event);
+      }}
+      title="Drag onto a section"
+      aria-label="Drag onto a section"
+      className="mt-2.5 flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded text-[#c4c4c4] hover:bg-[#f0f0f0] hover:text-[#757575] active:cursor-grabbing"
+    >
+      <GripVertical size={12} strokeWidth={2} />
+    </button>
+  );
+}
+
 function SourceRow({
   label,
   secondary,
@@ -109,6 +139,8 @@ function SourceRow({
   isActive,
   onSelect,
   processed,
+  entry,
+  enableMappingDrag = false,
 }: {
   label: ReactNode;
   secondary?: ReactNode;
@@ -116,37 +148,46 @@ function SourceRow({
   isActive: boolean;
   onSelect: () => void;
   processed: boolean;
+  entry?: StudyDataSource;
+  enableMappingDrag?: boolean;
 }) {
-  const indent = depth === 1 ? "pl-5" : "pl-3";
+  const padLeft = depth === 1 ? "pl-1" : "pl-0.5";
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`flex w-full items-start gap-2.5 ${indent} pr-3 py-2.5 text-left transition-colors ${
-        isActive ? "bg-[#fedbda]" : "hover:bg-[#f5f5f5]"
-      }`}
-    >
-      <span className="min-w-0 flex-1">
-        <span
-          className={`block text-[12px] leading-snug ${
-            depth === 0
-              ? isActive
-                ? "font-semibold text-[#302f2f]"
-                : "font-medium text-[#302f2f]"
-              : isActive
-                ? "font-medium text-[#302f2f]"
-                : "font-normal text-[#636161]"
-          }`}
-        >
-          {label}
+    <div className={`flex items-start ${padLeft}`}>
+      {entry ? (
+        <DragGrip entry={entry} enableMappingDrag={enableMappingDrag} />
+      ) : (
+        <span className="w-5 shrink-0" aria-hidden />
+      )}
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`flex min-w-0 flex-1 items-start gap-2.5 py-2.5 pr-3 text-left transition-colors ${
+          isActive ? "bg-[#fedbda]" : "hover:bg-[#f5f5f5]"
+        }`}
+      >
+        <span className="min-w-0 flex-1">
+          <span
+            className={`block text-[12px] leading-snug ${
+              depth === 0
+                ? isActive
+                  ? "font-semibold text-[#302f2f]"
+                  : "font-medium text-[#302f2f]"
+                : isActive
+                  ? "font-medium text-[#302f2f]"
+                  : "font-normal text-[#636161]"
+            }`}
+          >
+            {label}
+          </span>
+          {secondary && (
+            <span className="mt-0.5 block text-[11px] leading-snug text-[#9e9e9e]">{secondary}</span>
+          )}
         </span>
-        {secondary && (
-          <span className="mt-0.5 block text-[11px] leading-snug text-[#9e9e9e]">{secondary}</span>
-        )}
-      </span>
-      <StatusDot processed={processed} />
-    </button>
+        <StatusDot processed={processed} />
+      </button>
+    </div>
   );
 }
 
@@ -157,6 +198,7 @@ function DocumentGroupSection({
   collapsed,
   onToggleCollapse,
   onSelect,
+  enableMappingDrag = false,
 }: {
   group: DocumentGroup;
   category: string;
@@ -164,16 +206,17 @@ function DocumentGroupSection({
   collapsed: boolean;
   onToggleCollapse: () => void;
   onSelect: (source: StudyDataSource) => void;
+  enableMappingDrag?: boolean;
 }) {
   const hasSections = group.sections.length > 0;
   const collapseKey = `${category}:${group.key}`;
   const rootActive = group.root.id === activeSourceId;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[#ececec] bg-white">
+    <div className="overflow-hidden rounded-lg border border-[#e4e4e4] bg-white shadow-sm">
       <div
         className={`flex items-start gap-0.5 ${hasSections ? "border-b border-[#f0f0f0]" : ""} ${
-          rootActive ? "bg-[#fedbda]" : "hover:bg-[#f5f5f5]"
+          rootActive ? "bg-[#fedbda]" : ""
         }`}
       >
         {hasSections ? (
@@ -195,13 +238,15 @@ function DocumentGroupSection({
             />
           </button>
         ) : (
-          <span className="w-2 shrink-0" aria-hidden />
+          <span className="w-7 shrink-0" aria-hidden />
         )}
+
+        <DragGrip entry={group.root} enableMappingDrag={enableMappingDrag} />
 
         <button
           type="button"
           onClick={() => onSelect(group.root)}
-          className="flex min-w-0 flex-1 items-start gap-2.5 py-2.5 pr-3 pl-1 text-left"
+          className="flex min-w-0 flex-1 items-start gap-2.5 py-2.5 pr-3 text-left hover:bg-[#fafafa]"
         >
           <span className="min-w-0 flex-1">
             <span
@@ -231,6 +276,8 @@ function DocumentGroupSection({
                 isActive={entry.id === activeSourceId}
                 onSelect={() => onSelect(entry)}
                 processed={entry.status === "processed"}
+                entry={entry}
+                enableMappingDrag={enableMappingDrag}
               />
             </li>
           ))}
@@ -247,6 +294,7 @@ function CategorySection({
   collapsedDocs,
   onToggleDocument,
   onSelect,
+  enableMappingDrag = false,
 }: {
   category: string;
   items: StudyDataSource[];
@@ -254,6 +302,7 @@ function CategorySection({
   collapsedDocs: Set<string>;
   onToggleDocument: (key: string) => void;
   onSelect: (source: StudyDataSource) => void;
+  enableMappingDrag?: boolean;
 }) {
   const { documents, standalone } = useMemo(() => groupDocuments(items), [items]);
 
@@ -278,11 +327,12 @@ function CategorySection({
             collapsed={collapsedDocs.has(`${category}:${group.key}`)}
             onToggleCollapse={() => onToggleDocument(`${category}:${group.key}`)}
             onSelect={onSelect}
+            enableMappingDrag={enableMappingDrag}
           />
         ))}
 
         {standalone.length > 0 && (
-          <div className="divide-y divide-[#f5f5f5] overflow-hidden rounded-lg border border-[#ececec] bg-white">
+          <div className="divide-y divide-[#e0e0e0] overflow-hidden rounded-lg border border-[#d8d8d8] bg-white">
             {standalone.map((entry) => (
               <SourceRow
                 key={entry.id}
@@ -290,6 +340,8 @@ function CategorySection({
                 isActive={entry.id === activeSourceId}
                 onSelect={() => onSelect(entry)}
                 processed={entry.status === "processed"}
+                entry={entry}
+                enableMappingDrag={enableMappingDrag}
               />
             ))}
           </div>
@@ -303,9 +355,10 @@ export function StudyDataSourcesList({
   sources = STUDY_DATA_SOURCES,
   activeSourceId,
   onSelect,
-  compact = false,
+  compact: _compact = false,
   query: controlledQuery,
   onQueryChange,
+  enableMappingDrag = false,
 }: {
   sources?: StudyDataSource[];
   activeSourceId?: string;
@@ -313,24 +366,34 @@ export function StudyDataSourcesList({
   compact?: boolean;
   query?: string;
   onQueryChange?: (query: string) => void;
+  /** V2: rows are draggable onto section drop zones. */
+  enableMappingDrag?: boolean;
 }) {
   const [internalQuery, setInternalQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [collapsedDocs, setCollapsedDocs] = useState<Set<string>>(() => new Set());
   const query = controlledQuery ?? internalQuery;
   const setQuery = onQueryChange ?? setInternalQuery;
 
+  const availableCategories = useMemo(() => {
+    const set = new Set(sources.map((entry) => categoryForSource(entry)));
+    return CATEGORY_ORDER.filter((c) => set.has(c));
+  }, [sources]);
+
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return sources;
-    return sources.filter(
-      (entry) =>
+    return sources.filter((entry) => {
+      if (categoryFilter && categoryForSource(entry) !== categoryFilter) return false;
+      if (!normalized) return true;
+      return (
         entry.name.toLowerCase().includes(normalized) ||
         entry.uploadedFile.toLowerCase().includes(normalized) ||
         entry.dataSource.toLowerCase().includes(normalized) ||
         sectionLabelFor(entry).toLowerCase().includes(normalized) ||
-        categoryForSource(entry).toLowerCase().includes(normalized),
-    );
-  }, [query, sources]);
+        categoryForSource(entry).toLowerCase().includes(normalized)
+      );
+    });
+  }, [query, sources, categoryFilter]);
 
   const categories = useMemo(() => groupByCategory(filtered), [filtered]);
 
@@ -360,19 +423,46 @@ export function StudyDataSourcesList({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fafafa]">
       <div className="shrink-0 border-b border-[#ececec] bg-white px-3 py-3">
-        <div className="mb-2.5 flex items-center justify-between gap-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="text-[13px] font-semibold text-[#302f2f]">
             Data sources
             <span className="ml-1.5 font-normal tabular-nums text-[#bdbdbd]">({sources.length})</span>
           </h3>
+        </div>
+        {enableMappingDrag && (
+          <p className="mb-2 text-[10px] leading-snug text-[#9e9e9e]">
+            <GripVertical size={10} className="mr-0.5 inline -mt-px" />
+            Use grip to drag onto a section
+          </p>
+        )}
+        <div className="mb-2.5 flex flex-wrap gap-1">
           <button
             type="button"
-            className="peer-btn-primary inline-flex !h-7 !min-w-7 items-center justify-center !p-0 !px-2 !text-[11px]"
-            aria-label="Add data source"
+            onClick={() => setCategoryFilter(null)}
+            className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+              categoryFilter === null
+                ? "border-[#302f2f] bg-[#302f2f] text-white"
+                : "border-[#e0e0e0] bg-white text-[#636161] hover:border-[#c8c8c8]"
+            }`}
           >
-            <Plus size={13} />
-            {!compact && <span className="ml-0.5">Add</span>}
+            All
           </button>
+          {availableCategories.map((category) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() =>
+                setCategoryFilter((current) => (current === category ? null : category))
+              }
+              className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                categoryFilter === category
+                  ? "border-[#2b5bd7] bg-[#eef3ff] text-[#2b5bd7]"
+                  : "border-[#e0e0e0] bg-white text-[#636161] hover:border-[#c8c8c8]"
+              }`}
+            >
+              {category}
+            </button>
+          ))}
         </div>
         <label className="relative block">
           <Search
@@ -391,7 +481,7 @@ export function StudyDataSourcesList({
 
       <div className="min-h-0 flex-1 overflow-y-auto py-2">
         {categories.length === 0 ? (
-          <p className="px-3 py-8 text-center text-[12px] text-[#9e9e9e]">No matches.</p>
+          <p className="px-3 py-8 text-center text-[12px] text-[#8a8a8a]">No matches.</p>
         ) : (
           categories.map(({ category, items }) => (
             <CategorySection
@@ -402,6 +492,7 @@ export function StudyDataSourcesList({
               collapsedDocs={collapsedDocs}
               onToggleDocument={toggleDocument}
               onSelect={onSelect}
+              enableMappingDrag={enableMappingDrag}
             />
           ))
         )}
