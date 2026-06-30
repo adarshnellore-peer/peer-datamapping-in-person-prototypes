@@ -31,6 +31,7 @@ import { VariantSwitcher, type VariantId } from "./VariantSwitcher";
 import { TwoColumnVariant } from "./variants/TwoColumnVariant";
 import { SourceViewVariant } from "./variants/SourceViewVariant";
 import { ConnectorVariant } from "./variants/ConnectorVariant";
+import { findStudySourcePlacement } from "./variants/connectorGraph";
 import { MatrixVariant } from "./variants/MatrixVariant";
 import { MATRIX_COLUMNS } from "./variants/types";
 import { SourcePickerOverlay } from "./SourcePickerOverlay";
@@ -46,10 +47,11 @@ import {
   deleteHeadingSection,
   findInsertIndexAfterHeadingSection,
   getHeadingSectionBlockIds,
+  isHeadingInsertionSlot,
   moveDocumentBlockFromTocDrop,
   nextSiblingHeadingNumber,
 } from "../utils/documentBlocks";
-import { LIBRARY_TRACE_BLOCK } from "../utils/v2DragPayload";
+import { LIBRARY_TRACE_BLOCK, type V2DragPayload } from "../utils/v2DragPayload";
 
 type ActivePanel =
   | { type: "share" }
@@ -470,6 +472,74 @@ export function RoadmapPage() {
     [],
   );
 
+  const matrixDropOnHeadingSlot = useCallback(
+    (slotHeadingId: string, role: SourceRole, payload: V2DragPayload) => {
+      setBlocks((prev) => {
+        if (!isHeadingInsertionSlot(prev, slotHeadingId)) return prev;
+
+        const headingIndex = prev.findIndex((b) => b.id === slotHeadingId);
+        const insertAt = findInsertIndexAfterHeadingSection(prev, slotHeadingId);
+        if (insertAt === null || headingIndex === -1) return prev;
+
+        const slotHeading = prev[headingIndex];
+        if (slotHeading.type !== "heading") return prev;
+
+        const siblingLevel = slotHeading.level;
+        const newNumber = nextSiblingHeadingNumber(prev, headingIndex);
+        let newHeading: HeadingBlock = createHeadingBlock(siblingLevel, newNumber);
+        let working = prev;
+
+        if (payload.kind === "study-source") {
+          const entry = findStudySourceById(payload.studySourceId);
+          if (!entry) return prev;
+          newHeading = {
+            ...newHeading,
+            sources: [
+              {
+                ...studySourceToRoadmapSource(entry),
+                id: crypto.randomUUID(),
+                role,
+                isReference: role === "reference" ? true : undefined,
+              },
+            ],
+          };
+        } else if (payload.kind === "mapped") {
+          let movedSource: RoadmapSource | null = null;
+          working = prev.map((block) => {
+            if (block.id !== payload.fromBlockId) return block;
+            if (block.type !== "content" && block.type !== "heading") return block;
+            const sources = block.type === "content" ? block.sources : (block.sources ?? []);
+            const found = sources.find((s) => s.id === payload.sourceId);
+            if (!found) return block;
+            movedSource = found;
+            const nextSources = sources.filter((s) => s.id !== payload.sourceId);
+            return block.type === "content"
+              ? { ...block, sources: nextSources }
+              : { ...block, sources: nextSources };
+          });
+          if (!movedSource) return prev;
+          const placed: RoadmapSource = {
+            ...(movedSource as RoadmapSource),
+            role,
+            isReference: role === "reference" ? true : undefined,
+          };
+          newHeading = {
+            ...newHeading,
+            sources: [placed],
+          };
+        } else {
+          return prev;
+        }
+
+        const next = [...working];
+        next.splice(insertAt, 0, newHeading);
+        return bumpSubsequentHeadingNumbers(next, insertAt, siblingLevel, newNumber);
+      });
+      setToast("Heading added");
+    },
+    [],
+  );
+
   // V2 board: drag an outline row (TOC) onto a section as subcontent or content.
   const mapOutlineToSection = (
     blockId: string,
@@ -506,23 +576,54 @@ export function RoadmapPage() {
     setToast("Source mapped");
   };
 
-  // V7 connector map: remove every placement of a document within one section
-  // (detaches the whole connector, not the document elsewhere).
-  const unmapDataSourceFromSection = (blockId: string, dataSource: string) => {
+  const unmapOutlineRef = (toBlockId: string, sourceId: string) => {
     setBlocks((prev) =>
-      prev.map((block) =>
-        block.type === "content" && block.id === blockId
-          ? {
-              ...block,
-              sources: block.sources.filter(
-                (s) => !(s.sourceType === "DATA_SOURCE" && s.dataSource === dataSource),
-              ),
-            }
-          : block,
-      ),
+      prev.map((block) => {
+        if (block.id !== toBlockId) return block;
+        if (block.type === "content") {
+          return { ...block, sources: block.sources.filter((s) => s.id !== sourceId) };
+        }
+        if (block.type === "heading") {
+          return {
+            ...block,
+            sources: (block.sources ?? []).filter((s) => s.id !== sourceId),
+          };
+        }
+        return block;
+      }),
     );
-    setTraceState((prev) => (prev?.blockId === blockId ? null : prev));
-    setToast("Mapping removed");
+    setTraceState((prev) => (prev?.sourceId === sourceId ? null : prev));
+    setToast("Outline link removed");
+  };
+
+  const updateOutlineRefRole = (
+    toBlockId: string,
+    sourceId: string,
+    role: SourceRole,
+  ) => {
+    setBlocks((prev) =>
+      prev.map((block) => {
+        if (block.id !== toBlockId) return block;
+        const mapSources = (sources: RoadmapSource[]) =>
+          sources.map((source) =>
+            source.id === sourceId
+              ? {
+                  ...source,
+                  role,
+                  isReference: role === "reference" ? true : undefined,
+                }
+              : source,
+          );
+        if (block.type === "content") {
+          return { ...block, sources: mapSources(block.sources) };
+        }
+        if (block.type === "heading") {
+          return { ...block, sources: mapSources(block.sources ?? []) };
+        }
+        return block;
+      }),
+    );
+    setToast("Role updated");
   };
 
   // V6 source view: accept all proposed placements of one document at once.
@@ -740,6 +841,44 @@ export function RoadmapPage() {
     if (window.innerWidth < 768) setTocOpen(false);
   }, []);
 
+  const openConnectorSourceTrace = useCallback(
+    (studySourceId: string, preferredBlockId?: string) => {
+      const placement = findStudySourcePlacement(blocks, studySourceId, preferredBlockId);
+      if (placement) {
+        openTrace(placement.blockId, placement.sourceId);
+        return;
+      }
+      const studyEntry = findStudySourceById(studySourceId);
+      if (studyEntry) openStudySourceTrace(studyEntry);
+    },
+    [blocks, openTrace, openStudySourceTrace],
+  );
+
+  const updatePlacementRoleInSection = (
+    blockId: string,
+    sourceId: string,
+    role: SourceRole,
+  ) => {
+    setBlocks((prev) =>
+      prev.map((block) => {
+        if (block.id !== blockId || block.type !== "content") return block;
+        return {
+          ...block,
+          sources: block.sources.map((source) =>
+            source.id === sourceId
+              ? {
+                  ...source,
+                  role,
+                  isReference: role === "reference" ? true : undefined,
+                }
+              : source,
+          ),
+        };
+      }),
+    );
+    setToast("Role updated");
+  };
+
   const handleSourceCardClick = useCallback(
     (blockId: string, sourceId: string) => {
       openTrace(blockId, sourceId);
@@ -786,6 +925,14 @@ export function RoadmapPage() {
         setTraceState(null);
         setLibraryTraceSource(null);
         setExpandedSource(null);
+      }
+      return;
+    }
+    if (variant === "connectors") {
+      if (traceState) {
+        setTraceState(null);
+        setExpandedSource(null);
+        setLibraryTraceSource(null);
       }
       return;
     }
@@ -1201,9 +1348,11 @@ export function RoadmapPage() {
 
         <main
           className={`min-w-0 flex-1 ${
-            variant === "matrix"
+            variant === "matrix" || variant === "connectors"
               ? "flex min-h-0 flex-col overflow-hidden"
-              : `overflow-x-hidden ${variant === "baseline" ? "overflow-y-auto" : "overflow-y-hidden"}`
+              : variant === "baseline"
+                ? "overflow-x-hidden overflow-y-auto"
+                : "overflow-x-hidden overflow-y-hidden"
           }`}
         >
           {variant === "baseline" && (
@@ -1291,6 +1440,7 @@ export function RoadmapPage() {
               onRemoveSource={removeSourceFromBlock}
               onMapStudySourceWithRole={mapStudySourceToSectionWithRole}
               onMapOutlineRefWithRole={mapOutlineRefToSectionWithRole}
+              onHeadingSlotDrop={matrixDropOnHeadingSlot}
               onMoveSourceToMatrixCell={moveSourceToMatrixCell}
               usageCountByStudySourceId={usageCountByStudySourceId}
               onStudySourceSelect={openStudySourceTrace}
@@ -1323,11 +1473,53 @@ export function RoadmapPage() {
           )}
 
           {variant === "connectors" && (
-            <ConnectorVariant
-              blocks={blocks}
-              onMapDataSource={mapDataSourceToSection}
-              onUnmapDataSource={unmapDataSourceFromSection}
-            />
+            <div className="flex h-full min-h-0 w-full min-w-0 flex-1">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <ConnectorVariant
+                  blocks={blocks}
+                  tracedPlacement={
+                    traceState && traceState.blockId !== LIBRARY_TRACE_BLOCK
+                      ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
+                      : null
+                  }
+                  onMapStudySource={mapStudySourceToSectionWithRole}
+                  onUnmapPlacement={removeSourceFromBlock}
+                  onUpdatePlacementRole={updatePlacementRoleInSection}
+                  onMapOutlineRef={mapOutlineRefToSectionWithRole}
+                  onUnmapOutlineRef={unmapOutlineRef}
+                  onUpdateOutlineRefRole={updateOutlineRefRole}
+                  onTracePlacement={openTrace}
+                  onTraceStudySource={openConnectorSourceTrace}
+                  onClearTrace={closeTrace}
+                />
+              </div>
+              {tracedSource && traceState && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Close datasource panel"
+                    className="fixed inset-0 z-30 bg-black/20 md:hidden"
+                    onClick={closeTrace}
+                  />
+                  <aside
+                    data-datasource-panel=""
+                    className="fixed inset-y-0 right-0 z-40 flex h-full w-[min(92vw,360px)] shrink-0 flex-col overflow-hidden border-l border-[#d4ced3] bg-[#fafafa] shadow-lg md:relative md:z-0 md:w-[360px] md:shadow-none"
+                  >
+                    <DataSourcePanel
+                      embedded
+                      source={tracedSource}
+                      sectionTitle={tracedSectionTitle}
+                      initialPanelMode={traceState.view}
+                      blockSources={tracedBlockSources}
+                      activeSourceId={traceState.sourceId}
+                      onSourceChange={handleTracedSourceChange}
+                      onUpdateMappedSource={handleTracedMappedSourceUpdate}
+                      onClose={closeTrace}
+                    />
+                  </aside>
+                </>
+              )}
+            </div>
           )}
         </main>
 
@@ -1343,7 +1535,7 @@ export function RoadmapPage() {
           </>
         )}
 
-        {tracedSource && traceState && variant !== "matrix" ? (
+        {tracedSource && traceState && variant !== "matrix" && variant !== "connectors" ? (
           <>
             <button
               type="button"

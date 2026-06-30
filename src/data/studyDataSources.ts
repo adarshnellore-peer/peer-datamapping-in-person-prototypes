@@ -39,6 +39,52 @@ const LISTING_NAMES = [
   "Listing 16.2.11.1 - Listing of Concomitant Medications",
 ];
 
+const FIGURE_PLACEMENTS: ReadonlyArray<{ dataSource: string; referenceKey: string }> = [
+  {
+    dataSource: "TLF Package — Disposition & Demographics",
+    referenceKey: "Table 14.1.1 Disposition: 1-4",
+  },
+  {
+    dataSource: "Clinical Study Report",
+    referenceKey: "Efficacy Results — Primary Endpoint: 198-224",
+  },
+  {
+    dataSource: "TLF Package — Efficacy (Figures)",
+    referenceKey: "Figure 14.2.4 Secondary Endpoints: 1-8",
+  },
+  {
+    dataSource: "TLF Package — Safety (Figures)",
+    referenceKey: "Figure 14.3.1 Lab Trends: 1-8",
+  },
+  {
+    dataSource: "TLF Package — Safety (Figures)",
+    referenceKey: "Figure 14.3.7 Vital Signs: 9-15",
+  },
+];
+
+const LISTING_PLACEMENTS: ReadonlyArray<{ dataSource: string; referenceKey: string }> = [
+  {
+    dataSource: "TLF Package — Safety (Listings)",
+    referenceKey: "Listing 16.2.7.2 SAE Listing: 1-40",
+  },
+  {
+    dataSource: "TLF Package — Safety (Listings)",
+    referenceKey: "Listing 16.2.8 Lab Abnormalities: 80-140",
+  },
+  {
+    dataSource: "TLF Package — Efficacy (Listings)",
+    referenceKey: "Listing 16.2.6 Subgroups: 30-72",
+  },
+  {
+    dataSource: "TLF Package — Safety (Listings)",
+    referenceKey: "Listing 16.2.7.2 SAE Listing: 1-40",
+  },
+  {
+    dataSource: "TLF Package — Efficacy (Listings)",
+    referenceKey: "Listing 16.2.6 Subgroups: 30-72",
+  },
+];
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -80,28 +126,28 @@ function buildStudySources(): StudyDataSource[] {
   }
 
   for (const [i, name] of FIGURE_NAMES.entries()) {
-    const dataSource = DATA_SOURCES[i % DATA_SOURCES.length];
+    const placement = FIGURE_PLACEMENTS[i] ?? FIGURE_PLACEMENTS[0];
     items.push({
       id: `study-fig-${index++}`,
       name,
       uploadedFile: `${slugify(name)}.pdf`,
       status: "processed",
       kind: "figure",
-      dataSource,
-      referenceKey: getReferenceKeysForDataSource(dataSource)[0],
+      dataSource: placement.dataSource,
+      referenceKey: placement.referenceKey,
     });
   }
 
   for (const [i, name] of LISTING_NAMES.entries()) {
-    const dataSource = DATA_SOURCES[i % DATA_SOURCES.length];
+    const placement = LISTING_PLACEMENTS[i] ?? LISTING_PLACEMENTS[0];
     items.push({
       id: `study-list-${index++}`,
       name,
       uploadedFile: `${slugify(name)}.pdf`,
       status: i % 3 === 0 ? "uploaded" : "processed",
       kind: "listing",
-      dataSource,
-      referenceKey: getReferenceKeysForDataSource(dataSource)[0],
+      dataSource: placement.dataSource,
+      referenceKey: placement.referenceKey,
     });
   }
 
@@ -125,8 +171,11 @@ export function findStudySourceById(id: string): StudyDataSource | undefined {
 }
 
 export function findStudySourceForRoadmapSource(source: DataSourceRoadmapSource): StudyDataSource | undefined {
-  return STUDY_DATA_SOURCES.find(
+  const matches = STUDY_DATA_SOURCES.filter(
     (entry) =>
       entry.dataSource === source.dataSource && entry.referenceKey === source.referenceKey,
+  );
+  return (
+    matches.find((entry) => entry.kind === "figure" || entry.kind === "listing") ?? matches[0]
   );
 }

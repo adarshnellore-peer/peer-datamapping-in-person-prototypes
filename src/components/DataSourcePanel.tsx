@@ -59,6 +59,17 @@ function getDataSourceLabel(source: RoadmapSource): string | null {
   return source.content || null;
 }
 
+function referenceKeyForPage(
+  sections: ReturnType<typeof getSectionsForDocument>,
+  page: number,
+): string | undefined {
+  for (const section of sections) {
+    const { start, end } = parsePageRange(section.referenceKey);
+    if (page >= start && page <= end) return section.referenceKey;
+  }
+  return undefined;
+}
+
 export function DataSourcePanel({
   source,
   sectionTitle,
@@ -144,6 +155,8 @@ export function DataSourcePanel({
     setPreviewSource(next);
     setViewState((prev) => ({ ...prev, currentPage: start, activeChip: chip }));
     setDropdownOpen(false);
+    const entry = findStudySourceForRoadmapSource(next);
+    if (entry) setActiveStudySourceId(entry.id);
     if (detailOrigin === "trace") {
       onUpdateMappedSource?.(next);
     }
@@ -161,8 +174,35 @@ export function DataSourcePanel({
     }
     const start = Number.parseInt(chip.split("-")[0], 10);
     if (Number.isFinite(start)) {
+      if (detailOrigin === "trace") {
+        const key = referenceKeyForPage(sections, start);
+        if (key) {
+          applyReferenceKey(key);
+          return;
+        }
+      }
       setViewState((prev) => ({ ...prev, currentPage: start, activeChip: chip }));
     }
+  };
+
+  const goToPage = (page: number) => {
+    const clamped = Math.max(1, Math.min(totalPages, page));
+    if (detailOrigin === "trace") {
+      const key = referenceKeyForPage(sections, clamped);
+      if (key) {
+        applyReferenceKey(key);
+        return;
+      }
+    }
+    const section = sections.find((s) => {
+      const { start, end } = parsePageRange(s.referenceKey);
+      return clamped >= start && clamped <= end;
+    });
+    setViewState((prev) => ({
+      ...prev,
+      currentPage: clamped,
+      activeChip: section ? parsePageRange(section.referenceKey).chip : prev.activeChip,
+    }));
   };
 
   const openStudySourceDetail = (entry: StudyDataSource) => {
@@ -268,6 +308,7 @@ export function DataSourcePanel({
         listId={listId}
         selectSection={selectSection}
         jumpToChip={jumpToChip}
+        goToPage={goToPage}
         expanded={isExpanded}
       />
     );
@@ -355,6 +396,7 @@ function DataSourcePanelBody({
   listId,
   selectSection,
   jumpToChip,
+  goToPage,
   expanded,
 }: {
   source: RoadmapSource;
@@ -372,6 +414,7 @@ function DataSourcePanelBody({
   listId: string;
   selectSection: (referenceKey: string) => void;
   jumpToChip: (chip: string) => void;
+  goToPage: (page: number) => void;
   expanded: boolean;
 }) {
   const { currentPage, activeChip, zoom } = viewState;
@@ -505,12 +548,7 @@ function DataSourcePanelBody({
               <button
                 type="button"
                 disabled={currentPage <= 1}
-                onClick={() =>
-                  setViewState((prev) => ({
-                    ...prev,
-                    currentPage: Math.max(1, prev.currentPage - 1),
-                  }))
-                }
+                onClick={() => goToPage(currentPage - 1)}
                 className="flex items-center gap-1 rounded-md border border-[#d4ced3] px-2 py-1.5 text-[12px] text-[#636161] enabled:hover:bg-[#fafafa] disabled:opacity-40"
               >
                 <ChevronLeft size={14} />
@@ -522,12 +560,7 @@ function DataSourcePanelBody({
               <button
                 type="button"
                 disabled={currentPage >= totalPages}
-                onClick={() =>
-                  setViewState((prev) => ({
-                    ...prev,
-                    currentPage: Math.min(totalPages, prev.currentPage + 1),
-                  }))
-                }
+                onClick={() => goToPage(currentPage + 1)}
                 className="flex items-center gap-1 rounded-md border border-[#d4ced3] px-2 py-1.5 text-[12px] text-[#636161] enabled:hover:bg-[#fafafa] disabled:opacity-40"
               >
                 Next

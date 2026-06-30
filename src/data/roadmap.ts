@@ -158,6 +158,23 @@ export const REFERENCE_KEYS: Record<string, readonly string[]> = {
     "Introduction: 2-5",
     "Analysis Populations: 6-14",
   ],
+  "TLF Package — Disposition & Demographics": ["Table 14.1.1 Disposition: 1-4"],
+  "TLF Package — Efficacy (Tables)": [
+    "Endpoint Definitions: 2-9",
+    "Table 14.2.1 Primary Endpoint: 5-12",
+  ],
+  "TLF Package — Efficacy (Figures)": ["Figure 14.2.4 Secondary Endpoints: 1-8"],
+  "TLF Package — Efficacy (Listings)": ["Listing 16.2.6 Subgroups: 30-72"],
+  "TLF Package — Safety (Tables)": ["Table 14.3.1 Exposure: 1-5"],
+  "TLF Package — Safety (Figures)": [
+    "Figure 14.3.1 Lab Trends: 1-8",
+    "Figure 14.3.7 Vital Signs: 9-15",
+  ],
+  "TLF Package — Safety (Listings)": [
+    "Listing 16.2.7.2 SAE Listing: 1-40",
+    "Listing 16.2.8 Lab Abnormalities: 80-140",
+  ],
+  "TLF Package — Pharmacokinetics": ["Table 14.3.1 PK Parameters: 1-6"],
 };
 
 export const DEFAULT_REFERENCE_KEYS = [

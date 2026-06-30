@@ -5,6 +5,7 @@ import { StudyDataSourcesList } from "../StudyDataSourcesList";
 import type { StudyDataSource } from "../../data/studyDataSources";
 import type { RoadmapSource, SourceRole } from "../../data/roadmap";
 import type { HeadingBlock } from "../../types";
+import { isHeadingInsertionSlot } from "../../utils/documentBlocks";
 import {
   MATRIX_COLUMNS,
   isOutlineReferenceSource,
@@ -48,6 +49,7 @@ export function MatrixVariant({
   onRemoveSource,
   onMapStudySourceWithRole,
   onMapOutlineRefWithRole,
+  onHeadingSlotDrop,
   onMoveSourceToMatrixCell,
   usageCountByStudySourceId,
   onStudySourceSelect,
@@ -69,6 +71,11 @@ export function MatrixVariant({
     toBlockId: string,
     payload: OutlineRefPayload,
     role: SourceRole,
+  ) => void;
+  onHeadingSlotDrop: (
+    slotHeadingId: string,
+    role: SourceRole,
+    payload: V2DragPayload,
   ) => void;
   onMoveSourceToMatrixCell: (
     fromBlockId: string,
@@ -139,9 +146,22 @@ export function MatrixVariant({
     toBlockId: string,
     col: MatrixColumnId,
     dataTransfer: DataTransfer,
-    rejectOutlineRef?: (payload: OutlineRefPayload) => boolean,
+    options?: {
+      rejectOutlineRef?: (payload: OutlineRefPayload) => boolean;
+      headingSlotId?: string;
+    },
   ) => {
     const payload = readV2DragData(dataTransfer);
+    if (!payload) return;
+
+    if (options?.headingSlotId) {
+      if (payload.kind === "study-source" || payload.kind === "mapped") {
+        onHeadingSlotDrop(options.headingSlotId, roleForMatrixColumn(col), payload);
+      }
+      setDropTarget(null);
+      return;
+    }
+
     if (payload?.kind === "mapped") {
       dropMappedOnCell(toBlockId, col, payload.fromBlockId, payload.sourceId);
       return;
@@ -153,7 +173,7 @@ export function MatrixVariant({
         roleForMatrixColumn(col),
       );
     } else if (payload?.kind === "outline-ref") {
-      if (rejectOutlineRef?.(payload)) {
+      if (options?.rejectOutlineRef?.(payload)) {
         setDropTarget(null);
         return;
       }
@@ -184,34 +204,46 @@ export function MatrixVariant({
   const renderMatrixCells = (
     rowId: string,
     rowSources: RoadmapSource[],
-    rejectOutlineRef?: (payload: OutlineRefPayload) => boolean,
+    options?: {
+      rejectOutlineRef?: (payload: OutlineRefPayload) => boolean;
+      headingSlotId?: string;
+      dropDisabled?: boolean;
+    },
   ) =>
     MATRIX_COLUMNS.map((col) => {
       const cellId = `${rowId}|${col.id}`;
       const cellSources = sourcesInColumn(rowSources, col.id);
-      const isOver = dropTarget === cellId;
-      const cellDropHandlers = {
-        onDragOver: (e: React.DragEvent) => handleCellDragOver(cellId, e),
-        onDrop: (e: React.DragEvent) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropOnCell(rowId, col.id, e.dataTransfer, rejectOutlineRef);
-        },
-      };
+      const isOver = !options?.dropDisabled && dropTarget === cellId;
+      const cellDropHandlers = options?.dropDisabled
+        ? undefined
+        : {
+            onDragOver: (e: React.DragEvent) => handleCellDragOver(cellId, e),
+            onDrop: (e: React.DragEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              dropOnCell(rowId, col.id, e.dataTransfer, {
+                rejectOutlineRef: options?.rejectOutlineRef,
+                headingSlotId: options?.headingSlotId,
+              });
+            },
+          };
       return (
         <td
           key={col.id}
           className={`group/cell border-b border-r border-[#d4ced3] align-top transition-colors ${col.cellTint} ${
             isOver ? "outline outline-2 -outline-offset-2 outline-[#ff4e49]" : ""
-          }`}
-          onDragOver={(e) => handleCellDragOver(cellId, e)}
-          onDragLeave={() => setDropTarget((v) => (v === cellId ? null : v))}
-          onDrop={cellDropHandlers.onDrop}
+          } ${options?.dropDisabled ? "opacity-90" : ""}`}
+          {...(cellDropHandlers
+            ? {
+                onDragOver: cellDropHandlers.onDragOver,
+                onDragLeave: () => setDropTarget((v) => (v === cellId ? null : v)),
+                onDrop: cellDropHandlers.onDrop,
+              }
+            : {})}
         >
           <div
             className="min-h-[2.5rem] space-y-1.5 p-2"
-            onDragOver={(e) => handleCellDragOver(cellId, e)}
-            onDrop={cellDropHandlers.onDrop}
+            {...(cellDropHandlers ?? {})}
           >
             {cellSources.map((source) => (
               <SourcePill
@@ -288,6 +320,7 @@ export function MatrixVariant({
             <tbody>
               {blocks.map((block) => {
                 if (block.type === "heading") {
+                  const isInsertionSlot = isHeadingInsertionSlot(blocks, block.id);
                   return (
                     <tr key={block.id} className="group/heading">
                       <td className="sticky left-0 z-10 border-b border-r border-[#d4ced3] bg-[#ececec] px-2 py-1 align-top">
@@ -317,9 +350,12 @@ export function MatrixVariant({
                           </span>
                         </div>
                       </td>
-                      {renderMatrixCells(block.id, block.sources ?? [], (payload) =>
-                        payload.sourceType === "CONTENT" && payload.fromHeadingId === block.id,
-                      )}
+                      {renderMatrixCells(block.id, block.sources ?? [], {
+                        rejectOutlineRef: (payload) =>
+                          payload.sourceType === "CONTENT" && payload.fromHeadingId === block.id,
+                        headingSlotId: isInsertionSlot ? block.id : undefined,
+                        dropDisabled: !isInsertionSlot,
+                      })}
                     </tr>
                   );
                 }
@@ -352,9 +388,9 @@ export function MatrixVariant({
                         </span>
                       </div>
                     </td>
-                    {renderMatrixCells(block.id, block.sources, (payload) =>
-                      payload.fromBlockId === block.id,
-                    )}
+                    {renderMatrixCells(block.id, block.sources, {
+                      rejectOutlineRef: (payload) => payload.fromBlockId === block.id,
+                    })}
                   </tr>
                 );
               })}

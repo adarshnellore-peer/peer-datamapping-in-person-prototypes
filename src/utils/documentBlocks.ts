@@ -45,6 +45,14 @@ export function getSubsectionsForHeading(
   return subsections;
 }
 
+/** True when a heading has no subcontent rows — used as an insert-new-heading slot in V3. */
+export function isHeadingInsertionSlot(
+  blocks: DocumentBlock[],
+  headingId: string,
+): boolean {
+  return getSubsectionsForHeading(blocks, headingId).length === 0;
+}
+
 export type TocHeadingEntry = {
   heading: HeadingBlock;
   subsections: ContentBlockData[];
