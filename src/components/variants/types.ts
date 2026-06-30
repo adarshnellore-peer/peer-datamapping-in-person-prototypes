@@ -10,7 +10,7 @@ export type VariantProps = {
   onTraceSource?: (blockId: string, sourceId: string) => void;
   onUpdateSource: (blockId: string, source: RoadmapSource) => void;
   onRemoveSource: (blockId: string, sourceId: string) => void;
-  onAddSource: (blockId: string) => void;
+  onAddSource?: (blockId: string) => void;
 };
 
 /** Stable display order for document categories in the V3 library column. */
@@ -28,18 +28,87 @@ export const CATEGORY_ORDER = [
 
 /** Color dot per document category — a quick scan cue for a section's sources. */
 export const CATEGORY_DOT: Record<string, string> = {
-  Template: "bg-[#8b8b8b]",
-  Protocol: "bg-[#4f7cff]",
-  SAP: "bg-[#8b5cf6]",
-  CSR: "bg-[#0ea5a4]",
-  IB: "bg-[#f59e0b]",
-  TLF: "bg-[#ec4899]",
-  Data: "bg-[#10b981]",
-  Report: "bg-[#6366f1]",
-  Reference: "bg-[#94a3b8]",
-  Content: "bg-[#64748b]",
-  Subcontent: "bg-[#cbd5e1]",
+  Template: "bg-[#6b7280]",
+  Protocol: "bg-[#2563eb]",
+  SAP: "bg-[#7c3aed]",
+  CSR: "bg-[#0d9488]",
+  IB: "bg-[#d97706]",
+  TLF: "bg-[#db2777]",
+  Data: "bg-[#059669]",
+  Report: "bg-[#4f46e5]",
+  Reference: "bg-[#64748b]",
+  Content: "bg-[#475569]",
+  Subcontent: "bg-[#94a3b8]",
+  Document: "bg-[#9ca3af]",
 };
+
+/** Richer chip styling per document category for source rows. */
+export const CATEGORY_CHIP: Record<string, { badge: string; field: string; accent: string }> = {
+  Template: {
+    badge: "border-[#9ca3af] bg-[#f3f4f6] text-[#374151]",
+    field: "border-[#c4c9d1] bg-[#f8f9fa]",
+    accent: "#6b7280",
+  },
+  Protocol: {
+    badge: "border-[#3b82f6] bg-[#dbeafe] text-[#1e3a8a]",
+    field: "border-[#93c5fd] bg-[#eff6ff]",
+    accent: "#2563eb",
+  },
+  SAP: {
+    badge: "border-[#a78bfa] bg-[#ede9fe] text-[#5b21b6]",
+    field: "border-[#c4b5fd] bg-[#f5f3ff]",
+    accent: "#7c3aed",
+  },
+  CSR: {
+    badge: "border-[#2dd4bf] bg-[#ccfbf1] text-[#115e59]",
+    field: "border-[#5eead4] bg-[#f0fdfa]",
+    accent: "#0d9488",
+  },
+  IB: {
+    badge: "border-[#fbbf24] bg-[#fef3c7] text-[#92400e]",
+    field: "border-[#fcd34d] bg-[#fffbeb]",
+    accent: "#d97706",
+  },
+  TLF: {
+    badge: "border-[#f472b6] bg-[#fce7f3] text-[#9d174d]",
+    field: "border-[#f9a8d4] bg-[#fdf2f8]",
+    accent: "#db2777",
+  },
+  Data: {
+    badge: "border-[#34d399] bg-[#d1fae5] text-[#065f46]",
+    field: "border-[#6ee7b7] bg-[#ecfdf5]",
+    accent: "#059669",
+  },
+  Report: {
+    badge: "border-[#818cf8] bg-[#e0e7ff] text-[#3730a3]",
+    field: "border-[#a5b4fc] bg-[#eef2ff]",
+    accent: "#4f46e5",
+  },
+  Reference: {
+    badge: "border-[#94a3b8] bg-[#f1f5f9] text-[#334155]",
+    field: "border-[#cbd5e1] bg-[#f8fafc]",
+    accent: "#64748b",
+  },
+  Content: {
+    badge: "border-[#64748b] bg-[#f1f5f9] text-[#1e293b]",
+    field: "border-[#94a3b8] bg-[#f8fafc]",
+    accent: "#475569",
+  },
+  Subcontent: {
+    badge: "border-[#94a3b8] bg-[#f8fafc] text-[#334155]",
+    field: "border-[#cbd5e1] bg-[#f8fafc]",
+    accent: "#64748b",
+  },
+  Document: {
+    badge: "border-[#9ca3af] bg-[#f3f4f6] text-[#374151]",
+    field: "border-[#c4c9d1] bg-[#f8f9fa]",
+    accent: "#9ca3af",
+  },
+};
+
+export function categoryChip(tag: string) {
+  return CATEGORY_CHIP[tag] ?? CATEGORY_CHIP.Document;
+}
 
 /** Unique document categories present on a block's sources, in first-seen order. */
 export function sourceCategories(sources: RoadmapSource[]): string[] {
@@ -53,23 +122,116 @@ export function sourceCategories(sources: RoadmapSource[]): string[] {
 
 /** Badge styling per usage role. */
 export const ROLE_BADGE: Record<SourceRole, string> = {
-  primary: "border-[#fe9591] bg-[#fedbda] text-[#b3261e]",
-  supporting: "border-[#bcd0ff] bg-[#eef3ff] text-[#2b5bd7]",
-  context: "border-[#dcdcdc] bg-[#f3f3f3] text-[#636161]",
-  reference: "border-[#d8b4fe] bg-[#f3e8ff] text-[#5b21b6]",
+  primary: "border-[var(--peer-primary-border)] bg-[var(--peer-primary-tint)] text-[#9a1c12] font-semibold",
+  supporting: "border-[#bcd0ff] bg-[#eef3ff] text-[#2b5bd7] font-semibold",
+  context: "border-[#dcdcdc] bg-[#f3f3f3] text-[#636161] font-semibold",
+  reference: "border-[#d8b4fe] bg-[#f3e8ff] text-[#5b21b6] font-semibold",
+};
+
+/** Softer role chips in the role picker before selection. */
+export const ROLE_BADGE_SOFT: Record<SourceRole, string> = {
+  primary: "border-[var(--peer-primary-border)]/70 bg-[var(--peer-primary-tint)]/80 text-[#9a1c12] font-medium",
+  supporting: "border-[#bcd0ff]/70 bg-[#eef3ff]/80 text-[#2b5bd7] font-medium",
+  context: "border-[#dcdcdc]/70 bg-[#f3f3f3]/80 text-[#636161] font-medium",
+  reference: "border-[#d8b4fe]/70 bg-[#f3e8ff]/80 text-[#5b21b6] font-medium",
 };
 
 export function roleLabel(role: SourceRole): string {
   return SOURCE_ROLE_LABELS[role];
 }
 
-/** Short hint describing how a usage role is drafted from — shown in V4 column heads. */
+/** Short hint describing how a usage role is drafted from — shown in matrix column heads. */
 export const ROLE_HINT: Record<SourceRole, string> = {
-  primary: "Drafted from directly \u2014 load-bearing.",
-  supporting: "Reinforces or contextualizes the section.",
-  context: "Background / cross-check only; not drafted from.",
-  reference: "Bibliographic citation; not drafted from directly.",
+  primary: "Pull the output\u2019s values in and interpret them \u2014 retain approved numbers/structure.",
+  supporting: "Summarize and synthesize from this source; do not lift content verbatim.",
+  context: "Context only \u2014 for cross-checking facts; not drafted from directly.",
+  reference: "Context only \u2014 for cross-checking facts; not drafted from directly.",
 };
+
+/** Three-column mode matrix layout (Claude prototype alignment). */
+export type MatrixColumnId = "insert" | "interpret" | "reference";
+
+export const MATRIX_COLUMNS: {
+  id: MatrixColumnId;
+  role: SourceRole;
+  label: string;
+  hint: string;
+  dotHex: string;
+  text: string;
+  cellTint: string;
+  /** Subtle top stripe on header + cells for column role. */
+  cellAccent: string;
+}[] = [
+  {
+    id: "insert",
+    role: "primary",
+    label: "Insert + interpret",
+    hint: ROLE_HINT.primary,
+    dotHex: "#1a8a4a",
+    text: "text-[#1a8a4a]",
+    cellTint: "bg-[#edf7f1]",
+    cellAccent: "shadow-[inset_0_3px_0_0_rgba(26,138,74,0.22)]",
+  },
+  {
+    id: "interpret",
+    role: "supporting",
+    label: "Interpret only",
+    hint: ROLE_HINT.supporting,
+    dotHex: "#2b5bd7",
+    text: "text-[#2b5bd7]",
+    cellTint: "bg-[#eef3fc]",
+    cellAccent: "shadow-[inset_0_3px_0_0_rgba(43,91,215,0.2)]",
+  },
+  {
+    id: "reference",
+    role: "context",
+    label: "Reference",
+    hint: ROLE_HINT.context,
+    dotHex: "#9e9e9e",
+    text: "text-[#636161]",
+    cellTint: "bg-[#f2f2f2]",
+    cellAccent: "shadow-[inset_0_3px_0_0_rgba(158,158,158,0.28)]",
+  },
+];
+
+export function matrixColumnForSource(source: RoadmapSource): MatrixColumnId {
+  const role = effectiveSourceRole(source);
+  if (role === "primary") return "insert";
+  if (role === "supporting") return "interpret";
+  return "reference";
+}
+
+export function roleForMatrixColumn(col: MatrixColumnId): SourceRole {
+  return MATRIX_COLUMNS.find((c) => c.id === col)!.role;
+}
+
+export function isOutlineReferenceSource(source: RoadmapSource): boolean {
+  if (
+    source.sourceType === "SUBCONTENT" &&
+    "referencedBlockId" in source &&
+    source.referencedBlockId
+  ) {
+    return true;
+  }
+  if (
+    source.sourceType === "CONTENT" &&
+    "referencedHeadingId" in source &&
+    source.referencedHeadingId
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function artifactTypeLabel(source: RoadmapSource): string {
+  return ARTIFACT_TYPE_CHIP[source.sourceType].label;
+}
+
+export function matrixStatusLabel(state: MappingState): string {
+  if (state === "ready") return "Ready";
+  if (state === "review") return "In review";
+  return "Needs decision";
+}
 
 /** Accent classes per usage role, used by the matrix columns and spine nodes. */
 export const ROLE_ACCENT: Record<
@@ -82,27 +244,61 @@ export const ROLE_ACCENT: Record<
   reference: { text: "text-[#5b21b6]", cellTint: "bg-[#faf5ff]", dotHex: "#c084fc" },
 };
 
-/** V2 pill badge for mapped source origin type. */
+/** Compact chip per mapped artifact origin type (data source, content, etc.). */
+export const ARTIFACT_TYPE_CHIP: Record<
+  import("../../data/roadmap").RoadmapSource["sourceType"],
+  { label: string; badge: string; field: string }
+> = {
+  DATA_SOURCE: {
+    label: "Data source",
+    badge: "peer-type-tag",
+    field: "peer-field-chip",
+  },
+  SUBCONTENT: {
+    label: "Subcontent",
+    badge: "peer-type-tag",
+    field: "peer-field-chip",
+  },
+  CONTENT: {
+    label: "Content",
+    badge: "peer-type-tag",
+    field: "peer-field-chip",
+  },
+  REFERENCE_SOURCE: {
+    label: "Reference",
+    badge: "peer-type-tag",
+    field: "peer-field-chip",
+  },
+};
+
+/** @deprecated Use ARTIFACT_TYPE_CHIP */
 export const SOURCE_KIND_BADGE: Record<
   "DATA_SOURCE" | "SUBCONTENT" | "CONTENT",
   { label: string; className: string }
 > = {
   DATA_SOURCE: {
-    label: "Document",
-    className: "border-[#bcd0ff] bg-[#eef3ff] text-[#2b5bd7]",
+    label: "Data source",
+    className: ARTIFACT_TYPE_CHIP.DATA_SOURCE.badge,
   },
   SUBCONTENT: {
     label: "Subcontent",
-    className: "border-[#cbd5e1] bg-[#f1f5f9] text-[#475569]",
+    className: ARTIFACT_TYPE_CHIP.SUBCONTENT.badge,
   },
   CONTENT: {
     label: "Content",
-    className: "border-[#a7f3d0] bg-[#ecfdf5] text-[#047857]",
+    className: ARTIFACT_TYPE_CHIP.CONTENT.badge,
   },
 };
 
 /** Derived mapping state for a section, from its sources' status + usage roles. */
 export type MappingState = "ready" | "review" | "needsPrimary" | "empty";
+
+export const NODE_HEX: Record<MappingState, string> = {
+  ready: "#1a8a4a",
+  review: "#2b5bd7",
+  needsPrimary: "#e0a800",
+  empty: "#d0a000",
+};
 
 export function effectiveSourceRole(source: RoadmapSource): SourceRole | undefined {
   if (source.role) return source.role;

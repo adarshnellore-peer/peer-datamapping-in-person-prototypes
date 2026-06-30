@@ -165,6 +165,26 @@ export const DEFAULT_REFERENCE_KEYS = [
   "Table of Contents: 10-15",
 ] as const;
 
+/** Human-readable labels for reference keys that use generic section numbers. */
+export const REFERENCE_DISPLAY_NAMES: Record<string, Record<string, string>> = {
+  "247HV101 Protocol Version 3": {
+    "Section 1: 17-34": "Introduction & Study Objectives",
+    "Section 8: 84-102": "Study Design",
+    "Section 9.2: 118-126": "Inclusion & Exclusion Criteria",
+  },
+  "C4591001 Protocol Amendment 9": {
+    "Section 1: 17-34": "Introduction",
+    "Section 1.1: 17-25": "Background & Rationale",
+    "Section 1.2: 25-26": "Study Objectives",
+    "Section 1.3: 26-34": "Study Endpoints",
+  },
+  "Biogen Clinical Study Report Template": {
+    "Template Section 9.2: 142-148": "Efficacy Results",
+    "Template Section 10.8: 168-174": "Safety Evaluation",
+    "Template Section 11.9.2: 198-204": "Discussion & Conclusions",
+  },
+};
+
 export const OUTPUT_TYPES = [
   "OUTPUT_TYPE_SUMMARY",
   "OUTPUT_TYPE_TABLE",
@@ -207,11 +227,15 @@ export type DataSourceRoadmapSource = RoadmapSourceBase & {
 export type SubcontentRoadmapSource = RoadmapSourceBase & {
   sourceType: "SUBCONTENT";
   content: string;
+  /** V3 matrix: points at another subcontent row used as evidence. */
+  referencedBlockId?: string;
 };
 
 export type ContentRoadmapSource = RoadmapSourceBase & {
   sourceType: "CONTENT";
   content: string;
+  /** V3 matrix: points at a content heading used as evidence. */
+  referencedHeadingId?: string;
 };
 
 export type ReferenceSourceRoadmapSource = RoadmapSourceBase & {
@@ -252,6 +276,19 @@ export const INITIAL_SOURCES: RoadmapSource[] = [
   },
 ];
 
+export const DATA_SOURCE_CATEGORY_ORDER = [
+  "Template",
+  "Protocol",
+  "SAP",
+  "CSR",
+  "IB",
+  "TLF",
+  "Data",
+  "Report",
+  "Reference",
+  "Document",
+] as const;
+
 export function getDocumentCategory(dataSource: string): string {
   return DATA_SOURCE_CATEGORIES[dataSource] ?? "Document";
 }
@@ -262,8 +299,8 @@ export function getReferenceSectionName(referenceKey: string): string {
   return referenceKey.slice(0, colon).trim();
 }
 
-export function inferSectionName(_dataSource: string, referenceKey: string): string {
-  return getReferenceSectionName(referenceKey);
+export function inferSectionName(dataSource: string, referenceKey: string): string {
+  return REFERENCE_DISPLAY_NAMES[dataSource]?.[referenceKey] ?? getReferenceSectionName(referenceKey);
 }
 
 export function enrichDataSourceSource(

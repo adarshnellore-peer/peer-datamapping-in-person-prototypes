@@ -19,6 +19,7 @@ import {
   parsePageRange,
 } from "../data/documentPreview";
 import type { RoadmapSource } from "../data/roadmap";
+import { enrichDataSourceSource } from "../data/roadmap";
 import {
   findStudySourceById,
   findStudySourceForRoadmapSource,
@@ -62,15 +63,21 @@ export function DataSourcePanel({
   source,
   sectionTitle,
   initialPanelMode = "detail",
+  embedded = false,
   onClose,
+  onUpdateMappedSource,
 }: {
   source: RoadmapSource;
   sectionTitle?: string | null;
   initialPanelMode?: PanelMode;
+  /** When true, fill the parent column (V3 matrix) instead of fixed 360px dock. */
+  embedded?: boolean;
   blockSources?: RoadmapSource[];
   activeSourceId?: string;
   onSourceChange?: (sourceId: string) => void;
   onClose: () => void;
+  /** When tracing a mapped section source, sync section/page edits back to the roadmap. */
+  onUpdateMappedSource?: (source: RoadmapSource) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>(initialPanelMode);
@@ -114,20 +121,6 @@ export function DataSourcePanel({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [dropdownOpen]);
 
-  useEffect(() => {
-    if (!isExpanded) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (panelMode === "detail") {
-        setPanelMode("list");
-        return;
-      }
-      setIsExpanded(false);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isExpanded, panelMode]);
-
   const dataSource =
     previewSource.sourceType === "DATA_SOURCE" ? previewSource.dataSource : "";
   const dataSourceLabel = getDataSourceLabel(previewSource);
@@ -140,16 +133,30 @@ export function DataSourcePanel({
     ? getDocumentPdfPageUrl(dataSource, viewState.currentPage)
     : null;
 
-  const selectSection = (referenceKey: string) => {
+  const applyReferenceKey = (referenceKey: string) => {
+    if (previewSource.sourceType !== "DATA_SOURCE") return;
     const { start, chip } = parsePageRange(referenceKey);
+    const next = enrichDataSourceSource({
+      ...previewSource,
+      referenceKey,
+      sectionName: undefined,
+    });
+    setPreviewSource(next);
     setViewState((prev) => ({ ...prev, currentPage: start, activeChip: chip }));
     setDropdownOpen(false);
+    if (detailOrigin === "trace") {
+      onUpdateMappedSource?.(next);
+    }
+  };
+
+  const selectSection = (referenceKey: string) => {
+    applyReferenceKey(referenceKey);
   };
 
   const jumpToChip = (chip: string) => {
     const section = sections.find((s) => parsePageRange(s.referenceKey).chip === chip);
     if (section) {
-      selectSection(section.referenceKey);
+      applyReferenceKey(section.referenceKey);
       return;
     }
     const start = Number.parseInt(chip.split("-")[0], 10);
@@ -168,13 +175,40 @@ export function DataSourcePanel({
     setDropdownOpen(false);
   };
 
+  /** Trace-from-section: return to the outer library. Browse-in-panel: return to list. */
+  const exitDetailView = () => {
+    if (detailOrigin === "trace") {
+      onClose();
+      return;
+    }
+    setPanelMode("list");
+  };
+
   const handleBack = () => {
     if (panelMode === "detail") {
-      setPanelMode("list");
+      exitDetailView();
       return;
     }
     onClose();
   };
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (panelMode === "detail") {
+        if (detailOrigin === "trace") {
+          onClose();
+        } else {
+          setPanelMode("list");
+        }
+        return;
+      }
+      setIsExpanded(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isExpanded, panelMode, detailOrigin, onClose]);
 
   const activeStudyEntry = activeStudySourceId
     ? findStudySourceById(activeStudySourceId)
@@ -293,11 +327,12 @@ export function DataSourcePanel({
     );
   }
 
+  const dockClassName = embedded
+    ? "flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white"
+    : "fixed inset-y-0 right-0 z-40 flex w-[min(90vw,360px)] shrink-0 flex-col border-l border-[#d4ced3] bg-white shadow-lg md:relative md:z-0 md:w-[360px] md:shadow-none";
+
   return (
-    <aside
-      data-datasource-panel=""
-      className="fixed inset-y-0 right-0 z-40 flex w-[min(90vw,360px)] shrink-0 flex-col border-l border-[#d4ced3] bg-white shadow-lg md:relative md:z-0 md:w-[360px] md:shadow-none"
-    >
+    <aside data-datasource-panel="" className={dockClassName}>
       {panelHeader}
       {panelBody}
     </aside>

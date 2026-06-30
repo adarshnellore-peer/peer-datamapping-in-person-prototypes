@@ -1,4 +1,4 @@
-import { DATA_SOURCES, enrichDataSourceSource, getReferenceKeysForDataSource } from "./roadmap";
+import { DATA_SOURCES, enrichDataSourceSource, getReferenceKeysForDataSource, inferSectionName } from "./roadmap";
 import type { DataSourceRoadmapSource } from "./roadmap";
 
 export type StudySourceStatus = "processed" | "uploaded";
@@ -66,7 +66,7 @@ function buildStudySources(): StudyDataSource[] {
 
     for (let i = 1; i < referenceKeys.length; i++) {
       const referenceKey = referenceKeys[i];
-      const sectionLabel = referenceKey.split(":")[0]?.trim() ?? referenceKey;
+      const sectionLabel = inferSectionName(dataSource, referenceKey);
       items.push({
         id: `study-doc-${index++}`,
         name: `${dataSource.replace(/ Protocol Amendment \d+$/, " Protocol")} — ${sectionLabel}`,

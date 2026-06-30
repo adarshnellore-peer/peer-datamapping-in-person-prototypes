@@ -5,7 +5,6 @@ export type VariantId =
   | "baseline"
   | "twoColumn"
   | "matrix"
-  | "spine"
   | "connectors"
   | "sourceView";
 
@@ -13,22 +12,17 @@ export const VARIANTS: { id: VariantId; name: string; description: string }[] = 
   {
     id: "baseline",
     name: "V1 \u00b7 Current",
-    description: "Inline source cards in the document",
+    description: "Inline document with V2-style source pills; trace panel on the right",
   },
   {
     id: "twoColumn",
-    name: "V2 \u00b7 Two-column",
-    description: "Drag from outline and data sources onto sections",
+    name: "V2 \u00b7 Storyline mapping",
+    description: "Evidence-first cards; drag from outline and data sources",
   },
   {
     id: "matrix",
-    name: "V3 \u00b7 Usage matrix",
-    description: "Sections \u00d7 usage; drag sources between Primary/Supporting/Context",
-  },
-  {
-    id: "spine",
-    name: "V4 \u00b7 Narrative spine",
-    description: "Sections with sources expanded; key message optional",
+    name: "V3 \u00b7 Mode matrix",
+    description: "Sections \u00d7 Insert / Interpret / Reference with document library",
   },
   {
     id: "connectors",

@@ -166,7 +166,7 @@ export function SourceViewVariant({
     <div className="flex h-full min-h-0">
       {/* Left: document index rail */}
       <aside className="hidden w-[250px] shrink-0 flex-col overflow-y-auto border-r border-[#d4ced3] bg-[#fafafa] md:flex">
-        <div className="sticky top-0 z-10 border-b border-[#e8e8e8] bg-[#fafafa] px-4 py-3">
+        <div className="sticky top-0 z-10 border-b border-[#d4ced3] bg-[#fafafa] px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
             Documents
           </p>
@@ -380,7 +380,7 @@ function DocCard({
       {/* Card header: the document (parent of the sections it feeds) */}
       <div
         className={`flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-3 ${
-          collapsed ? "" : "border-b border-[#ececec]"
+          collapsed ? "" : "border-b border-[#d4ced3]"
         }`}
       >
         <button
@@ -431,7 +431,7 @@ function DocCard({
         <>
           {/* Mocked version-change affordance */}
           {update && (
-            <div className="flex items-center gap-2 border-b border-[#ececec] bg-[#eef3ff] px-4 py-2 text-[12px]">
+            <div className="flex items-center gap-2 border-b border-[#d4ced3] bg-[#eef3ff] px-4 py-2 text-[12px]">
               <RefreshCw size={13} className="shrink-0 text-[#2b5bd7]" />
               <span className="min-w-0 flex-1 text-[#2b5bd7]">
                 Update available ({update}) — review {doc.placements.length} affected section
@@ -570,7 +570,7 @@ function PlacementRow({
           ? "border-[#ff4e49]"
           : isProposed
             ? "border-dashed border-[#c0b8be]"
-            : "border-[#e4e4e4]"
+            : "border-[#d4ced3]"
       }`}
     >
       <div className="flex items-center gap-1.5 px-2.5 py-2">
@@ -599,7 +599,7 @@ function PlacementRow({
           className={`shrink-0 max-w-[34%] truncate rounded border px-2 py-1 text-[12px] transition-colors ${
             active === "pages"
               ? "border-[#ff4e49] bg-[#fedbda] font-medium text-[#302f2f]"
-              : "border-[#e4e4e4] bg-white text-[#454545] hover:border-[#bdbdbd]"
+              : "border-[#d4ced3] bg-white text-[#454545] hover:border-[#bdbdbd]"
           }`}
         >
           {source.referenceKey || "Pages…"}
@@ -662,7 +662,7 @@ function PlacementRow({
       </div>
 
       {active && (
-        <div className="border-t border-[#ececec] px-2.5 py-2.5">
+        <div className="border-t border-[#d4ced3] px-2.5 py-2.5">
           {active === "pages" && (
             <PillOptionPicker
               value={source.referenceKey}

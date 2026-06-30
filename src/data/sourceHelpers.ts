@@ -140,6 +140,20 @@ export function getPageRange(source: RoadmapSource): string {
   return "—";
 }
 
+/** Mono ref + label for mode-matrix chips (Claude-style TFL rows). */
+export function getMatrixChipLines(source: RoadmapSource): { ref: string; label: string } {
+  if (source.sourceType === "DATA_SOURCE") {
+    const section = getSourceSectionName(source);
+    const refPart = source.referenceKey.split(":")[0]?.trim() ?? source.referenceKey;
+    return { ref: refPart, label: section };
+  }
+  if (source.sourceType === "REFERENCE_SOURCE") {
+    return { ref: "Ref", label: source.referenceSource || "Reference" };
+  }
+  const text = source.content || "Source";
+  return { ref: SOURCE_TYPE_TAGS[source.sourceType], label: text };
+}
+
 export function getSourceSecondaryLabel(source: RoadmapSource): string {
   if (source.sourceType === "DATA_SOURCE") {
     return getSourceDocumentCategory(source);

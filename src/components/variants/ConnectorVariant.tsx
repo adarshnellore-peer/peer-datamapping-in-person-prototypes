@@ -358,7 +358,7 @@ export function ConnectorVariant({
                 className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors ${
                   on
                     ? "border-[#d4ced3] bg-white text-[#454545]"
-                    : "border-[#ececec] bg-[#f5f5f5] text-[#b0b0b0]"
+                    : "border-[#d4ced3] bg-[#f5f5f5] text-[#b0b0b0]"
                 }`}
               >
                 <span
@@ -455,7 +455,7 @@ export function ConnectorVariant({
         {/* On-demand hint in the empty gap */}
         {showHint && (
           <div className="pointer-events-none absolute inset-y-0 left-1/2 flex -translate-x-1/2 items-center">
-            <span className="rounded-full border border-[#ececec] bg-white/80 px-3 py-1 text-[12px] text-[#b0b0b0]">
+            <span className="rounded-full border border-[#d4ced3] bg-white/80 px-3 py-1 text-[12px] text-[#b0b0b0]">
               Hover a node to reveal its connections
             </span>
           </div>
@@ -570,7 +570,7 @@ function ColumnHeader({
   pinned?: boolean;
 }) {
   return (
-    <div className="sticky top-0 z-10 mb-1 flex items-center justify-between border-b border-[#ececec] bg-white pb-1 pt-0.5">
+    <div className="sticky top-0 z-10 mb-1 flex items-center justify-between border-b border-[#d4ced3] bg-white pb-1 pt-0.5">
       <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#757575]">
         {label}
         {pinned && (
@@ -593,7 +593,7 @@ function nodeClasses(
   if (isTarget) return "border-[#ff4e49] bg-[#fff5f5] ring-2 ring-[#ff4e49]/40";
   if (selected) return "border-[#ff4e49] bg-[#fedbda]";
   if (highlighted) return "border-[#fe9591] bg-[#fff5f5]";
-  if (dimmed) return "border-[#ececec] bg-white opacity-40";
+  if (dimmed) return "border-[#d4ced3] bg-white opacity-40";
   return "border-[#d4ced3] bg-white hover:border-[#bdbdbd]";
 }
 

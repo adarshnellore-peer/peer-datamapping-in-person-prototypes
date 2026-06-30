@@ -3,10 +3,12 @@ import { PillFieldSummary, PillOptionPicker } from "./CollapsiblePillField";
 import {
   CONTENT_OPTIONS,
   DATA_SOURCES,
+  DATA_SOURCE_CATEGORY_ORDER,
   REFERENCE_SOURCE_OPTIONS,
   SOURCE_TYPES,
   SUBCONTENT_OPTIONS,
   enrichDataSourceSource,
+  getDocumentCategory,
   getReferenceKeysForDataSource,
   withSourceType,
   type RoadmapSource,
@@ -141,6 +143,8 @@ export function SourceCardPillFields({
                 <PillOptionPicker
                   value={source.dataSource}
                   options={DATA_SOURCES}
+                  getCategory={getDocumentCategory}
+                  categoryOrder={DATA_SOURCE_CATEGORY_ORDER}
                   searchThreshold={Number.POSITIVE_INFINITY}
                   onSelect={(dataSource) => {
                     onChange({

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ChevronRight,
-  GripVertical,
   Plus,
   Search,
   Trash2,
@@ -123,6 +122,7 @@ function TocRow({
   outlineMappingDrag = false,
   outlineDragLabel,
   onOutlineDragStart,
+  rowKind = "content",
   label,
   actions,
 }: {
@@ -136,86 +136,83 @@ function TocRow({
   onDragPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   outlineMappingDrag?: boolean;
   outlineDragLabel?: string;
-  onOutlineDragStart?: (event: React.DragEvent<HTMLButtonElement>) => void;
+  onOutlineDragStart?: (event: React.DragEvent) => void;
+  rowKind?: "heading" | "content";
   label: ReactNode;
   actions?: ReactNode;
 }) {
-  const indent = outlineMappingDrag ? 4 + depth * 10 : 6 + depth * 12;
-  const isHeading = depth === 0;
+  const indent = depth * (outlineMappingDrag ? 10 : 12);
+  const isHeading = rowKind === "heading";
+  const isDraggable = outlineMappingDrag ? !!onOutlineDragStart : !!onDragPointerDown;
 
   return (
-    <div
-      onPointerDown={onDragPointerDown}
-      className={`group/toc-row flex min-h-[30px] items-start rounded-md pr-1 transition-colors ${
-        onDragPointerDown ? "cursor-grab touch-none active:cursor-grabbing" : ""
-      } ${isDragging ? "opacity-40" : ""} ${
-        isActive
-          ? "bg-[#fedbda]"
-          : isHeading
-            ? "hover:bg-black/[0.03]"
-            : "border-l-2 border-transparent hover:border-[#d4ced3] hover:bg-white/80"
-      }`}
-      style={{ paddingLeft: `${indent}px` }}
-    >
-      {outlineMappingDrag ? (
+    <div style={{ marginLeft: `${indent}px` }} className="py-0.5">
+      <div
+        draggable={outlineMappingDrag && !!onOutlineDragStart}
+        onDragStart={onOutlineDragStart}
+        onPointerDown={outlineMappingDrag ? undefined : onDragPointerDown}
+        title={
+          outlineMappingDrag
+            ? `Drag to map ${outlineDragLabel ?? "outline"}`
+            : isDraggable
+              ? "Drag to reorder"
+              : undefined
+        }
+        className={`group/toc-row flex min-h-[26px] items-start pr-0.5 transition-[background-color,border-color,opacity] peer-toc-card ${
+          isDraggable ? "cursor-grab touch-none active:cursor-grabbing" : ""
+        } ${isDragging ? "opacity-40" : ""} ${isActive ? "is-active" : ""}`}
+      >
         <button
           type="button"
-          draggable
-          onDragStart={onOutlineDragStart}
-          title={`Drag to map ${outlineDragLabel ?? "outline"}`}
-          aria-label={`Drag to map ${outlineDragLabel ?? "outline"}`}
-          className="mr-0.5 mt-1 flex h-[22px] w-[16px] shrink-0 cursor-grab items-center justify-center rounded text-[#c4c4c4] hover:bg-black/[0.05] hover:text-[#757575] active:cursor-grabbing"
+          data-toc-no-drag
+          aria-label={isCollapsed ? "Expand section" : "Collapse section"}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleCollapse?.();
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          className={`mr-0.5 flex h-[18px] w-[16px] shrink-0 items-center justify-center rounded text-[#9e9e9e] transition-colors hover:bg-black/[0.06] hover:text-[#636161] ${
+            hasChildren ? "visible" : "invisible pointer-events-none"
+          }`}
         >
-          <GripVertical size={12} strokeWidth={2} />
+          <ChevronRight
+            size={12}
+            strokeWidth={2}
+            className={`transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+          />
         </button>
-      ) : null}
 
-      <button
-        type="button"
-        data-toc-no-drag
-        aria-label={isCollapsed ? "Expand section" : "Collapse section"}
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleCollapse?.();
-        }}
-        onPointerDown={(event) => event.stopPropagation()}
-        className={`mr-0.5 mt-0.5 flex h-[22px] w-[18px] shrink-0 items-center justify-center rounded text-[#9e9e9e] transition-colors hover:bg-black/[0.06] hover:text-[#636161] ${
-          hasChildren ? "visible" : "invisible pointer-events-none"
-        }`}
-      >
-        <ChevronRight
-          size={14}
-          strokeWidth={2}
-          className={`transition-transform ${isCollapsed ? "" : "rotate-90"}`}
-        />
-      </button>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={() => onNavigate()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onNavigate();
+            }
+          }}
+          className={`min-w-0 flex-1 text-left ${
+            outlineMappingDrag
+              ? isHeading
+                ? "py-0.5 text-[12px] font-semibold leading-[1.3] text-[var(--peer-text)]"
+                : "py-0.5 text-[12px] font-normal leading-[1.35] text-[var(--peer-muted)]"
+              : isHeading
+                ? "py-0.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--peer-muted)]"
+                : depth === 1
+                  ? "py-0.5 text-[13px] font-medium text-[var(--peer-text)]"
+                  : "py-0.5 text-[12px] font-normal text-[var(--peer-muted)]"
+          } ${isActive ? "text-[var(--peer-text)]" : ""}`}
+        >
+          {label}
+        </span>
 
-      <span
-        role="button"
-        tabIndex={0}
-        onClick={() => onNavigate()}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onNavigate();
-          }
-        }}
-        className={`min-w-0 flex-1 py-1.5 text-left leading-snug ${
-          isHeading
-            ? "text-[12px] font-semibold uppercase tracking-wide text-[#636161]"
-            : depth === 1
-              ? "text-[13px] font-medium text-[#302f2f]"
-              : "text-[12px] font-normal text-[#636161]"
-        } ${isActive ? "text-[#302f2f]" : ""}`}
-      >
-        {label}
-      </span>
-
-      {actions && (
-        <div data-toc-no-drag onPointerDown={(event) => event.stopPropagation()}>
-          <TocRowActions>{actions}</TocRowActions>
-        </div>
-      )}
+        {actions && (
+          <div data-toc-no-drag onPointerDown={(event) => event.stopPropagation()}>
+            <TocRowActions>{actions}</TocRowActions>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -367,7 +364,7 @@ export function TableOfContents({
       if (heading.number) {
         return (
           <>
-            <span className="mr-1 tabular-nums text-[#9e9e9e]">
+            <span className="mr-1.5 tabular-nums text-[#9e9e9e]">
               {highlightMatch(heading.number, searchQuery)}
             </span>
             {highlightMatch(heading.title, searchQuery)}
@@ -381,9 +378,9 @@ export function TableOfContents({
 
   const renderOutlineDragStart = (item: TocFlatItem) => {
     if (!outlineMappingDrag) return undefined;
-    return (event: React.DragEvent<HTMLButtonElement>) => {
+    return (event: React.DragEvent) => {
       event.stopPropagation();
-      const sourceType: SourceType = item.kind === "heading" ? "SUBCONTENT" : "CONTENT";
+      const sourceType: SourceType = item.kind === "heading" ? "CONTENT" : "SUBCONTENT";
       const label =
         item.kind === "heading" ? headingLabel(item.heading) : item.block.title;
       setV2DragData(event.dataTransfer, { kind: "toc", sourceType, label });
@@ -394,30 +391,14 @@ export function TableOfContents({
     if (!outlineMappingDrag) return { label: undefined, badge: null as ReactNode };
     const isHeading = item.kind === "heading";
     return {
-      label: isHeading ? "subcontent" : "content",
-      badge: (
-        <span
-          className={`ml-1.5 shrink-0 rounded border px-1 py-px text-[9px] font-semibold uppercase tracking-wide ${
-            isHeading
-              ? "border-[#cbd5e1] bg-[#f1f5f9] text-[#475569]"
-              : "border-[#a7f3d0] bg-[#ecfdf5] text-[#047857]"
-          }`}
-        >
-          {isHeading ? "Sub" : "Sec"}
-        </span>
-      ),
+      label: isHeading ? "content" : "subcontent",
+      badge: null,
     };
   };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#fafafa]">
-      <div className="shrink-0 border-b border-[#ececec] px-2 py-2">
-        {outlineMappingDrag && (
-          <p className="mb-2 px-0.5 text-[10px] leading-snug text-[#9e9e9e]">
-            <GripVertical size={10} className="mr-0.5 inline -mt-px" />
-            Drag grip onto a section to map outline
-          </p>
-        )}
+      <div className="shrink-0 border-b border-[#d4ced3] px-3 py-2.5">
         <div className="relative">
           <Search
             size={14}
@@ -446,24 +427,26 @@ export function TableOfContents({
         </div>
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
+      <nav className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-3 pt-1">
         {visibleItems.length === 0 ? (
           <p className="px-2 py-6 text-center text-[12px] text-[#9e9e9e]">
             {normalizedQuery ? "No matches" : "No sections yet"}
           </p>
         ) : (
-          <ul className="space-y-0.5">
+          <ul>
             {visibleItems.map((item, index) => {
               const isActive = activeId === item.id;
               const isDragging = tocDrag?.blockId === item.id;
               const showDropBefore =
                 tocDrag !== null && tocDrag.dropFlatIndex === index && tocDrag.blockId !== item.id;
+              const isHeadingRow = item.kind === "heading";
 
               const dragMeta = outlineDragMeta(item);
               const rowProps = {
                 depth: item.depth,
                 isActive,
                 isDragging,
+                rowKind: isHeadingRow ? ("heading" as const) : ("content" as const),
                 onNavigate: () => onNavigate(item.id),
                 onDragPointerDown:
                   outlineMappingDrag || normalizedQuery
@@ -474,8 +457,14 @@ export function TableOfContents({
                 outlineDragLabel: dragMeta.label,
                 onOutlineDragStart: renderOutlineDragStart(item),
                 label: (
-                  <span className="flex min-w-0 items-center">
-                    <span className="min-w-0 truncate">{renderLabel(item)}</span>
+                  <span className="flex min-w-0 items-start">
+                    <span
+                      className={`min-w-0 ${
+                        outlineMappingDrag ? "whitespace-normal break-words" : "truncate"
+                      }`}
+                    >
+                      {renderLabel(item)}
+                    </span>
                     {dragMeta.badge}
                   </span>
                 ),
@@ -487,7 +476,9 @@ export function TableOfContents({
                   ref={(el) => {
                     rowRefs.current[item.id] = el;
                   }}
-                  className="relative"
+                  className={`relative ${
+                    outlineMappingDrag && isHeadingRow && index > 0 ? "mt-1.5" : ""
+                  }`}
                 >
                   {showDropBefore && (
                     <div

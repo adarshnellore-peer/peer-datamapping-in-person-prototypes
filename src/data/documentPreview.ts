@@ -1,4 +1,4 @@
-import { REFERENCE_KEYS } from "./roadmap";
+import { REFERENCE_KEYS, REFERENCE_DISPLAY_NAMES } from "./roadmap";
 import type { RoadmapSource } from "./roadmap";
 import { getReferenceSectionName, getSourceLabel } from "./sourceHelpers";
 
@@ -169,7 +169,43 @@ export const DOCUMENT_SECTIONS: Record<string, DocumentSection[]> = {
       preview: "Document outline and section page references.",
     },
   ],
-  "247HV101 Protocol Version 3": buildSectionsFromReferenceKeys("247HV101 Protocol Version 3"),
+  "247HV101 Protocol Version 3": [
+    {
+      id: "247hv-title",
+      referenceKey: "Protocol Title Page: 1-1",
+      title: "Protocol Title Page",
+      kind: "section",
+      preview: SECTION_PREVIEWS["Protocol Title Page: 1-1"],
+    },
+    {
+      id: "247hv-intro",
+      referenceKey: "Section 1: 17-34",
+      title: "Introduction & Study Objectives",
+      kind: "section",
+      preview: "Background, rationale, and primary and secondary study objectives.",
+    },
+    {
+      id: "247hv-design",
+      referenceKey: "Section 8: 84-102",
+      title: "Study Design",
+      kind: "section",
+      preview: "Overall study design, visit schedule, and treatment schema.",
+    },
+    {
+      id: "247hv-ie",
+      referenceKey: "Section 9.2: 118-126",
+      title: "Inclusion & Exclusion Criteria",
+      kind: "section",
+      preview: "Eligibility criteria for study enrollment.",
+    },
+    {
+      id: "247hv-toc",
+      referenceKey: "Table of Contents: 10-15",
+      title: "Table of Contents",
+      kind: "section",
+      preview: "Protocol section listing with page references.",
+    },
+  ],
   "C4591001 Protocol Amendment 9": [
     {
       id: "c459-title",
@@ -185,15 +221,40 @@ export const DOCUMENT_SECTIONS: Record<string, DocumentSection[]> = {
       kind: "section",
       preview: SECTION_PREVIEWS["Protocol Amendment Summary of Changes / Document History: 2-9"],
     },
-    ...buildSectionsFromReferenceKeys("C4591001 Protocol Amendment 9").filter(
-      (s) =>
-        s.referenceKey !== "Protocol Title Page: 1-1" &&
-        s.referenceKey !== "Protocol Amendment Summary of Changes / Document History: 2-9",
-    ),
+    ...buildSectionsFromReferenceKeys("C4591001 Protocol Amendment 9")
+      .filter(
+        (s) =>
+          s.referenceKey !== "Protocol Title Page: 1-1" &&
+          s.referenceKey !== "Protocol Amendment Summary of Changes / Document History: 2-9",
+      )
+      .map((s) => {
+        const titles: Record<string, string> = {
+          "Section 1: 17-34": "Introduction",
+          "Section 1.1: 17-25": "Background & Rationale",
+          "Section 1.2: 25-26": "Study Objectives",
+          "Section 1.3: 26-34": "Study Endpoints",
+          "List of Tables: 15-17": "List of Tables",
+          "Table of Contents: 10-15": "Table of Contents",
+        };
+        return titles[s.referenceKey] ? { ...s, title: titles[s.referenceKey] } : s;
+      }),
   ],
   "Biogen Clinical Study Report Template": buildSectionsFromReferenceKeys(
     "Biogen Clinical Study Report Template",
-  ).map((s) => ({ ...s, isTemplateInstruction: true })),
+  ).map((s) => {
+    const titles: Record<string, string> = {
+      "Template Section 9.2: 142-148": "Efficacy Results",
+      "Template Section 10.8: 168-174": "Safety Evaluation",
+      "Template Section 11.9.2: 198-204": "Discussion & Conclusions",
+      "Synopsis: 2-8": "Synopsis",
+      "Table of Contents: 9-12": "Table of Contents",
+    };
+    return {
+      ...s,
+      title: titles[s.referenceKey] ?? s.title,
+      isTemplateInstruction: true,
+    };
+  }),
   "109MS306 (CONNECT) LTE Statistical Analysis Plan": buildSectionsFromReferenceKeys(
     "109MS306 (CONNECT) LTE Statistical Analysis Plan",
   ),
@@ -205,6 +266,13 @@ export const DOCUMENT_SECTIONS: Record<string, DocumentSection[]> = {
 export function getSectionsForDocument(dataSource: string): DocumentSection[] {
   if (DOCUMENT_SECTIONS[dataSource]) return DOCUMENT_SECTIONS[dataSource];
   return buildSectionsFromReferenceKeys(dataSource);
+}
+
+/** Human-readable section title for library rows and chips. */
+export function getReferenceDisplayName(dataSource: string, referenceKey: string): string {
+  const matched = findSectionByReferenceKey(dataSource, referenceKey);
+  if (matched) return matched.title;
+  return REFERENCE_DISPLAY_NAMES[dataSource]?.[referenceKey] ?? getReferenceSectionName(referenceKey);
 }
 
 export function getDefaultSectionForDocument(dataSource: string): DocumentSection | undefined {

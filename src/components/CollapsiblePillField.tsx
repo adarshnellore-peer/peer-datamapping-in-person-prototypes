@@ -63,11 +63,61 @@ export function PillFieldSummary({
   );
 }
 
+const PICKER_CATEGORY_SWATCH: Record<string, string> = {
+  Template: "#8b8b8b",
+  Protocol: "#1a8a4a",
+  SAP: "#e0a800",
+  CSR: "#0a9e9a",
+  IB: "#6366f1",
+  TLF: "#ec4899",
+  Data: "#7c3aed",
+  Report: "#d97706",
+  Reference: "#64748b",
+  Document: "#bdbdbd",
+};
+
+function groupPickerOptions(
+  options: readonly string[],
+  getCategory?: (option: string) => string,
+  categoryOrder?: readonly string[],
+): { category: string | null; options: string[] }[] {
+  if (!getCategory) {
+    return [{ category: null, options: [...options] }];
+  }
+
+  const buckets = new Map<string, string[]>();
+  for (const option of options) {
+    const category = getCategory(option);
+    const items = buckets.get(category) ?? [];
+    items.push(option);
+    buckets.set(category, items);
+  }
+
+  const grouped: { category: string | null; options: string[] }[] = [];
+  const seen = new Set<string>();
+
+  for (const category of categoryOrder ?? []) {
+    const items = buckets.get(category);
+    if (!items?.length) continue;
+    grouped.push({ category, options: items });
+    seen.add(category);
+  }
+
+  for (const [category, items] of buckets) {
+    if (seen.has(category)) continue;
+    grouped.push({ category, options: items });
+  }
+
+  return grouped;
+}
+
 export function PillOptionPicker({
   value,
   options,
   onSelect,
   getLabel = (option) => option,
+  getCategory,
+  categoryOrder,
   /** Above this many options, switch to a searchable list (studies often have 30-40+ sources). */
   searchThreshold = 12,
   searchPlaceholder = "Search…",
@@ -76,6 +126,8 @@ export function PillOptionPicker({
   options: readonly string[];
   onSelect: (value: string) => void;
   getLabel?: (value: string) => string;
+  getCategory?: (option: string) => string;
+  categoryOrder?: readonly string[];
   searchThreshold?: number;
   searchPlaceholder?: string;
 }) {
@@ -86,6 +138,8 @@ export function PillOptionPicker({
         options={options}
         onSelect={onSelect}
         getLabel={getLabel}
+        getCategory={getCategory}
+        categoryOrder={categoryOrder}
         placeholder={searchPlaceholder}
       />
     );
@@ -116,18 +170,51 @@ export function PillOptionPicker({
  * 30-40+ data sources). Renders a filter input above a scrollable list so the
  * writer searches instead of scanning a huge pill cloud.
  */
+function PickerOptionButton({
+  option,
+  label,
+  isCurrent,
+  onSelect,
+}: {
+  option: string;
+  label: string;
+  isCurrent: boolean;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={isCurrent}
+      onClick={() => onSelect(option)}
+      className={`block w-full rounded px-2 py-1.5 text-left text-[13px] leading-snug transition-colors ${
+        isCurrent
+          ? "bg-[#fedbda] font-medium text-[#302f2f]"
+          : "text-[#454545] hover:bg-[#f5f5f5]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function PillSearchPicker({
   value,
   options,
   onSelect,
   getLabel = (option) => option,
+  getCategory,
+  categoryOrder,
   placeholder = "Search…",
+  maxListHeight = 360,
 }: {
   value: string;
   options: readonly string[];
   onSelect: (value: string) => void;
   getLabel?: (value: string) => string;
+  getCategory?: (option: string) => string;
+  categoryOrder?: readonly string[];
   placeholder?: string;
+  maxListHeight?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -140,6 +227,7 @@ export function PillSearchPicker({
   const filtered = normalized
     ? options.filter((option) => getLabel(option).toLowerCase().includes(normalized))
     : options;
+  const grouped = groupPickerOptions(filtered, getCategory, categoryOrder);
 
   return (
     <div className="rounded-md border border-[#d4ced3] bg-white p-1.5">
@@ -160,30 +248,42 @@ export function PillSearchPicker({
           className="mb-1 w-full rounded bg-black/[0.04] py-1.5 pl-7 pr-2 text-[13px] text-[#302f2f] placeholder:text-[#9e9e9e] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#d4ced3]"
         />
       </div>
-      <div className="max-h-[200px] overflow-y-auto">
+      <div className="overflow-y-auto" style={{ maxHeight: maxListHeight }}>
         {filtered.length === 0 ? (
           <p className="px-2 py-3 text-center text-[12px] text-[#9e9e9e]">No matches</p>
         ) : (
-          <ul className="space-y-0.5">
-            {filtered.map((option) => {
-              const isCurrent = option === value;
-              return (
-                <li key={option}>
-                  <button
-                    type="button"
-                    aria-pressed={isCurrent}
-                    onClick={() => onSelect(option)}
-                    className={`block w-full rounded px-2 py-1.5 text-left text-[13px] leading-snug transition-colors ${
-                      isCurrent
-                        ? "bg-[#fedbda] font-medium text-[#302f2f]"
-                        : "text-[#454545] hover:bg-[#f5f5f5]"
-                    }`}
-                  >
-                    {getLabel(option)}
-                  </button>
-                </li>
-              );
-            })}
+          <ul>
+            {grouped.map((group) => (
+              <li key={group.category ?? "__flat"}>
+                {group.category && (
+                  <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-white px-2 pb-0.5 pt-1.5">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor:
+                          PICKER_CATEGORY_SWATCH[group.category] ?? PICKER_CATEGORY_SWATCH.Document,
+                      }}
+                      aria-hidden
+                    />
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
+                      {group.category}
+                    </span>
+                  </div>
+                )}
+                <ul className="space-y-0.5">
+                  {group.options.map((option) => (
+                    <li key={option}>
+                      <PickerOptionButton
+                        option={option}
+                        label={getLabel(option)}
+                        isCurrent={option === value}
+                        onSelect={onSelect}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
           </ul>
         )}
       </div>

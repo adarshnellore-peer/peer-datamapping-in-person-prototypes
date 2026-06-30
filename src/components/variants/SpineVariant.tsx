@@ -1,35 +1,10 @@
-import { useRef, useState } from "react";
-import { AlertTriangle, ChevronRight } from "lucide-react";
-import type { ContentBlockData, DocumentBlock } from "../../types";
-import { SectionMapper } from "./SectionMapper";
-import { mappingStatus, type MappingState, type VariantProps } from "./types";
-
-const NODE_HEX: Record<MappingState, string> = {
-  ready: "#1a8a4a",
-  review: "#2b5bd7",
-  needsPrimary: "#e0a800",
-  empty: "#d0a000",
-};
-
-/** Nearest preceding heading label for a content block. */
-function headingLabelFor(blocks: DocumentBlock[], blockId: string): string | null {
-  let current: string | null = null;
-  for (const block of blocks) {
-    if (block.type === "heading") {
-      current = `${block.number ? block.number + " " : ""}${block.title}`;
-    } else if (block.id === blockId) {
-      return current;
-    }
-  }
-  return null;
-}
+import { useRef } from "react";
+import type { ContentBlockData } from "../../types";
+import { BeatCard, headingLabelFor } from "./BeatCard";
+import { mappingStatus, NODE_HEX, type VariantProps } from "./types";
 
 /**
- * V5 — Narrative spine. Reframes the roadmap as a story: each section is a
- * "key message" (claim) on a vertical timeline, with its sources shown as the
- * evidence behind it (tagged Primary / Supporting / Context via the shared
- * SourcePill). A left arc rail lists the messages grouped by heading (acts) for
- * fast navigation; claims drafted only from non-primary evidence get a nudge.
+ * @deprecated V4 merged into V2. Kept as a thin wrapper for reference.
  */
 export function SpineVariant({
   blocks,
@@ -37,25 +12,17 @@ export function SpineVariant({
   onTraceSource,
   onUpdateSource,
   onRemoveSource,
-  onAddSource,
   onPromptChange,
-}: VariantProps & {
+}: Omit<VariantProps, "onAddSource"> & {
   onPromptChange?: (blockId: string, prompt: string) => void;
 }) {
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
   const beats = blocks.filter((b): b is ContentBlockData => b.type === "content");
   const beatIndex = new Map(beats.map((b, i) => [b.id, i + 1]));
-
-  const scrollToBeat = (id: string) => {
-    cardRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
-  };
-
   let actSeq = 0;
 
   return (
     <div className="flex h-full min-h-0">
-      {/* Left: narrative arc */}
       <aside className="flex w-[250px] shrink-0 flex-col overflow-y-auto border-r border-[#d4ced3] bg-[#fafafa]">
         <div className="sticky top-0 z-10 border-b border-[#e8e8e8] bg-[#fafafa] px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
@@ -85,7 +52,12 @@ export function SpineVariant({
               <button
                 key={block.id}
                 type="button"
-                onClick={() => scrollToBeat(block.id)}
+                onClick={() =>
+                  cardRefs.current[block.id]?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                  })
+                }
                 className="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-[#f0f0f0]"
               >
                 <span
@@ -108,7 +80,6 @@ export function SpineVariant({
         </div>
       </aside>
 
-      {/* Center: the spine */}
       <main className="min-w-0 flex-1 overflow-y-auto bg-white">
         <div className="mx-auto w-full max-w-[760px] px-8 py-7">
           <h1 className="text-[22px] font-semibold tracking-tight text-[#333]">
@@ -116,8 +87,7 @@ export function SpineVariant({
           </h1>
           <p className="mb-6 mt-1 text-[13px] text-[#9e9e9e]">
             Each section shows its mapped evidence up front — mark how load-bearing
-            each source is. Expand “Key message” at the foot of a card to state the
-            claim it supports.
+            each source is.
           </p>
 
           {blocks.map((block) => {
@@ -165,7 +135,6 @@ export function SpineVariant({
                 }
                 onUpdateSource={(source) => onUpdateSource(block.id, source)}
                 onRemoveSource={(sourceId) => onRemoveSource(block.id, sourceId)}
-                onAddSource={() => onAddSource(block.id)}
                 onPromptChange={
                   onPromptChange ? (prompt) => onPromptChange(block.id, prompt) : undefined
                 }
@@ -174,126 +143,6 @@ export function SpineVariant({
           })}
         </div>
       </main>
-    </div>
-  );
-}
-
-function BeatCard({
-  cardRef,
-  block,
-  index,
-  contextLabel,
-  tracedSourceId,
-  onTrace,
-  onUpdateSource,
-  onRemoveSource,
-  onAddSource,
-  onPromptChange,
-}: {
-  cardRef: (el: HTMLDivElement | null) => void;
-  block: ContentBlockData;
-  index: number;
-  contextLabel: string | null;
-  tracedSourceId: string | null;
-  onTrace?: (sourceId: string) => void;
-  onUpdateSource: (source: import("../../data/roadmap").RoadmapSource) => void;
-  onRemoveSource: (sourceId: string) => void;
-  onAddSource: () => void;
-  onPromptChange?: (prompt: string) => void;
-}) {
-  const state = mappingStatus(block.sources);
-  const hex = NODE_HEX[state];
-  const primaryCount = block.sources.filter((s) => s.role === "primary").length;
-  const showGap = block.sources.length > 0 && primaryCount === 0;
-  const [showMessage, setShowMessage] = useState(false);
-
-  return (
-    <div className="flex gap-4">
-      {/* rail */}
-      <div className="flex w-7 shrink-0 flex-col items-center">
-        <span
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[12px] font-bold text-white"
-          style={{ background: hex }}
-        >
-          {index}
-        </span>
-        <span className="my-1.5 w-0.5 flex-1 bg-[#ececec]" />
-      </div>
-
-      {/* card */}
-      <div
-        ref={cardRef}
-        className="mb-3 min-w-0 flex-1 rounded-lg border border-[#e4e4e4] bg-white p-4 transition-colors"
-      >
-        <div className="flex items-baseline gap-2">
-          {contextLabel && (
-            <span className="truncate text-[12px] font-medium text-[#9e9e9e]">
-              {contextLabel}
-            </span>
-          )}
-          <span className="text-[14px] font-semibold text-[#302f2f]">{block.title}</span>
-        </div>
-
-        <div className="mb-2 mt-3 flex items-center gap-2">
-          <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
-            Evidence
-          </span>
-          <span className="text-[11px] text-[#9e9e9e]">
-            {block.sources.length} attached
-            {primaryCount > 0 ? ` \u00b7 ${primaryCount} primary` : ""}
-          </span>
-        </div>
-
-        <SectionMapper
-          block={block}
-          tracedSourceId={tracedSourceId}
-          onTrace={onTrace}
-          onUpdateSource={onUpdateSource}
-          onRemoveSource={onRemoveSource}
-          onAddSource={onAddSource}
-        />
-
-        {showGap && (
-          <div className="mt-3 flex items-center gap-2 rounded-md bg-[#fff3cd] px-3 py-2 text-[12px] text-[#9a6700]">
-            <AlertTriangle size={15} className="shrink-0" />
-            This message leans on supporting evidence only — consider marking a
-            source as primary before filing.
-          </div>
-        )}
-
-        {/* Key message: collapsed by default, anchored at the bottom of the card. */}
-        <div className="mt-4 border-t border-[#f0f0f0] pt-3">
-          <button
-            type="button"
-            aria-expanded={showMessage}
-            onClick={() => setShowMessage((v) => !v)}
-            className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-[#9e9e9e] transition-colors hover:text-[#636161]"
-          >
-            <ChevronRight
-              size={13}
-              className={`transition-transform ${showMessage ? "rotate-90" : ""}`}
-            />
-            Key message
-          </button>
-          {showMessage && (
-            <div className="mt-2">
-              {onPromptChange ? (
-                <textarea
-                  value={block.prompt}
-                  onChange={(event) => onPromptChange(event.target.value)}
-                  rows={2}
-                  placeholder="State the claim this section makes…"
-                  className="w-full resize-y rounded-md border border-[#e4e4e4] bg-white px-3 py-2 text-[14px] font-medium leading-relaxed text-[#302f2f] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
-                />
-              ) : (
-                <p className="text-[14px] font-medium leading-relaxed text-[#302f2f]">
-                  {block.prompt || "—"}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { GripVertical, Pencil, Plus } from "lucide-react";
 import { GenerateAsSelect } from "./OutputTypeToggle";
-import { DuplicateDeleteActions, SourceCard } from "./SourceCard";
+import { DuplicateDeleteActions } from "./SourceCard";
+import { SectionMapper } from "./variants/SectionMapper";
 import type { ContentBlockData } from "../types";
 import type { RoadmapSource } from "../data/roadmap";
 
@@ -137,12 +138,10 @@ function EditableTextSection({
 export function SectionContentBlock({
   block,
   tracedSourceId,
-  expandedSourceId,
   onSourceCardClick,
   onDragHandlePointerDown,
   onUpdateSource,
   onRemoveSource,
-  onDuplicateSource,
   onAddSource,
   onPromptChange,
   onAdditionalContextChange,
@@ -152,12 +151,10 @@ export function SectionContentBlock({
 }: {
   block: ContentBlockData;
   tracedSourceId: string | null;
-  expandedSourceId: string | null;
   onSourceCardClick: (sourceId: string) => void;
   onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
-  onDuplicateSource: (sourceId: string) => void;
   onAddSource: () => void;
   onPromptChange: (prompt: string) => void;
   onAdditionalContextChange: (additionalContext: string) => void;
@@ -211,33 +208,21 @@ export function SectionContentBlock({
 
       <div className="px-3 py-3 sm:px-4">
         <p className="mb-2 text-[12px] font-medium text-[#636161]">Sources</p>
-        <div className="space-y-2">
-          {block.sources.length === 0 ? (
-            <p className="py-1 text-center text-[13px] text-[#9e9e9e]">
-              No sources mapped to this section.
-            </p>
-          ) : (
-            block.sources.map((source) => (
-              <SourceCard
-                key={source.id}
-                source={source}
-                isTraced={tracedSourceId === source.id}
-                isExpanded={expandedSourceId === source.id}
-                onCardClick={() => onSourceCardClick(source.id)}
-                onChange={onUpdateSource}
-                onDuplicate={() => onDuplicateSource(source.id)}
-                onRemove={() => onRemoveSource(source.id)}
-              />
-            ))
-          )}
-          <button
-            type="button"
-            onClick={onAddSource}
-            className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-[#d4ced3] py-2 text-[13px] font-medium text-[#636161] transition-colors hover:border-[#ff4e49]/40 hover:bg-[#fffafa] hover:text-[#302f2f]"
-          >
-            <Plus size={14} /> Add source
-          </button>
-        </div>
+        <SectionMapper
+          block={block}
+          tracedSourceId={tracedSourceId}
+          onTrace={onSourceCardClick}
+          onUpdateSource={onUpdateSource}
+          onRemoveSource={onRemoveSource}
+          allowSourceTypeChange
+        />
+        <button
+          type="button"
+          onClick={onAddSource}
+          className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-[#d4ced3] py-2 text-[13px] font-medium text-[#636161] transition-colors hover:border-[#ff4e49]/40 hover:bg-[#fffafa] hover:text-[#302f2f]"
+        >
+          <Plus size={14} /> Add source
+        </button>
       </div>
 
       <div className="border-t border-[#ececec] bg-[#fafafa] px-3 py-3 sm:px-4">
