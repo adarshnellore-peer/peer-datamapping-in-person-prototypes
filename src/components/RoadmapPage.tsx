@@ -208,7 +208,7 @@ export function RoadmapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("roadmap");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [blocks, setBlocks] = useState<DocumentBlock[]>(loadRoadmapBlocks);
-  const [variant, setVariant] = useState<VariantId>("baseline");
+  const [variant, setVariant] = useState<VariantId>("mapping");
   const [tocOpen, setTocOpen] = useState(true);
   const [activeTocId, setActiveTocId] = useState<string | null>("c-1-3");
   const [tocScrollTick, setTocScrollTick] = useState(0);

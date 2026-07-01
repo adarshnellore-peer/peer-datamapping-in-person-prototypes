@@ -10,31 +10,31 @@ export type VariantId =
   | "sourceView";
 
 export const VARIANTS: { id: VariantId; name: string; description: string }[] = [
-  {
-    id: "baseline",
-    name: "V1 \u00b7 Current",
-    description: "Inline document with V2-style source pills; trace panel on the right",
-  },
-  {
-    id: "twoColumn",
-    name: "V2 \u00b7 Storyline mapping",
-    description: "Evidence-first cards; drag from outline and data sources",
-  },
-  {
-    id: "matrix",
-    name: "V3 \u00b7 Mode matrix",
-    description: "Sections \u00d7 Primary narrative / Supporting evidence / Background reference",
-  },
-  {
-    id: "connectors",
-    name: "V4 \u00b7 Connector map",
-    description: "Sections and sources joined by lines; click to trace one",
-  },
-  {
-    id: "sourceView",
-    name: "V5 \u00b7 Source view",
-    description: "Group by document; see every section a source feeds",
-  },
+  // {
+  //   id: "baseline",
+  //   name: "V1 \u00b7 Current",
+  //   description: "Inline document with V2-style source pills; trace panel on the right",
+  // },
+  // {
+  //   id: "twoColumn",
+  //   name: "V2 \u00b7 Storyline mapping",
+  //   description: "Evidence-first cards; drag from outline and data sources",
+  // },
+  // {
+  //   id: "matrix",
+  //   name: "V3 \u00b7 Mode matrix",
+  //   description: "Sections \u00d7 Primary narrative / Supporting evidence / Background reference",
+  // },
+  // {
+  //   id: "connectors",
+  //   name: "V4 \u00b7 Connector map",
+  //   description: "Sections and sources joined by lines; click to trace one",
+  // },
+  // {
+  //   id: "sourceView",
+  //   name: "V5 \u00b7 Source view",
+  //   description: "Group by document; see every section a source feeds",
+  // },
   {
     id: "mapping",
     name: "V6 \u00b7 Unified mapping",
