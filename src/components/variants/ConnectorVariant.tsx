@@ -162,6 +162,23 @@ function isConnectorHoverAnchor(el: Element | null): boolean {
   );
 }
 
+function focusFromElement(el: Element | null): Focus | null {
+  const node = el?.closest("[data-node-kind][data-node-id]");
+  if (!node) return null;
+  const kind = node.getAttribute("data-node-kind");
+  const id = node.getAttribute("data-node-id");
+  if (!kind || !id) return null;
+  if (
+    kind === "section" ||
+    kind === "heading" ||
+    kind === "reference" ||
+    kind === "document"
+  ) {
+    return { type: kind, id };
+  }
+  return null;
+}
+
 function leftNodeEl(
   kind: LeftNodeKind,
   id: string,
@@ -543,11 +560,14 @@ export function ConnectorVariant({
   const connectDragExpandDocRef = useRef<string | null>(null);
   const suppressViewportClickRef = useRef(false);
   const suppressViewportClickTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hoveredRef = useRef<Focus>(null);
+  const lastPointerRef = useRef({ x: 0, y: 0 });
   const [paths, setPaths] = useState<EdgePath[]>([]);
 
   const isConnecting = connect !== null;
   selectedRef.current = selected;
   isConnectingRef.current = isConnecting;
+  hoveredRef.current = hovered;
   const pathFocus = useMemo((): Focus => {
     if (connect) {
       return { type: connect.fromType, id: connect.fromId };
@@ -729,22 +749,91 @@ export function ConnectorVariant({
     [cancelRowHoverTimers],
   );
 
+  const pointerInsideViewport = useCallback((clientX: number, clientY: number) => {
+    const viewport = connectorViewportRef.current;
+    if (!viewport) return false;
+    const rect = viewport.getBoundingClientRect();
+    return (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    );
+  }, []);
+
+  const syncHoverFromPointer = useCallback(
+    (clientX: number, clientY: number) => {
+      if (isConnectingRef.current || suppressHoverRef.current || selectedRef.current) return;
+      if (!pointerInsideViewport(clientX, clientY)) return;
+
+      const under = document.elementFromPoint(clientX, clientY);
+      const focus = focusFromElement(under);
+      if (focus) {
+        if (hoveredRef.current?.type !== focus.type || hoveredRef.current?.id !== focus.id) {
+          setHovered(focus);
+        }
+        return;
+      }
+      if (isConnectorHoverAnchor(under)) return;
+      // Pointer is in the connector canvas gap — keep the current row focus.
+    },
+    [pointerInsideViewport],
+  );
+
+  const scheduleViewportHoverClear = useCallback(() => {
+    if (isConnectingRef.current || selectedRef.current) return;
+    cancelRowHoverTimers();
+    rowHoverLeaveTimerRef.current = setTimeout(() => {
+      if (suppressHoverRef.current || selectedRef.current) return;
+      const { x, y } = lastPointerRef.current;
+      if (pointerInsideViewport(x, y)) {
+        syncHoverFromPointer(x, y);
+        if (hoveredRef.current) return;
+      }
+      setHovered(null);
+    }, ROW_HOVER_HIDE_MS);
+  }, [cancelRowHoverTimers, pointerInsideViewport, syncHoverFromPointer]);
+
   const scheduleClearRowHover = useCallback(
     (event?: React.MouseEvent) => {
       if (isConnectingRef.current || suppressHoverRef.current || selectedRef.current) return;
+      const x = event?.clientX ?? lastPointerRef.current.x;
+      const y = event?.clientY ?? lastPointerRef.current.y;
       if (event) {
         const next = event.relatedTarget;
         if (next instanceof Element && isConnectorHoverAnchor(next)) return;
-        const under = document.elementFromPoint(event.clientX, event.clientY);
-        if (under instanceof Element && isConnectorHoverAnchor(under)) return;
+        const under = document.elementFromPoint(x, y);
+        if (isConnectorHoverAnchor(under)) return;
+        const focus = focusFromElement(under);
+        if (focus) {
+          setHovered(focus);
+          return;
+        }
       }
-      cancelRowHoverTimers();
-      rowHoverLeaveTimerRef.current = setTimeout(() => {
-        if (suppressHoverRef.current || selectedRef.current) return;
-        setHovered(null);
-      }, ROW_HOVER_HIDE_MS);
+      if (pointerInsideViewport(x, y)) return;
+      scheduleViewportHoverClear();
     },
-    [cancelRowHoverTimers],
+    [pointerInsideViewport, scheduleViewportHoverClear],
+  );
+
+  const handleViewportPointerMove = useCallback(
+    (event: React.PointerEvent) => {
+      lastPointerRef.current = { x: event.clientX, y: event.clientY };
+      if (isConnecting) return;
+      cancelRowHoverTimers();
+      syncHoverFromPointer(event.clientX, event.clientY);
+    },
+    [isConnecting, cancelRowHoverTimers, syncHoverFromPointer],
+  );
+
+  const handleViewportPointerLeave = useCallback(
+    (event: React.PointerEvent) => {
+      if (selectedRef.current || isConnectingRef.current) return;
+      const related = event.relatedTarget;
+      if (related instanceof Node && connectorViewportRef.current?.contains(related)) return;
+      scheduleViewportHoverClear();
+    },
+    [scheduleViewportHoverClear],
   );
 
   const scheduleEdgeHover = useCallback(
@@ -798,15 +887,13 @@ export function ConnectorVariant({
   const markColumnScrolling = useCallback(() => {
     suppressHoverRef.current = true;
     suppressNextViewportClick();
-    cancelRowHoverTimers();
-    cancelEdgeHoverTimers();
-    setHovered(null);
-    setHoverEdge(null);
     if (suppressHoverTimerRef.current) clearTimeout(suppressHoverTimerRef.current);
     suppressHoverTimerRef.current = setTimeout(() => {
       suppressHoverRef.current = false;
+      const { x, y } = lastPointerRef.current;
+      syncHoverFromPointer(x, y);
     }, ROW_HOVER_SCROLL_SUPPRESS_MS);
-  }, [suppressNextViewportClick, cancelRowHoverTimers, cancelEdgeHoverTimers]);
+  }, [suppressNextViewportClick, syncHoverFromPointer]);
 
   const setRowHover = scheduleRowHover;
 
@@ -955,15 +1042,14 @@ export function ConnectorVariant({
             ? docRefs.current[focus.id]
             : refRefs.current[focus.id];
     el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [selected, traceFocus, expandedDocsKey]);
-
-  useEffect(() => {
-    if (pathFocus?.type !== "document") return;
-    const sections = graph.dataSourceToSections.get(pathFocus.id);
-    if (!sections?.size) return;
-    const first = [...sections][0];
-    secRefs.current[first]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [pathFocus, graph.dataSourceToSections, expandedDocsKey]);
+    if (focus.type === "document") {
+      const sections = graph.dataSourceToSections.get(focus.id);
+      if (sections?.size) {
+        const first = [...sections][0];
+        secRefs.current[first]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }
+  }, [selected, traceFocus, expandedDocsKey, graph.dataSourceToSections]);
 
   const sourceEdgeTouchesPathFocus = (
     blockId: string,
@@ -1669,6 +1755,8 @@ export function ConnectorVariant({
           if (dismissOverlay()) return;
           clearSelection();
         }}
+        onPointerMove={handleViewportPointerMove}
+        onPointerLeave={handleViewportPointerLeave}
       >
         <svg className="absolute inset-0 z-[2] h-full w-full overflow-hidden pointer-events-none">
           <g className="pointer-events-none">
