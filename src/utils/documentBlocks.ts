@@ -89,6 +89,8 @@ export type TocFlatItem =
       depth: number;
       ancestorHeadingIds: string[];
       block: ContentBlockData;
+      /** Derived from parent heading number + sibling index (e.g. 5.2, 1.6.1). */
+      number: string;
     };
 
 function headingHasTocChildren(blocks: DocumentBlock[], headingIndex: number): boolean {
@@ -103,9 +105,26 @@ function headingHasTocChildren(blocks: DocumentBlock[], headingIndex: number): b
   return false;
 }
 
+export function formatSubsectionNumber(parentHeadingNumber: string, index: number): string {
+  const parent = parentHeadingNumber.trim();
+  if (!parent) return String(index);
+  return formatHeadingNumber(`${parent}.`, index);
+}
+
+export function getTocFlatItemNumber(item: TocFlatItem): string | undefined {
+  if (item.kind === "heading") {
+    const number = item.heading.number?.trim();
+    return number || undefined;
+  }
+  const number = item.number.trim();
+  return number || undefined;
+}
+
 export function buildTocFlatList(blocks: DocumentBlock[]): TocFlatItem[] {
   const items: TocFlatItem[] = [];
   const ancestorStack: string[] = [];
+  const headingNumbers = new Map<string, string>();
+  const contentIndexByHeading = new Map<string, number>();
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -114,6 +133,8 @@ export function buildTocFlatList(blocks: DocumentBlock[]): TocFlatItem[] {
     if (block.type === "heading") {
       const depth = block.level - 1;
       ancestorStack.length = depth;
+
+      headingNumbers.set(block.id, block.number);
 
       items.push({
         kind: "heading",
@@ -128,12 +149,22 @@ export function buildTocFlatList(blocks: DocumentBlock[]): TocFlatItem[] {
       continue;
     }
 
+    const parentId = ancestorStack[ancestorStack.length - 1];
+    let number = "";
+    if (parentId) {
+      const parentNumber = headingNumbers.get(parentId) ?? "";
+      const index = (contentIndexByHeading.get(parentId) ?? 0) + 1;
+      contentIndexByHeading.set(parentId, index);
+      number = formatSubsectionNumber(parentNumber, index);
+    }
+
     items.push({
       kind: "content",
       id: block.id,
       depth: ancestorStack.length,
       ancestorHeadingIds: [...ancestorStack],
       block,
+      number,
     });
   }
 

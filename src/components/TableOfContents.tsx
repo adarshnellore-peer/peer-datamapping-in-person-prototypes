@@ -35,7 +35,8 @@ function itemSearchText(item: TocFlatItem): string {
     return headingLabel(item.heading);
   }
   const sourceText = item.block.sources.map(sourceSearchText).join(" ");
-  return `${item.block.title} ${sourceText}`;
+  const numberPrefix = item.number ? `${item.number} ` : "";
+  return `${numberPrefix}${item.block.title} ${sourceText}`;
 }
 
 function highlightMatch(text: string, query: string): ReactNode {
@@ -395,6 +396,16 @@ export function TableOfContents({
         );
       }
       return highlightMatch(heading.title, searchQuery);
+    }
+    if (item.number) {
+      return (
+        <>
+          <span className="mr-1.5 tabular-nums text-[#9e9e9e]">
+            {highlightMatch(item.number, searchQuery)}
+          </span>
+          {highlightMatch(item.block.title, searchQuery)}
+        </>
+      );
     }
     return highlightMatch(item.block.title, searchQuery);
   };
