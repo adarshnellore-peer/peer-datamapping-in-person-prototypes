@@ -438,6 +438,7 @@ html {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: stretch;
   width: 100%;
+  min-height: 0;
   padding: 0 0 var(--conn-space-2);
 }
 
@@ -455,6 +456,7 @@ html {
 
 .connector-column {
   min-width: 0;
+  min-height: 0;
   width: 100%;
   height: 100%;
   padding: 0;
@@ -509,21 +511,13 @@ html {
   /* Full left half — scrollbar sits on the 50% center line. */
 }
 
-.connector-column--sources {
-  overflow: visible;
-}
-
 .connector-column--sources .connector-column-shell {
+  min-height: 0;
   overflow: hidden;
 }
 
 .connector-column--sources .connector-column-content {
   padding-left: 18px;
-  overflow: visible;
-}
-
-.connector-column--sources .connector-group-items {
-  overflow: visible;
 }
 
 .connector-column--sources .connector-node > .connector-connect-handle {
@@ -846,7 +840,6 @@ html {
 .connector-column--sources .connector-source-doc {
   border: 1px solid #ece8ea;
   border-radius: 5px;
-  overflow: visible;
   background: #fafafa;
 }
 
