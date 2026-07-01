@@ -564,6 +564,18 @@ html {
   background: #fff5f5;
 }
 
+.connector-connect-handle--outline.connector-connect-handle--selected {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.connector-connect-handle--outline.connector-connect-handle--dragging {
+  border-color: #4338ca;
+  background: #eef2ff;
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.22),
+    0 1px 4px rgba(0, 0, 0, 0.14);
+}
+
 .connector-variant[data-connecting="true"] .connector-node.is-selected {
   border-color: rgba(255, 78, 73, 0.55);
   background: rgba(255, 78, 73, 0.1);
