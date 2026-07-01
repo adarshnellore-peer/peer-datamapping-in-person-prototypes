@@ -1,11 +1,17 @@
-import { useRef, useState } from "react";
-import { GripVertical, Info } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Info } from "lucide-react";
 import { DataSourcePanel } from "../DataSourcePanel";
 import { StudyDataSourcesList } from "../StudyDataSourcesList";
+import {
+  RoadmapOutlineHeader,
+  RoadmapOutlineRow,
+  ROADMAP_OUTLINE_COLUMN_CLASS,
+  ROADMAP_OUTLINE_HEAD_CLASS,
+} from "../roadmap/RoadmapOutlineRow";
 import type { StudyDataSource } from "../../data/studyDataSources";
 import type { RoadmapSource, SourceRole } from "../../data/roadmap";
 import type { HeadingBlock } from "../../types";
-import { isHeadingInsertionSlot } from "../../utils/documentBlocks";
+import { buildTocFlatList, isHeadingInsertionSlot } from "../../utils/documentBlocks";
 import {
   MATRIX_COLUMNS,
   isOutlineReferenceSource,
@@ -44,6 +50,7 @@ function headingDragLabel(heading: HeadingBlock): string {
  */
 export function MatrixVariant({
   blocks,
+  activeBlockId,
   tracedSource,
   onTraceSource,
   onUpdateSource,
@@ -64,6 +71,7 @@ export function MatrixVariant({
   onCloseTrace,
   onUpdateMappedSource,
 }: VariantProps & {
+  activeBlockId?: string | null;
   onMapStudySourceWithRole: (
     blockId: string,
     studySourceId: string,
@@ -103,6 +111,14 @@ export function MatrixVariant({
 }) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const draggingRef = useRef<V2DragPayload | null>(null);
+
+  const outlineByBlockId = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof buildTocFlatList>[number]>();
+    for (const item of buildTocFlatList(blocks)) {
+      map.set(item.id, item);
+    }
+    return map;
+  }, [blocks]);
 
   const beginDrag = (event: React.DragEvent, payload: V2DragPayload) => {
     draggingRef.current = payload;
@@ -305,8 +321,8 @@ export function MatrixVariant({
           <table className="w-full min-w-[960px] border-separate border-spacing-0">
             <thead>
               <tr>
-                <th className="sticky left-0 top-0 z-30 w-[220px] border-b border-r border-[#d4ced3] bg-[#fafafa] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
-                  Roadmap block
+                <th className={ROADMAP_OUTLINE_HEAD_CLASS}>
+                  <RoadmapOutlineHeader />
                 </th>
                 {MATRIX_COLUMNS.map((col) => (
                   <th
@@ -335,10 +351,17 @@ export function MatrixVariant({
               {blocks.map((block) => {
                 if (block.type === "heading") {
                   const isInsertionSlot = isHeadingInsertionSlot(blocks, block.id);
+                  const outline = outlineByBlockId.get(block.id);
+                  const depth = outline?.kind === "heading" ? outline.depth : 0;
                   return (
                     <tr key={block.id} className="group/heading">
-                      <td className="sticky left-0 z-10 border-b border-r border-[#d4ced3] bg-[#ececec] px-2 py-1 align-top">
-                        <div
+                      <td className={ROADMAP_OUTLINE_COLUMN_CLASS}>
+                        <RoadmapOutlineRow
+                          depth={depth}
+                          isHeading
+                          isActive={activeBlockId === block.id}
+                          number={block.number}
+                          title={block.title}
                           draggable
                           onDragStart={(event) => {
                             beginDrag(event, {
@@ -349,20 +372,8 @@ export function MatrixVariant({
                             });
                           }}
                           onDragEnd={endDrag}
-                          title="Drag content heading as evidence to another row"
-                          className="flex cursor-grab items-center gap-1 touch-none active:cursor-grabbing"
-                        >
-                          <GripVertical
-                            size={12}
-                            strokeWidth={1.75}
-                            className="shrink-0 text-[#bdbdbd]"
-                            aria-hidden
-                          />
-                          <span className="text-[11px] font-semibold leading-snug text-[#5c5c5c]">
-                            {block.number && <span>{block.number} </span>}
-                            {block.title}
-                          </span>
-                        </div>
+                          dragTitle="Drag content heading as evidence to another row"
+                        />
                       </td>
                       {renderMatrixCells(block.id, block.sources ?? [], {
                         rejectOutlineRef: (payload) =>
@@ -374,10 +385,16 @@ export function MatrixVariant({
                   );
                 }
                 if (block.type !== "content") return null;
+                const outline = outlineByBlockId.get(block.id);
+                const depth = outline?.kind === "content" ? outline.depth : 0;
                 return (
                   <tr key={block.id} className="group">
-                    <td className="sticky left-0 z-10 w-[220px] border-b border-r border-[#d4ced3] bg-[#f3f3f3] px-2 py-2 align-top group-hover:bg-[#ececec]">
-                      <div
+                    <td className={ROADMAP_OUTLINE_COLUMN_CLASS}>
+                      <RoadmapOutlineRow
+                        depth={depth}
+                        isHeading={false}
+                        isActive={activeBlockId === block.id}
+                        title={block.title}
                         draggable
                         onDragStart={(event) => {
                           beginDrag(event, {
@@ -388,19 +405,8 @@ export function MatrixVariant({
                           });
                         }}
                         onDragEnd={endDrag}
-                        title="Drag subcontent as evidence to another row"
-                        className="flex cursor-grab items-start gap-1 touch-none active:cursor-grabbing"
-                      >
-                        <GripVertical
-                          size={12}
-                          strokeWidth={1.75}
-                          className="mt-0.5 shrink-0 text-[#bdbdbd]"
-                          aria-hidden
-                        />
-                        <span className="text-[12px] font-semibold leading-snug text-[#302f2f]">
-                          {block.title}
-                        </span>
-                      </div>
+                        dragTitle="Drag subcontent as evidence to another row"
+                      />
                     </td>
                     {renderMatrixCells(block.id, block.sources, {
                       rejectOutlineRef: (payload) => payload.fromBlockId === block.id,

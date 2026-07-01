@@ -11,6 +11,7 @@ import { buildTocFlatList, type TocFlatItem } from "../utils/documentBlocks";
 import type { DocumentBlock, HeadingBlock } from "../types";
 import type { RoadmapSource, SourceType } from "../data/roadmap";
 import { setV2DragData } from "../utils/v2DragPayload";
+import { RoadmapOutlineRow } from "./roadmap/RoadmapOutlineRow";
 
 function headingLabel(heading: HeadingBlock): string {
   return heading.number ? `${heading.number} ${heading.title}` : heading.title;
@@ -144,6 +145,28 @@ function TocRow({
   const indent = depth * (outlineMappingDrag ? 10 : 12);
   const isHeading = rowKind === "heading";
   const isDraggable = outlineMappingDrag ? !!onOutlineDragStart : !!onDragPointerDown;
+
+  if (outlineMappingDrag) {
+    return (
+      <RoadmapOutlineRow
+        depth={depth}
+        isHeading={isHeading}
+        isActive={isActive}
+        label={label}
+        title=""
+        draggable={!!onOutlineDragStart}
+        hasChevron={!!hasChildren}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={onToggleCollapse}
+        onDragStart={onOutlineDragStart}
+        dragTitle={
+          onOutlineDragStart ? `Drag to map ${outlineDragLabel ?? "outline"}` : undefined
+        }
+        onNavigate={onNavigate}
+        actions={actions}
+      />
+    );
+  }
 
   return (
     <div style={{ marginLeft: `${indent}px` }} className="py-0.5">

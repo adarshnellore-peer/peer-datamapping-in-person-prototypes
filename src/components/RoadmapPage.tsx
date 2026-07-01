@@ -27,7 +27,14 @@ import { SectionContentBlock } from "./SectionContentBlock";
 import { DataSourcePanel } from "./DataSourcePanel";
 import { StudyDataSourcesList } from "./StudyDataSourcesList";
 import { TableOfContents } from "./TableOfContents";
-import { VariantSwitcher, MappingViewToggle, type VariantId } from "./VariantSwitcher";
+import { VariantSwitcher, type VariantId } from "./VariantSwitcher";
+import {
+  MappingVariant,
+  usesMatrixLayout,
+  usesMappingToc,
+  usesStorylineLayout,
+  type MappingSubview,
+} from "./variants/MappingVariant";
 import { TwoColumnVariant } from "./variants/TwoColumnVariant";
 import { SourceViewVariant } from "./variants/SourceViewVariant";
 import { ConnectorVariant } from "./variants/ConnectorVariant";
@@ -185,6 +192,7 @@ export function RoadmapPage() {
   const [traceState, setTraceState] = useState<TraceState>(null);
   const [libraryTraceSource, setLibraryTraceSource] = useState<RoadmapSource | null>(null);
   const [v2DataPanelOpen, setV2DataPanelOpen] = useState(true);
+  const [mappingSubview, setMappingSubview] = useState<MappingSubview>("storyline");
   const [expandedSource, setExpandedSource] = useState<ExpandedSourceState>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [sourcePicker, setSourcePicker] = useState<SourcePickerState>(null);
@@ -270,16 +278,20 @@ export function RoadmapPage() {
 
   // TOC clicks scroll to the target block. V1 uses document block refs; V2
   // scrolls the mapping board's section column via focusId.
+  const storylineLayout = usesStorylineLayout(variant, mappingSubview);
+  const matrixLayout = usesMatrixLayout(variant, mappingSubview);
+  const showGlobalToc = usesMappingToc(variant, mappingSubview);
+
   const handleTocNavigate = useCallback(
     (id: string) => {
-      if (variant === "twoColumn") {
+      if (storylineLayout) {
         setActiveTocId(id);
         if (window.innerWidth < 768) setTocOpen(false);
         return;
       }
       scrollToBlock(id);
     },
-    [variant, scrollToBlock],
+    [storylineLayout, scrollToBlock],
   );
 
   const moveBlockFromToc = useCallback((blockId: string, dropFlatIndex: number) => {
@@ -1004,7 +1016,7 @@ export function RoadmapPage() {
   }, [expandedSource]);
 
   const toggleTracePanel = useCallback(() => {
-    if (variant === "twoColumn") {
+    if (storylineLayout) {
       if (traceState?.view === "detail") {
         setTraceState(null);
         setExpandedSource(null);
@@ -1021,7 +1033,7 @@ export function RoadmapPage() {
       if (window.innerWidth < 768) setTocOpen(false);
       return;
     }
-    if (variant === "matrix") {
+    if (matrixLayout) {
       if (traceState) {
         setTraceState(null);
         setLibraryTraceSource(null);
@@ -1051,14 +1063,11 @@ export function RoadmapPage() {
     setTraceState({ ...target, view: "list" });
     setExpandedSource(target);
     if (window.innerWidth < 768) setTocOpen(false);
-  }, [blocks, traceState, variant]);
+  }, [blocks, traceState, variant, storylineLayout, matrixLayout]);
 
   useEffect(() => {
-    if (variant === "twoColumn") setV2DataPanelOpen(true);
-  }, [variant]);
-
-  // Global TOC for document-style variants (V1 inline doc, V2 mapping board).
-  const showGlobalToc = variant === "baseline" || variant === "twoColumn";
+    if (storylineLayout) setV2DataPanelOpen(true);
+  }, [storylineLayout]);
 
   const tracedSource = useMemo(() => {
     if (!traceState) return null;
@@ -1115,7 +1124,7 @@ export function RoadmapPage() {
   }, [sourcePicker, blocks]);
 
   useEffect(() => {
-    if (variant !== "twoColumn") return;
+    if (!storylineLayout) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const tag = (event.target as HTMLElement).tagName?.toLowerCase();
       if (tag === "textarea" || tag === "input") return;
@@ -1133,14 +1142,27 @@ export function RoadmapPage() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [variant, contentBlockIds, activeTocId]);
+  }, [storylineLayout, contentBlockIds, activeTocId]);
 
   const handleVariantChange = useCallback((id: VariantId) => {
     setVariant(id);
-    if (id === "twoColumn") {
+    if (id === "twoColumn" || id === "mapping") {
       setV2DataPanelOpen(true);
+      if (id === "mapping") setMappingSubview("storyline");
     }
     if (id === "matrix") {
+      setLibraryTraceSource(null);
+    }
+  }, []);
+
+  const handleMappingSubviewChange = useCallback((view: MappingSubview) => {
+    setMappingSubview(view);
+    if (view === "storyline") {
+      setV2DataPanelOpen(true);
+    } else {
+      setTocOpen(false);
+      setTraceState(null);
+      setExpandedSource(null);
       setLibraryTraceSource(null);
     }
   }, []);
@@ -1323,11 +1345,8 @@ export function RoadmapPage() {
           </button>
         )}
 
-        <div className="flex items-center">
+        <div>
           <VariantSwitcher variant={variant} onChange={handleVariantChange} />
-          {(variant === "twoColumn" || variant === "matrix") && (
-            <MappingViewToggle view={variant} onChange={handleVariantChange} />
-          )}
         </div>
 
         {variant === "baseline" && (
@@ -1377,12 +1396,10 @@ export function RoadmapPage() {
             data-trace-toggle=""
             onClick={toggleTracePanel}
             aria-pressed={
-              variant === "twoColumn"
-                ? v2DataPanelOpen || traceState !== null
-                : traceState !== null
+              storylineLayout ? v2DataPanelOpen || traceState !== null : traceState !== null
             }
             aria-label={
-              variant === "twoColumn"
+              storylineLayout
                 ? v2DataPanelOpen || traceState
                   ? "Hide data sources panel"
                   : "Show data sources panel"
@@ -1391,7 +1408,7 @@ export function RoadmapPage() {
                   : "Enter trace to datasource view"
             }
             className={`flex h-8 w-8 items-center justify-center rounded hover:bg-[#f5f5f5] ${
-              (variant === "twoColumn" ? v2DataPanelOpen || traceState : traceState)
+              (storylineLayout ? v2DataPanelOpen || traceState : traceState)
                 ? "bg-[#fedbda]"
                 : ""
             }`}
@@ -1437,8 +1454,8 @@ export function RoadmapPage() {
               onAddContentAfter={addContentAfter}
               onDeleteHeading={deleteHeading}
               onDeleteContent={deleteContentBlock}
-              outlineMappingDrag={variant === "twoColumn"}
-              hideAddActions={variant === "twoColumn"}
+              outlineMappingDrag={storylineLayout}
+              hideAddActions={storylineLayout}
             />
           </aside>
         )}
@@ -1458,7 +1475,7 @@ export function RoadmapPage() {
 
         <main
           className={`min-w-0 flex-1 ${
-            variant === "matrix" || variant === "connectors"
+            matrixLayout || variant === "connectors"
               ? "flex min-h-0 flex-col overflow-hidden"
               : variant === "baseline"
                 ? "overflow-x-hidden overflow-y-auto"
@@ -1515,6 +1532,53 @@ export function RoadmapPage() {
             </div>
           )}
 
+          {variant === "mapping" && (
+            <MappingVariant
+              subview={mappingSubview}
+              onSubviewChange={handleMappingSubviewChange}
+              storyline={{
+                blocks,
+                focusId: activeTocId,
+                tracedSource: traceState
+                  ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
+                  : null,
+                onTraceSource: openTrace,
+                onUpdateSource: updateSourceInBlock,
+                onRemoveSource: removeSourceFromBlock,
+                onMapStudySource: mapStudySourceToSection,
+                onMapStudySources: mapStudySourcesToSection,
+                onMapOutlineToSection: mapOutlineToSection,
+                onMoveSource: moveSourceToSection,
+                onPromptChange: updatePrompt,
+              }}
+              matrix={{
+                blocks,
+                activeBlockId: activeTocId,
+                tracedSource: traceState
+                  ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
+                  : null,
+                onTraceSource: openTrace,
+                onUpdateSource: updateSourceInBlock,
+                onRemoveSource: removeSourceFromBlock,
+                onMapStudySourceWithRole: mapStudySourceToSectionWithRole,
+                onMapStudySourcesWithRole: mapStudySourcesToSectionWithRole,
+                onMapOutlineRefWithRole: mapOutlineRefToSectionWithRole,
+                onHeadingSlotDrop: matrixDropOnHeadingSlot,
+                onMoveSourceToMatrixCell: moveSourceToMatrixCell,
+                usageCountByStudySourceId,
+                onStudySourceSelect: openStudySourceTrace,
+                traceSource: tracedSource,
+                traceSectionTitle: tracedSectionTitle,
+                traceBlockSources: tracedBlockSources,
+                traceSourceId: traceState?.sourceId ?? null,
+                tracePanelMode: traceState?.view ?? "detail",
+                onTraceSourceChange: handleTracedSourceChange,
+                onCloseTrace: closeTrace,
+                onUpdateMappedSource: handleTracedMappedSourceUpdate,
+              }}
+            />
+          )}
+
           {variant === "twoColumn" && (
             <TwoColumnVariant
               blocks={blocks}
@@ -1538,6 +1602,7 @@ export function RoadmapPage() {
           {variant === "matrix" && (
             <MatrixVariant
               blocks={blocks}
+              activeBlockId={activeTocId}
               tracedSource={
                 traceState
                   ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
@@ -1644,7 +1709,7 @@ export function RoadmapPage() {
           </>
         )}
 
-        {tracedSource && traceState && variant !== "matrix" && variant !== "connectors" ? (
+        {tracedSource && traceState && !matrixLayout && variant !== "connectors" ? (
           <>
             <button
               type="button"
@@ -1664,7 +1729,7 @@ export function RoadmapPage() {
             />
           </>
         ) : (
-          variant === "twoColumn" &&
+          storylineLayout &&
           v2DataPanelOpen && (
             <aside
               data-datasource-panel=""
@@ -1767,7 +1832,7 @@ export function RoadmapPage() {
       )}
 
       {/* V3 matrix uses library + section-row drag only — picker disabled for matrix */}
-      {sourcePicker && variant !== "matrix" && (
+      {sourcePicker && !matrixLayout && (
         <SourcePickerOverlay
           modeLabel={sourcePicker.modeLabel}
           modeColor={sourcePicker.modeColor}
