@@ -27,7 +27,7 @@ import { SectionContentBlock } from "./SectionContentBlock";
 import { DataSourcePanel } from "./DataSourcePanel";
 import { StudyDataSourcesList } from "./StudyDataSourcesList";
 import { TableOfContents } from "./TableOfContents";
-import { VariantSwitcher, type VariantId } from "./VariantSwitcher";
+import { VariantSwitcher, MappingViewToggle, type VariantId } from "./VariantSwitcher";
 import { TwoColumnVariant } from "./variants/TwoColumnVariant";
 import { SourceViewVariant } from "./variants/SourceViewVariant";
 import { ConnectorVariant } from "./variants/ConnectorVariant";
@@ -1137,6 +1137,12 @@ export function RoadmapPage() {
 
   const handleVariantChange = useCallback((id: VariantId) => {
     setVariant(id);
+    if (id === "twoColumn") {
+      setV2DataPanelOpen(true);
+    }
+    if (id === "matrix") {
+      setLibraryTraceSource(null);
+    }
   }, []);
 
   const handleTracedSourceChange = useCallback((sourceId: string) => {
@@ -1317,8 +1323,11 @@ export function RoadmapPage() {
           </button>
         )}
 
-        <div>
+        <div className="flex items-center">
           <VariantSwitcher variant={variant} onChange={handleVariantChange} />
+          {(variant === "twoColumn" || variant === "matrix") && (
+            <MappingViewToggle view={variant} onChange={handleVariantChange} />
+          )}
         </div>
 
         {variant === "baseline" && (

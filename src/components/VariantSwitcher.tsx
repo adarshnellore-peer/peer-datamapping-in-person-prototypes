@@ -71,3 +71,48 @@ export function VariantSwitcher({
     </DropdownMenu>
   );
 }
+
+export type MappingViewId = "twoColumn" | "matrix";
+
+/** Quick toggle between V2 storyline board and V3 mode matrix. */
+export function MappingViewToggle({
+  view,
+  onChange,
+}: {
+  view: MappingViewId;
+  onChange: (id: MappingViewId) => void;
+}) {
+  const optionClass = (active: boolean) =>
+    `rounded px-2.5 py-1 text-[12px] font-medium transition-colors ${
+      active
+        ? "bg-white text-[#302f2f] shadow-sm"
+        : "text-[#636161] hover:text-[#302f2f]"
+    }`;
+
+  return (
+    <div
+      role="group"
+      aria-label="Mapping view"
+      className="ml-2 flex h-8 items-center rounded-md border border-[#d4ced3] bg-[#f3f3f3] p-0.5"
+    >
+      <button
+        type="button"
+        aria-pressed={view === "twoColumn"}
+        onClick={() => onChange("twoColumn")}
+        className={optionClass(view === "twoColumn")}
+        title="V2 · Storyline mapping"
+      >
+        Storyline
+      </button>
+      <button
+        type="button"
+        aria-pressed={view === "matrix"}
+        onClick={() => onChange("matrix")}
+        className={optionClass(view === "matrix")}
+        title="V3 · Mode matrix"
+      >
+        Matrix
+      </button>
+    </div>
+  );
+}
