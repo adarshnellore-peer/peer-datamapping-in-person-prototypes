@@ -87,6 +87,7 @@ type StorylineProps = Omit<VariantProps, "onAddSource"> & {
 
 type MatrixProps = VariantProps & {
   activeBlockId?: string | null;
+  scrollTick?: number;
   columnMode?: "usage" | "format";
   rolePickerMode?: "usage" | "format";
   onMapStudySourceWithRole: (
@@ -123,7 +124,7 @@ type MatrixProps = VariantProps & {
   traceSectionTitle?: string | null;
   traceBlockSources?: RoadmapSource[];
   traceSourceId?: string | null;
-  tracePanelMode?: "detail" | "list";
+  tracePanelMode?: "detail" | "list" | "navigate";
   onTraceSourceChange?: (sourceId: string) => void;
   onCloseTrace?: () => void;
   onUpdateMappedSource?: (source: RoadmapSource) => void;

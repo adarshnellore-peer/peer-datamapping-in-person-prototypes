@@ -82,7 +82,7 @@ type ActivePanel =
 type TraceState = {
   blockId: string;
   sourceId: string;
-  view: "list" | "detail";
+  view: "list" | "detail" | "navigate";
 } | null;
 
 type ExpandedSourceState = {
@@ -206,6 +206,7 @@ export function RoadmapPage() {
   const [tocOpen, setTocOpen] = useState(true);
   const [activeTocId, setActiveTocId] = useState<string | null>("c-1-3");
   const [tocScrollTick, setTocScrollTick] = useState(0);
+  const [matrixScrollTick, setMatrixScrollTick] = useState(0);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [traceState, setTraceState] = useState<TraceState>(null);
   const [libraryTraceSource, setLibraryTraceSource] = useState<RoadmapSource | null>(null);
@@ -1140,18 +1141,36 @@ export function RoadmapPage() {
     (placement: StudySourcePlacement) => {
       setLibraryTraceSource(null);
       setActivePanel((panel) => (panel?.type === "version" ? null : panel));
+      setActiveTocId(placement.blockId);
+
+      if (matrixLayout) {
+        setTraceState({
+          blockId: placement.blockId,
+          sourceId: placement.sourceId,
+          view: "navigate",
+        });
+        setExpandedSource(null);
+        setMatrixScrollTick((tick) => tick + 1);
+        if (window.innerWidth < 768) setTocOpen(false);
+        return;
+      }
+
       setTraceState({
         blockId: placement.blockId,
         sourceId: placement.sourceId,
         view: "detail",
       });
       setExpandedSource({ blockId: placement.blockId, sourceId: placement.sourceId });
-      setActiveTocId(placement.blockId);
-      if (!storylineLayout) {
-        scrollToBlock(placement.blockId);
+
+      if (storylineLayout) {
+        setTocScrollTick((tick) => tick + 1);
+        if (window.innerWidth < 768) setTocOpen(false);
+        return;
       }
+
+      scrollToBlock(placement.blockId);
     },
-    [storylineLayout, scrollToBlock],
+    [matrixLayout, storylineLayout, scrollToBlock],
   );
 
   const openConnectorSourceTrace = useCallback(
@@ -1789,6 +1808,7 @@ export function RoadmapPage() {
               matrix={{
                 blocks,
                 activeBlockId: activeTocId,
+                scrollTick: matrixScrollTick,
                 columnMode: "format",
                 rolePickerMode: "format",
                 tracedSource: traceState
@@ -1844,6 +1864,7 @@ export function RoadmapPage() {
             <MatrixVariant
               blocks={blocks}
               activeBlockId={activeTocId}
+              scrollTick={matrixScrollTick}
               tracedSource={
                 traceState
                   ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
@@ -1925,7 +1946,7 @@ export function RoadmapPage() {
                       embedded
                       source={tracedSource}
                       sectionTitle={tracedSectionTitle}
-                      initialPanelMode={traceState.view}
+                      initialPanelMode={traceState.view === "list" ? "list" : "detail"}
                       blockSources={tracedBlockSources}
                       activeSourceId={traceState.sourceId}
                       onSourceChange={handleTracedSourceChange}
@@ -1962,7 +1983,7 @@ export function RoadmapPage() {
             <DataSourcePanel
               source={tracedSource}
               sectionTitle={tracedSectionTitle}
-              initialPanelMode={traceState.view}
+              initialPanelMode={traceState.view === "list" ? "list" : "detail"}
               blockSources={tracedBlockSources}
               activeSourceId={traceState.sourceId}
               onSourceChange={handleTracedSourceChange}

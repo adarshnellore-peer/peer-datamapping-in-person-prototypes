@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Info } from "lucide-react";
 import { DataSourcePanel } from "../DataSourcePanel";
 import { StudyDataSourcesList } from "../StudyDataSourcesList";
@@ -104,6 +104,7 @@ function headingDragLabel(heading: HeadingBlock): string {
 export function MatrixVariant({
   blocks,
   activeBlockId,
+  scrollTick = 0,
   columnMode = "usage",
   rolePickerMode = "usage",
   tracedSource,
@@ -129,6 +130,8 @@ export function MatrixVariant({
   onUpdateMappedSource,
 }: VariantProps & {
   activeBlockId?: string | null;
+  /** Bumped when library placement navigation should scroll the active row into view. */
+  scrollTick?: number;
   columnMode?: "usage" | "format";
   rolePickerMode?: "usage" | "format";
   onMapStudySourceWithRole: (
@@ -165,13 +168,14 @@ export function MatrixVariant({
   traceSectionTitle?: string | null;
   traceBlockSources?: RoadmapSource[];
   traceSourceId?: string | null;
-  tracePanelMode?: "detail" | "list";
+  tracePanelMode?: "detail" | "list" | "navigate";
   onTraceSourceChange?: (sourceId: string) => void;
   onCloseTrace?: () => void;
   onUpdateMappedSource?: (source: RoadmapSource) => void;
 }) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const draggingRef = useRef<V2DragPayload | null>(null);
+  const rowRefs = useRef<Record<string, HTMLElement | null>>({});
   const columns = useMemo(() => matrixColumnsForMode(columnMode), [columnMode]);
   const tableMinWidth = columnMode === "format" ? "min-w-[640px]" : "min-w-[840px]";
 
@@ -193,6 +197,12 @@ export function MatrixVariant({
     setDropTarget(null);
   };
 
+  useEffect(() => {
+    if (!activeBlockId) return;
+    rowRefs.current[activeBlockId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeBlockId, scrollTick]);
+
+  const showTracePanel = Boolean(traceSource && tracePanelMode === "detail" && onCloseTrace);
 
   const sourcesInColumn = (sources: RoadmapSource[], colId: string) =>
     sources.filter((s) => columnForSource(s, columnMode) === colId);
@@ -425,7 +435,13 @@ export function MatrixVariant({
                   const outline = outlineByBlockId.get(block.id);
                   const depth = outline?.kind === "heading" ? outline.depth : 0;
                   return (
-                    <tr key={block.id} className="group/heading">
+                    <tr
+                      key={block.id}
+                      ref={(el) => {
+                        rowRefs.current[block.id] = el;
+                      }}
+                      className="group/heading"
+                    >
                       <td className={ROADMAP_OUTLINE_COLUMN_CLASS}>
                         <RoadmapOutlineRow
                           compact
@@ -459,7 +475,13 @@ export function MatrixVariant({
                 const outline = outlineByBlockId.get(block.id);
                 const depth = outline?.kind === "content" ? outline.depth : 0;
                 return (
-                  <tr key={block.id} className="group">
+                  <tr
+                    key={block.id}
+                    ref={(el) => {
+                      rowRefs.current[block.id] = el;
+                    }}
+                    className="group"
+                  >
                     <td className={ROADMAP_OUTLINE_COLUMN_CLASS}>
                       <RoadmapOutlineRow
                         compact
@@ -490,12 +512,12 @@ export function MatrixVariant({
         </div>
 
         <aside data-datasource-panel="" className="peer-library-sidebar">
-          {traceSource && onCloseTrace ? (
+          {showTracePanel && traceSource && onCloseTrace ? (
             <DataSourcePanel
               embedded
               source={traceSource}
               sectionTitle={traceSectionTitle}
-              initialPanelMode={tracePanelMode}
+              initialPanelMode="detail"
               blockSources={traceBlockSources}
               activeSourceId={traceSourceId ?? undefined}
               onSourceChange={onTraceSourceChange}

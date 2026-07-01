@@ -238,6 +238,7 @@ function UsageMenu({
               onClick={(event) => {
                 event.stopPropagation();
                 onNavigateToPlacement?.(placement);
+                setOpen(false);
               }}
               className="peer-usage-menu-item"
               title={placementTocLabel(placement)}
