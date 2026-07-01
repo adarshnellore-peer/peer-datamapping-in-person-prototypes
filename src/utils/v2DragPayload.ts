@@ -14,9 +14,22 @@ export type OutlineRefPayload = {
 
 export type V2DragPayload =
   | { kind: "study-source"; studySourceId: string }
+  | { kind: "study-sources"; studySourceIds: string[] }
   | { kind: "toc"; sourceType: "SUBCONTENT" | "CONTENT"; label: string }
   | OutlineRefPayload
   | { kind: "mapped"; fromBlockId: string; sourceId: string; toIndex?: number };
+
+export function studySourceIdsFromPayload(payload: V2DragPayload): string[] | null {
+  if (payload.kind === "study-source") return [payload.studySourceId];
+  if (payload.kind === "study-sources") return payload.studySourceIds;
+  return null;
+}
+
+export function studySourceDragPayload(studySourceIds: string[]): V2DragPayload {
+  return studySourceIds.length === 1
+    ? { kind: "study-source", studySourceId: studySourceIds[0]! }
+    : { kind: "study-sources", studySourceIds };
+}
 
 export function setV2DragData(dataTransfer: DataTransfer, payload: V2DragPayload) {
   const json = JSON.stringify(payload);

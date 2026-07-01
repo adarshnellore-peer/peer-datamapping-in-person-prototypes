@@ -419,7 +419,7 @@ export function RoadmapPage() {
     [openSourcePicker],
   );
 
-  // V2 board: drag a study-library row onto a section (document + pages pre-filled).
+  // V2 board: drag study-library rows onto a section (document + pages pre-filled).
   const mapStudySourceToSection = (blockId: string, studySourceId: string) => {
     const entry = findStudySourceById(studySourceId);
     if (!entry) return;
@@ -433,6 +433,31 @@ export function RoadmapPage() {
     );
     setToast("Source mapped");
   };
+
+  const mapStudySourcesToSection = useCallback((blockId: string, studySourceIds: string[]) => {
+    if (studySourceIds.length === 0) return;
+    let added = 0;
+    setBlocks((prev) =>
+      prev.map((block) => {
+        if (block.type !== "content" || block.id !== blockId) return block;
+        const nextSources = [...block.sources];
+        for (const studySourceId of studySourceIds) {
+          const entry = findStudySourceById(studySourceId);
+          if (!entry) continue;
+          nextSources.push({
+            ...studySourceToRoadmapSource(entry),
+            id: crypto.randomUUID(),
+          });
+          added += 1;
+        }
+        if (added === 0) return block;
+        return { ...block, sources: nextSources };
+      }),
+    );
+    if (added > 0) {
+      setToast(added === 1 ? "Source mapped" : `${added} sources mapped`);
+    }
+  }, []);
 
   const mapStudySourceToSectionWithRole = (
     blockId: string,
@@ -460,6 +485,40 @@ export function RoadmapPage() {
     );
     setToast("Source mapped");
     return created.id;
+  };
+
+  const mapStudySourcesToSectionWithRole = (
+    blockId: string,
+    studySourceIds: string[],
+    role: SourceRole,
+  ) => {
+    if (studySourceIds.length === 0) return;
+    let added = 0;
+    setBlocks((prev) =>
+      prev.map((block) => {
+        if (block.id !== blockId) return block;
+        if (block.type !== "content" && block.type !== "heading") return block;
+        const sources = block.type === "content" ? block.sources : (block.sources ?? []);
+        const nextSources = [...sources];
+        for (const studySourceId of studySourceIds) {
+          const entry = findStudySourceById(studySourceId);
+          if (!entry) continue;
+          nextSources.push({
+            ...studySourceToRoadmapSource(entry),
+            id: crypto.randomUUID(),
+            role,
+          });
+          added += 1;
+        }
+        if (added === 0) return block;
+        return block.type === "content"
+          ? { ...block, sources: nextSources }
+          : { ...block, sources: nextSources };
+      }),
+    );
+    if (added > 0) {
+      setToast(added === 1 ? "Source mapped" : `${added} sources mapped`);
+    }
   };
 
   const mapOutlineRefToSectionWithRole = useCallback(
@@ -530,6 +589,21 @@ export function RoadmapPage() {
               },
             ],
           };
+        } else if (payload.kind === "study-sources") {
+          const mapped = payload.studySourceIds.flatMap((studySourceId) => {
+            const entry = findStudySourceById(studySourceId);
+            if (!entry) return [];
+            return [
+              {
+                ...studySourceToRoadmapSource(entry),
+                id: crypto.randomUUID(),
+                role,
+                isReference: role === "reference" ? true : undefined,
+              },
+            ];
+          });
+          if (mapped.length === 0) return prev;
+          newHeading = { ...newHeading, sources: mapped };
         } else if (payload.kind === "mapped") {
           let movedSource: RoadmapSource | null = null;
           working = prev.map((block) => {
@@ -1445,6 +1519,7 @@ export function RoadmapPage() {
               onUpdateSource={updateSourceInBlock}
               onRemoveSource={removeSourceFromBlock}
               onMapStudySource={mapStudySourceToSection}
+              onMapStudySources={mapStudySourcesToSection}
               onMapOutlineToSection={mapOutlineToSection}
               onMoveSource={moveSourceToSection}
               onPromptChange={updatePrompt}
@@ -1463,6 +1538,7 @@ export function RoadmapPage() {
               onUpdateSource={updateSourceInBlock}
               onRemoveSource={removeSourceFromBlock}
               onMapStudySourceWithRole={mapStudySourceToSectionWithRole}
+              onMapStudySourcesWithRole={mapStudySourcesToSectionWithRole}
               onMapOutlineRefWithRole={mapOutlineRefToSectionWithRole}
               onHeadingSlotDrop={matrixDropOnHeadingSlot}
               onMoveSourceToMatrixCell={moveSourceToMatrixCell}

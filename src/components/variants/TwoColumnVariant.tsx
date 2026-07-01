@@ -49,12 +49,14 @@ export function TwoColumnVariant({
   onUpdateSource,
   onRemoveSource,
   onMapStudySource,
+  onMapStudySources,
   onMapOutlineToSection,
   onMoveSource,
   onPromptChange,
   focusId,
 }: Omit<VariantProps, "onAddSource"> & {
   onMapStudySource: (blockId: string, studySourceId: string) => void;
+  onMapStudySources?: (blockId: string, studySourceIds: string[]) => void;
   onMapOutlineToSection: (
     blockId: string,
     sourceType: "SUBCONTENT" | "CONTENT",
@@ -121,6 +123,15 @@ export function TwoColumnVariant({
         case "study-source":
           onMapStudySource(toBlockId, payload.studySourceId);
           break;
+        case "study-sources":
+          if (onMapStudySources) {
+            onMapStudySources(toBlockId, payload.studySourceIds);
+          } else {
+            for (const studySourceId of payload.studySourceIds) {
+              onMapStudySource(toBlockId, studySourceId);
+            }
+          }
+          break;
         case "toc":
           onMapOutlineToSection(toBlockId, payload.sourceType, payload.label);
           break;
@@ -129,7 +140,7 @@ export function TwoColumnVariant({
           break;
       }
     },
-    [onMapOutlineToSection, onMapStudySource, onMoveSource],
+    [onMapOutlineToSection, onMapStudySource, onMapStudySources, onMoveSource],
   );
 
   const dropOnBlock = (blockId: string, dataTransfer: DataTransfer) => {

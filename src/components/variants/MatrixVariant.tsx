@@ -20,6 +20,7 @@ import {
   LIBRARY_TRACE_BLOCK,
   readV2DragData,
   setV2DragData,
+  studySourceIdsFromPayload,
   type OutlineRefPayload,
   type V2DragPayload,
 } from "../../utils/v2DragPayload";
@@ -48,6 +49,7 @@ export function MatrixVariant({
   onUpdateSource,
   onRemoveSource,
   onMapStudySourceWithRole,
+  onMapStudySourcesWithRole,
   onMapOutlineRefWithRole,
   onHeadingSlotDrop,
   onMoveSourceToMatrixCell,
@@ -65,6 +67,11 @@ export function MatrixVariant({
   onMapStudySourceWithRole: (
     blockId: string,
     studySourceId: string,
+    role: SourceRole,
+  ) => void;
+  onMapStudySourcesWithRole?: (
+    blockId: string,
+    studySourceIds: string[],
     role: SourceRole,
   ) => void;
   onMapOutlineRefWithRole: (
@@ -155,7 +162,8 @@ export function MatrixVariant({
     if (!payload) return;
 
     if (options?.headingSlotId) {
-      if (payload.kind === "study-source" || payload.kind === "mapped") {
+      const studySourceIds = studySourceIdsFromPayload(payload);
+      if (studySourceIds || payload.kind === "mapped") {
         onHeadingSlotDrop(options.headingSlotId, roleForMatrixColumn(col), payload);
       }
       setDropTarget(null);
@@ -166,12 +174,18 @@ export function MatrixVariant({
       dropMappedOnCell(toBlockId, col, payload.fromBlockId, payload.sourceId);
       return;
     }
-    if (payload?.kind === "study-source") {
-      onMapStudySourceWithRole(
-        toBlockId,
-        payload.studySourceId,
-        roleForMatrixColumn(col),
-      );
+    const studySourceIds = studySourceIdsFromPayload(payload);
+    if (studySourceIds) {
+      const role = roleForMatrixColumn(col);
+      if (studySourceIds.length === 1) {
+        onMapStudySourceWithRole(toBlockId, studySourceIds[0]!, role);
+      } else if (onMapStudySourcesWithRole) {
+        onMapStudySourcesWithRole(toBlockId, studySourceIds, role);
+      } else {
+        for (const studySourceId of studySourceIds) {
+          onMapStudySourceWithRole(toBlockId, studySourceId, role);
+        }
+      }
     } else if (payload?.kind === "outline-ref") {
       if (options?.rejectOutlineRef?.(payload)) {
         setDropTarget(null);
