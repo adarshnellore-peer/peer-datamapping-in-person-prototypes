@@ -61,7 +61,8 @@ const OUTLINE_STROKE = "#6366f1";
 const OUTLINE_STROKE_HOVER = "#4338ca";
 
 const ROLE_STROKE_HOVER: Record<SourceRole, string> = {
-  primary: "#e64641",
+  text: "#e64641",
+  table: "#0d9488",
   supporting: "#2b5bd7",
   context: "#636161",
   reference: "#5b21b6",
@@ -69,7 +70,7 @@ const ROLE_STROKE_HOVER: Record<SourceRole, string> = {
 
 function pathEdgeRole(path: EdgePath): SourceRole {
   if (path.kind === "outline") return path.edge.role ?? "reference";
-  return path.role ?? "primary";
+  return path.role ?? "text";
 }
 
 function pathStroke(path: EdgePath, isHover: boolean): string {

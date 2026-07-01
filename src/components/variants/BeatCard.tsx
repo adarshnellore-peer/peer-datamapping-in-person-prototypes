@@ -3,6 +3,7 @@ import { AlertTriangle } from "lucide-react";
 import type { ContentBlockData, DocumentBlock } from "../../types";
 import { KeyMessageFooter } from "../KeyMessageFooter";
 import { SectionMapper } from "./SectionMapper";
+import { isInsertRole } from "./types";
 
 /** Nearest preceding heading label for a content block. */
 export function headingLabelFor(blocks: DocumentBlock[], blockId: string): string | null {
@@ -42,8 +43,8 @@ export function BeatCard({
   isDropTarget?: boolean;
   dropOverlay?: ReactNode;
 }) {
-  const primaryCount = block.sources.filter((s) => s.role === "primary").length;
-  const showGap = block.sources.length > 0 && primaryCount === 0;
+  const insertCount = block.sources.filter((s) => isInsertRole(s.role)).length;
+  const showGap = block.sources.length > 0 && insertCount === 0;
 
   return (
     <div
@@ -72,7 +73,7 @@ export function BeatCard({
       {showGap && (
         <div className="mx-3 mb-3 flex items-center gap-2 rounded-md bg-[#fff8e6] px-3 py-2 text-[12px] text-[#9a6700] sm:mx-4">
           <AlertTriangle size={14} className="shrink-0" />
-          Consider marking a source as primary before filing.
+          Consider marking a source as text or table before filing.
         </div>
       )}
 

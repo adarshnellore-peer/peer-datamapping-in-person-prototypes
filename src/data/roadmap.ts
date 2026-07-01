@@ -211,12 +211,13 @@ export const OUTPUT_TYPES = [
 export const DEFAULT_PROMPT =
   "Generate the CSR Title-Page table. Use the exact two-column structure provided below; the left column labels must remain verbatim. Populate the right-hand cells with values extracted from the Protocol Title Page / Synopsis and the Sponsor corporate roster. If a value is missing, insert the text 'TBD.'";
 
-export const SOURCE_ROLES = ["primary", "supporting", "context", "reference"] as const;
+export const SOURCE_ROLES = ["text", "table", "supporting", "context", "reference"] as const;
 
 export type SourceRole = (typeof SOURCE_ROLES)[number];
 
 export const SOURCE_ROLE_LABELS: Record<SourceRole, string> = {
-  primary: "Primary",
+  text: "Text",
+  table: "Table",
   supporting: "Supporting",
   context: "Context",
   reference: "Reference",
@@ -225,7 +226,7 @@ export const SOURCE_ROLE_LABELS: Record<SourceRole, string> = {
 type RoadmapSourceBase = {
   id: string;
   status?: "proposed" | "confirmed";
-  /** How the source is used in this section: primary / supporting / context. */
+  /** How the source is used in this section: text / table / supporting / context. */
   role?: SourceRole;
   /** Bibliographic / citation reference — orthogonal to usage role. */
   isReference?: boolean;
