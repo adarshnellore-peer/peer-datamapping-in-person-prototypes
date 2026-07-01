@@ -22,7 +22,7 @@ export const VARIANTS: { id: VariantId; name: string; description: string }[] = 
   {
     id: "matrix",
     name: "V3 \u00b7 Mode matrix",
-    description: "Sections \u00d7 Insert / Interpret / Reference with document library",
+    description: "Sections \u00d7 Primary narrative / Supporting evidence / Background reference",
   },
   {
     id: "connectors",

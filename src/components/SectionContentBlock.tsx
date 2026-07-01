@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { GripVertical, Pencil, Plus } from "lucide-react";
+import { GripVertical, Pencil } from "lucide-react";
 import { GenerateAsSelect } from "./OutputTypeToggle";
 import { DuplicateDeleteActions } from "./SourceCard";
 import { KeyMessageFooter } from "./KeyMessageFooter";
@@ -113,7 +113,6 @@ export function SectionContentBlock({
   onDragHandlePointerDown,
   onUpdateSource,
   onRemoveSource,
-  onAddSource,
   onPromptChange,
   onAdditionalContextChange,
   onOutputTypeChange,
@@ -126,7 +125,6 @@ export function SectionContentBlock({
   onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
-  onAddSource: () => void;
   onPromptChange: (prompt: string) => void;
   onAdditionalContextChange: (additionalContext: string) => void;
   onOutputTypeChange: (outputType: string) => void;
@@ -175,13 +173,6 @@ export function SectionContentBlock({
           onRemoveSource={onRemoveSource}
           allowSourceTypeChange
         />
-        <button
-          type="button"
-          onClick={onAddSource}
-          className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-[#d4ced3] py-2 text-[13px] font-medium text-[#636161] transition-colors hover:border-[#ff4e49]/40 hover:bg-[#fffafa] hover:text-[#302f2f]"
-        >
-          <Plus size={14} /> Add source
-        </button>
       </div>
 
       <div className="border-t border-[#ececec] bg-[#fafafa] px-3 py-3 sm:px-4">

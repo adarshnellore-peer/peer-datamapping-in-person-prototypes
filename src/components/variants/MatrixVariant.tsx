@@ -38,7 +38,7 @@ function headingDragLabel(heading: HeadingBlock): string {
 
 /**
  * V3 — Mode matrix + document library. Rows are roadmap sections; columns are
- * Insert+interpret / Interpret only / Reference. Drag from the library or
+ * Primary narrative / Supporting evidence / Background reference. Drag from the library or
  * between columns to map and retag sources.
  */
 export function MatrixVariant({

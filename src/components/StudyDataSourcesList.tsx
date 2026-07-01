@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { ChevronRight, Eye, GripVertical, Search, X } from "lucide-react";
+import { ChevronRight, GripVertical, Search, X } from "lucide-react";
 import { parsePageRange, getReferenceDisplayName } from "../data/documentPreview";
 import { getDocumentCategory } from "../data/roadmap";
 import type { StudyDataSource } from "../data/studyDataSources";
@@ -17,6 +17,8 @@ const CATEGORY_SWATCH: Record<string, string> = {
   Listings: "#6366f1",
   Document: "#bdbdbd",
 };
+
+const HOVER_EXPAND_LEAVE_MS = 160;
 
 type DocumentGroup = {
   key: string;
@@ -124,28 +126,37 @@ function groupDocuments(items: StudyDataSource[]): {
   return { documents, standalone };
 }
 
-function StatusDot({ processed }: { processed: boolean }) {
-  return (
-    <span
-      className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${
-        processed ? "bg-[#2e7d32]" : "bg-[#bdbdbd]"
-      }`}
-      aria-label={processed ? "Processed" : "Uploaded"}
-    />
-  );
-}
-
 function startStudySourceDrag(entry: StudyDataSource, event: DragEvent) {
   setV2DragData(event.dataTransfer, { kind: "study-source", studySourceId: entry.id });
 }
 
-function UsageBadge({ count }: { count: number }) {
+function rowMetric(
+  usageCount: number | undefined,
+  fallback?: number,
+): { value: number; title: string } | null {
+  if (usageCount != null && usageCount > 0) {
+    return {
+      value: usageCount,
+      title: `Mapped in ${usageCount} section${usageCount === 1 ? "" : "s"}`,
+    };
+  }
+  if (fallback != null && fallback > 0) {
+    return {
+      value: fallback,
+      title: `${fallback} section${fallback === 1 ? "" : "s"}`,
+    };
+  }
+  return null;
+}
+
+function RowMetric({ metric }: { metric: { value: number; title: string } | null }) {
+  if (!metric) return <span className="w-5 shrink-0" aria-hidden />;
   return (
     <span
-      className="shrink-0 rounded-full bg-[#e6f6ec] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[#1a8a4a]"
-      title={`Mapped in ${count} section${count === 1 ? "" : "s"}`}
+      className="w-5 shrink-0 text-right text-[11px] font-medium tabular-nums text-[#9e9e9e]"
+      title={metric.title}
     >
-      {count}×
+      {metric.value}
     </span>
   );
 }
@@ -169,6 +180,7 @@ function LibrarySectionRow({
 }) {
   const didDragRef = useRef(false);
   const draggable = enableMappingDrag;
+  const metric = rowMetric(usageCount);
 
   return (
     <div
@@ -183,19 +195,19 @@ function LibrarySectionRow({
           didDragRef.current = false;
         }, 0);
       }}
-      className={`group/lib-row flex items-center gap-1 rounded-md py-0.5 pr-1 transition-colors ${
+      className={`group/lib-row flex items-center gap-1.5 border-b border-[#f0f0f0] px-3 py-1.5 last:border-b-0 transition-colors ${
         draggable ? "cursor-grab touch-none active:cursor-grabbing" : ""
-      } ${isActive ? "bg-[#fedbda]" : "hover:bg-[#f3f3f3]"}`}
+      } ${isActive ? "bg-[#fff5f5]" : "hover:bg-[#f7f7f7]"}`}
     >
       {draggable ? (
         <GripVertical
-          size={11}
+          size={12}
           strokeWidth={2}
-          className="pointer-events-none shrink-0 text-[#d0d0d0]"
+          className="pointer-events-none shrink-0 text-[#d8d8d8]"
           aria-hidden
         />
       ) : (
-        <span className="w-[11px] shrink-0" aria-hidden />
+        <span className="w-3 shrink-0" aria-hidden />
       )}
       <button
         type="button"
@@ -204,28 +216,12 @@ function LibrarySectionRow({
           if (didDragRef.current) return;
           onSelect();
         }}
-        className="min-w-0 flex-1 truncate py-0.5 text-left"
+        className="min-w-0 flex-1 truncate text-left"
       >
-        <span className="text-[11px] font-medium text-[#302f2f]">{label}</span>
-        {pageRef && (
-          <span className="ml-1.5 text-[10px] font-normal text-[#9e9e9e]">{pageRef}</span>
-        )}
+        <span className="text-[11px] text-[#454545]">{label}</span>
+        {pageRef && <span className="ml-1.5 text-[10px] text-[#b0b0b0]">{pageRef}</span>}
       </button>
-      {usageCount != null && usageCount > 0 && <UsageBadge count={usageCount} />}
-      <button
-        type="button"
-        draggable={false}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelect();
-        }}
-        aria-label={`Preview ${label}`}
-        title="Trace to data"
-        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#bdbdbd] opacity-0 transition-opacity hover:text-[#302f2f] group-hover/lib-row:opacity-100"
-      >
-        <Eye size={12} strokeWidth={1.75} />
-      </button>
-      <StatusDot processed={entry.status === "processed"} />
+      <RowMetric metric={metric} />
     </div>
   );
 }
@@ -237,25 +233,23 @@ function defaultDragEntryForGroup(group: DocumentGroup): StudyDataSource {
 function LibraryDocumentRow({
   group,
   category,
-  collapsed,
+  expanded,
   isActive,
-  onToggleCollapse,
   onSelect,
   usageCount,
 }: {
   group: DocumentGroup;
   category: string;
-  collapsed: boolean;
+  expanded: boolean;
   isActive: boolean;
-  onToggleCollapse: () => void;
   onSelect: () => void;
   usageCount?: number;
 }) {
   const didDragRef = useRef(false);
   const dragEntry = defaultDragEntryForGroup(group);
   const swatch = CATEGORY_SWATCH[category] ?? CATEGORY_SWATCH.Document;
-  const entries = documentEntriesForGroup(group);
   const pageRef = pageRefFor(dragEntry);
+  const metric = rowMetric(usageCount, group.sections.length);
 
   return (
     <div
@@ -270,34 +264,24 @@ function LibraryDocumentRow({
           didDragRef.current = false;
         }, 0);
       }}
-      className={`group/lib-doc flex items-center gap-1 rounded-md py-0.5 pr-1 transition-colors cursor-grab touch-none active:cursor-grabbing ${
-        isActive ? "bg-[#fedbda]" : "hover:bg-[#f3f3f3]"
+      className={`group/lib-doc flex items-center gap-1.5 px-3 py-2 transition-colors cursor-grab touch-none active:cursor-grabbing ${
+        isActive ? "bg-[#fff5f5]" : "hover:bg-[#f7f7f7]"
       }`}
     >
       <GripVertical
-        size={11}
+        size={12}
         strokeWidth={2}
-        className="pointer-events-none shrink-0 text-[#d0d0d0]"
+        className="pointer-events-none shrink-0 text-[#d8d8d8]"
         aria-hidden
       />
-      <button
-        type="button"
-        draggable={false}
-        aria-expanded={!collapsed}
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleCollapse();
-        }}
-        className="flex h-5 w-4 shrink-0 items-center justify-center rounded text-[#bdbdbd] hover:bg-black/[0.05] hover:text-[#636161]"
-      >
-        <ChevronRight
-          size={13}
-          strokeWidth={2}
-          className={`transition-transform ${collapsed ? "" : "rotate-90"}`}
-        />
-      </button>
+      <ChevronRight
+        size={13}
+        strokeWidth={2}
+        className={`shrink-0 text-[#c8c8c8] transition-transform ${expanded ? "rotate-90" : ""}`}
+        aria-hidden
+      />
       <span
-        className="h-2 w-2 shrink-0 rounded-sm"
+        className="h-2 w-2 shrink-0 rounded-full"
         style={{ backgroundColor: swatch }}
         aria-hidden
       />
@@ -308,30 +292,13 @@ function LibraryDocumentRow({
           if (didDragRef.current) return;
           onSelect();
         }}
-        className="min-w-0 flex-1 truncate py-0.5 text-left"
+        className="min-w-0 flex-1 truncate text-left"
         title={pageRef ? `Default section: ${pageRef}` : undefined}
       >
-        <span className="text-[12px] font-medium text-[#302f2f]">{group.documentLabel}</span>
-        {pageRef && (
-          <span className="ml-1.5 text-[10px] font-normal text-[#9e9e9e]">{pageRef}</span>
-        )}
+        <span className="text-[12px] font-semibold text-[#302f2f]">{group.documentLabel}</span>
+        {pageRef && <span className="ml-1.5 text-[10px] font-normal text-[#b0b0b0]">{pageRef}</span>}
       </button>
-      {usageCount != null && usageCount > 0 && <UsageBadge count={usageCount} />}
-      <button
-        type="button"
-        draggable={false}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelect();
-        }}
-        aria-label={`Preview ${group.documentLabel}`}
-        title="Trace to data"
-        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#bdbdbd] opacity-0 transition-opacity hover:text-[#302f2f] group-hover/lib-doc:opacity-100"
-      >
-        <Eye size={12} strokeWidth={1.75} />
-      </button>
-      <span className="shrink-0 text-[10px] tabular-nums text-[#bdbdbd]">{entries.length}</span>
-      <StatusDot processed={dragEntry.status === "processed"} />
+      <RowMetric metric={metric} />
     </div>
   );
 }
@@ -340,42 +307,52 @@ function DocumentGroupSection({
   group,
   category,
   activeSourceId,
-  collapsed,
+  expanded,
   onToggleCollapse,
   onSelect,
+  onHoverStart,
+  onHoverEnd,
   enableMappingDrag = false,
   usageCountByStudySourceId,
 }: {
   group: DocumentGroup;
   category: string;
   activeSourceId?: string;
-  collapsed: boolean;
+  expanded: boolean;
   onToggleCollapse: () => void;
   onSelect: (source: StudyDataSource) => void;
+  onHoverStart?: () => void;
+  onHoverEnd?: () => void;
   enableMappingDrag?: boolean;
   usageCountByStudySourceId?: Record<string, number>;
 }) {
   const entries = documentEntriesForGroup(group);
   const collapseKey = `${category}:${group.key}`;
-  const swatch = CATEGORY_SWATCH[category] ?? CATEGORY_SWATCH.Document;
   const dragEntry = defaultDragEntryForGroup(group);
+  const hasSections = group.sections.length > 0;
 
   if (enableMappingDrag) {
     return (
-      <div>
+      <div
+        className="border-b border-[#e8e4ea] last:border-b-0"
+        onMouseEnter={onHoverStart}
+        onMouseLeave={onHoverEnd}
+      >
         <LibraryDocumentRow
           group={group}
           category={category}
-          collapsed={collapsed}
+          expanded={expanded}
           isActive={dragEntry.id === activeSourceId}
-          onToggleCollapse={onToggleCollapse}
           onSelect={() => onSelect(dragEntry)}
           usageCount={usageCountByStudySourceId?.[dragEntry.id]}
         />
 
-        {!collapsed && (
-          <div id={`doc-sections-${collapseKey}`} className="ml-[18px] border-l border-[#ececec] pl-1.5">
-            {entries.slice(1).map((entry) => (
+        {expanded && hasSections && (
+          <div
+            id={`doc-sections-${collapseKey}`}
+            className="border-t border-[#ececec] bg-[#fcfcfc] pl-4"
+          >
+            {group.sections.map((entry) => (
               <LibrarySectionRow
                 key={entry.id}
                 entry={entry}
@@ -394,34 +371,32 @@ function DocumentGroupSection({
   }
 
   return (
-    <div>
+    <div className="border-b border-[#e8e4ea] last:border-b-0">
       <button
         type="button"
-        aria-expanded={!collapsed}
+        aria-expanded={expanded}
         aria-controls={`doc-sections-${collapseKey}`}
         onClick={onToggleCollapse}
-        className="flex w-full items-center gap-1.5 rounded-md py-1 pl-0.5 pr-1 text-left transition-colors hover:bg-[#f3f3f3]"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-[#f7f7f7]"
       >
         <ChevronRight
           size={13}
           strokeWidth={2}
-          className={`shrink-0 text-[#bdbdbd] transition-transform ${collapsed ? "" : "rotate-90"}`}
+          className={`shrink-0 text-[#bdbdbd] transition-transform ${expanded ? "rotate-90" : ""}`}
         />
         <span
-          className="h-2 w-2 shrink-0 rounded-sm"
-          style={{ backgroundColor: swatch }}
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: CATEGORY_SWATCH[category] ?? CATEGORY_SWATCH.Document }}
           aria-hidden
         />
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#302f2f]">
           {group.documentLabel}
         </span>
-        <span className="shrink-0 text-[10px] tabular-nums text-[#bdbdbd]">
-          {entries.length}
-        </span>
+        <RowMetric metric={rowMetric(undefined, entries.length)} />
       </button>
 
-      {!collapsed && (
-        <div id={`doc-sections-${collapseKey}`} className="ml-[18px] border-l border-[#ececec] pl-1.5">
+      {expanded && (
+        <div id={`doc-sections-${collapseKey}`} className="border-t border-[#ececec] bg-[#fcfcfc]">
           {entries.map((entry) => (
             <LibrarySectionRow
               key={entry.id}
@@ -445,7 +420,9 @@ function CategorySection({
   items,
   activeSourceId,
   collapsedDocs,
+  hoverDocKey,
   onToggleDocument,
+  onHoverDocument,
   onSelect,
   enableMappingDrag = false,
   usageCountByStudySourceId,
@@ -454,36 +431,72 @@ function CategorySection({
   items: StudyDataSource[];
   activeSourceId?: string;
   collapsedDocs: Set<string>;
+  hoverDocKey: string | null;
   onToggleDocument: (key: string) => void;
+  onHoverDocument: (key: string | null) => void;
   onSelect: (source: StudyDataSource) => void;
   enableMappingDrag?: boolean;
   usageCountByStudySourceId?: Record<string, number>;
 }) {
   const { documents, standalone } = useMemo(() => groupDocuments(items), [items]);
+  const swatch = CATEGORY_SWATCH[category] ?? CATEGORY_SWATCH.Document;
+  const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const docIsExpanded = (key: string, group: DocumentGroup) => {
+    const hasActiveChild = documentEntriesForGroup(group).some((entry) => entry.id === activeSourceId);
+    if (hasActiveChild) return true;
+    if (enableMappingDrag && hoverDocKey === key) return true;
+    return !collapsedDocs.has(key);
+  };
+
+  const scheduleHoverEnd = () => {
+    if (!enableMappingDrag) return;
+    if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
+    hoverLeaveTimerRef.current = setTimeout(() => onHoverDocument(null), HOVER_EXPAND_LEAVE_MS);
+  };
+
+  const cancelHoverEnd = () => {
+    if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
+  };
 
   return (
-    <section className="px-3 pb-3">
-      <div className="mb-1 flex items-baseline gap-1.5 px-0.5 pt-3 first:pt-1">
-        <h4 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#9e9e9e]">
+    <section className="border-b border-[#d4ced3] last:border-b-0">
+      <div className="flex items-center gap-2 border-b border-[#e8e4ea] bg-[#f3f3f3] px-3 py-2">
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: swatch }} />
+        <h4 className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#636161]">
           {category}
         </h4>
-        <span className="text-[10px] tabular-nums text-[#bdbdbd]">{items.length}</span>
+        <span className="ml-auto text-[10px] font-medium tabular-nums text-[#9e9e9e]">
+          {items.length}
+        </span>
       </div>
 
-      <div className="space-y-0.5">
-        {documents.map((group) => (
-          <DocumentGroupSection
-            key={group.key}
-            group={group}
-            category={category}
-            activeSourceId={activeSourceId}
-            collapsed={collapsedDocs.has(`${category}:${group.key}`)}
-            onToggleCollapse={() => onToggleDocument(`${category}:${group.key}`)}
-            onSelect={onSelect}
-            enableMappingDrag={enableMappingDrag}
-            usageCountByStudySourceId={usageCountByStudySourceId}
-          />
-        ))}
+      <div>
+        {documents.map((group) => {
+          const key = `${category}:${group.key}`;
+          return (
+            <DocumentGroupSection
+              key={group.key}
+              group={group}
+              category={category}
+              activeSourceId={activeSourceId}
+              expanded={docIsExpanded(key, group)}
+              onToggleCollapse={() => onToggleDocument(key)}
+              onSelect={onSelect}
+              onHoverStart={
+                enableMappingDrag
+                  ? () => {
+                      cancelHoverEnd();
+                      onHoverDocument(key);
+                    }
+                  : undefined
+              }
+              onHoverEnd={enableMappingDrag ? scheduleHoverEnd : undefined}
+              enableMappingDrag={enableMappingDrag}
+              usageCountByStudySourceId={usageCountByStudySourceId}
+            />
+          );
+        })}
 
         {standalone.map((entry) => (
           <LibrarySectionRow
@@ -528,6 +541,7 @@ export function StudyDataSourcesList({
   const [collapsedDocs, setCollapsedDocs] = useState<Set<string>>(() =>
     buildDefaultCollapsedKeys(sources),
   );
+  const [hoverDocKey, setHoverDocKey] = useState<string | null>(null);
   const query = controlledQuery ?? internalQuery;
   const setQuery = onQueryChange ?? setInternalQuery;
 
@@ -590,7 +604,7 @@ export function StudyDataSourcesList({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fafafa]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <div className="shrink-0 border-b border-[#d4ced3] bg-white px-3 py-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="text-[13px] font-semibold text-[#302f2f]">
@@ -652,7 +666,7 @@ export function StudyDataSourcesList({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto py-1">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {categories.length === 0 ? (
           <p className="px-3 py-8 text-center text-[12px] text-[#8a8a8a]">No matches.</p>
         ) : (
@@ -663,7 +677,9 @@ export function StudyDataSourcesList({
               items={items}
               activeSourceId={activeSourceId}
               collapsedDocs={collapsedDocs}
+              hoverDocKey={hoverDocKey}
               onToggleDocument={toggleDocument}
+              onHoverDocument={setHoverDocKey}
               onSelect={onSelect}
               enableMappingDrag={enableMappingDrag}
               usageCountByStudySourceId={usageCountByStudySourceId}

@@ -1408,9 +1408,6 @@ export function RoadmapPage() {
                       }
                       onUpdateSource={(source) => updateSourceInBlock(block.id, source)}
                       onRemoveSource={(sourceId) => removeSourceFromBlock(block.id, sourceId)}
-                      onAddSource={() =>
-                        setToast("Study library is disabled in this prototype")
-                      }
                       onPromptChange={(prompt) => updatePrompt(block.id, prompt)}
                       onAdditionalContextChange={(additionalContext) =>
                         updateAdditionalContext(block.id, additionalContext)
@@ -1746,7 +1743,6 @@ function BlockRenderer({
   onDragHandlePointerDown,
   onUpdateSource,
   onRemoveSource,
-  onAddSource,
   onPromptChange,
   onAdditionalContextChange,
   onOutputTypeChange,
@@ -1763,7 +1759,6 @@ function BlockRenderer({
   onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
-  onAddSource: () => void;
   onPromptChange: (prompt: string) => void;
   onAdditionalContextChange: (additionalContext: string) => void;
   onOutputTypeChange: (outputType: string) => void;
@@ -1842,7 +1837,6 @@ function BlockRenderer({
         onDragHandlePointerDown={onDragHandlePointerDown}
         onUpdateSource={onUpdateSource}
         onRemoveSource={onRemoveSource}
-        onAddSource={onAddSource}
         onPromptChange={onPromptChange}
         onAdditionalContextChange={onAdditionalContextChange}
         onOutputTypeChange={onOutputTypeChange}

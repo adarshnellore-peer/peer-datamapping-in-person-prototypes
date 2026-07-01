@@ -141,12 +141,14 @@ export function roleLabel(role: SourceRole): string {
   return SOURCE_ROLE_LABELS[role];
 }
 
-/** Short hint describing how a usage role is drafted from — shown in matrix column heads. */
+/** Short hint describing how a source is used in the section — shown in matrix column heads. */
 export const ROLE_HINT: Record<SourceRole, string> = {
-  primary: "Pull the output\u2019s values in and interpret them \u2014 retain approved numbers/structure.",
-  supporting: "Summarize and synthesize from this source; do not lift content verbatim.",
-  context: "Context only \u2014 for cross-checking facts; not drafted from directly.",
-  reference: "Context only \u2014 for cross-checking facts; not drafted from directly.",
+  primary:
+    "Report results and interpretation from this source directly in the section text.",
+  supporting:
+    "Inform background or discussion; summarize\u2014do not reproduce tables or listings verbatim.",
+  context: "Cross-check facts and maintain traceability; not drafted from.",
+  reference: "Cross-check facts and maintain traceability; not drafted from.",
 };
 
 /** Three-column mode matrix layout (Claude prototype alignment). */
@@ -166,7 +168,7 @@ export const MATRIX_COLUMNS: {
   {
     id: "insert",
     role: "primary",
-    label: "Insert + interpret",
+    label: "Primary narrative",
     hint: ROLE_HINT.primary,
     dotHex: "#1a8a4a",
     text: "text-[#1a8a4a]",
@@ -176,7 +178,7 @@ export const MATRIX_COLUMNS: {
   {
     id: "interpret",
     role: "supporting",
-    label: "Interpret only",
+    label: "Supporting evidence",
     hint: ROLE_HINT.supporting,
     dotHex: "#2b5bd7",
     text: "text-[#2b5bd7]",
@@ -186,7 +188,7 @@ export const MATRIX_COLUMNS: {
   {
     id: "reference",
     role: "context",
-    label: "Reference",
+    label: "Background reference",
     hint: ROLE_HINT.context,
     dotHex: "#9e9e9e",
     text: "text-[#636161]",
