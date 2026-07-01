@@ -1,4 +1,4 @@
-import { SOURCE_ROLE_LABELS, type RoadmapSource, type SourceRole } from "../../data/roadmap";
+import { SOURCE_ROLE_LABELS, SOURCE_ROLES, type RoadmapSource, type SourceRole } from "../../data/roadmap";
 import { getSourceTypeTag } from "../../data/sourceHelpers";
 import type { DocumentBlock } from "../../types";
 
@@ -122,16 +122,17 @@ export function sourceCategories(sources: RoadmapSource[]): string[] {
 
 /** Badge styling per usage role. */
 export const ROLE_BADGE: Record<SourceRole, string> = {
-  text: "border-[var(--peer-primary-border)] bg-[var(--peer-primary-tint)] text-[#9a1c12] font-semibold",
-  table: "border-[#5eead4] bg-[#f0fdfa] text-[#115e59] font-semibold",
+  primary: "border-[var(--peer-primary-border)] bg-[var(--peer-primary-tint)] text-[#9a1c12] font-semibold",
+  supporting: "border-[#bcd0ff] bg-[#eef3ff] text-[#2b5bd7] font-semibold",
   context: "border-[#dcdcdc] bg-[#f3f3f3] text-[#636161] font-semibold",
   reference: "border-[#d8b4fe] bg-[#f3e8ff] text-[#5b21b6] font-semibold",
 };
 
 /** Faded chips in the inline role picker (unselected). */
 export const ROLE_BADGE_PICKER: Record<SourceRole, string> = {
-  text: "border-[var(--peer-primary-border)]/30 bg-[var(--peer-primary-tint)]/35 text-[#9a1c12]/65",
-  table: "border-[#5eead4]/35 bg-[#f0fdfa]/40 text-[#115e59]/65",
+  primary:
+    "border-[var(--peer-primary-border)]/30 bg-[var(--peer-primary-tint)]/35 text-[#9a1c12]/65",
+  supporting: "border-[#bcd0ff]/35 bg-[#eef3ff]/40 text-[#2b5bd7]/65",
   context: "border-[#dcdcdc]/50 bg-[#f3f3f3]/50 text-[#636161]/65",
   reference: "border-[#d8b4fe]/35 bg-[#f3e8ff]/40 text-[#5b21b6]/65",
 };
@@ -142,10 +143,11 @@ export function roleLabel(role: SourceRole): string {
 
 /** Short hint describing how a source is used in the section — shown in matrix column heads. */
 export const ROLE_HINT: Record<SourceRole, string> = {
-  text: "Report narrative text from this source directly in the section.",
-  table: "Insert or reproduce tabular results from this source in the section.",
-  context:
-    "Inform background or discussion; summarize and cross-check facts for traceability.",
+  primary:
+    "Report results and interpretation from this source directly in the section text.",
+  supporting:
+    "Inform background or discussion; summarize\u2014do not reproduce tables or listings verbatim.",
+  context: "Cross-check facts and maintain traceability; not drafted from.",
   reference: "Cross-check facts and maintain traceability; not drafted from.",
 };
 
@@ -165,9 +167,9 @@ export const MATRIX_COLUMNS: {
 }[] = [
   {
     id: "insert",
-    role: "text",
+    role: "primary",
     label: "Primary narrative",
-    hint: ROLE_HINT.text,
+    hint: ROLE_HINT.primary,
     dotHex: "#1a8a4a",
     text: "text-[#1a8a4a]",
     cellTint: "bg-[#edf7f1]",
@@ -175,9 +177,9 @@ export const MATRIX_COLUMNS: {
   },
   {
     id: "interpret",
-    role: "context",
+    role: "supporting",
     label: "Supporting evidence",
-    hint: ROLE_HINT.context,
+    hint: ROLE_HINT.supporting,
     dotHex: "#2b5bd7",
     text: "text-[#2b5bd7]",
     cellTint: "bg-[#eef3fc]",
@@ -185,9 +187,9 @@ export const MATRIX_COLUMNS: {
   },
   {
     id: "reference",
-    role: "reference",
+    role: "context",
     label: "Background reference",
-    hint: ROLE_HINT.reference,
+    hint: ROLE_HINT.context,
     dotHex: "#9e9e9e",
     text: "text-[#636161]",
     cellTint: "bg-[#f2f2f2]",
@@ -195,14 +197,10 @@ export const MATRIX_COLUMNS: {
   },
 ];
 
-export function isInsertRole(role: SourceRole | undefined): boolean {
-  return role === "text" || role === "table";
-}
-
 export function matrixColumnForSource(source: RoadmapSource): MatrixColumnId {
   const role = effectiveSourceRole(source);
-  if (isInsertRole(role)) return "insert";
-  if (role === "context") return "interpret";
+  if (role === "primary") return "insert";
+  if (role === "supporting") return "interpret";
   return "reference";
 }
 
@@ -243,8 +241,8 @@ export const ROLE_ACCENT: Record<
   SourceRole,
   { text: string; cellTint: string; dotHex: string }
 > = {
-  text: { text: "text-[#b3261e]", cellTint: "bg-[#fff6f5]", dotHex: "#fe9591" },
-  table: { text: "text-[#115e59]", cellTint: "bg-[#f0fdfa]", dotHex: "#5eead4" },
+  primary: { text: "text-[#b3261e]", cellTint: "bg-[#fff6f5]", dotHex: "#fe9591" },
+  supporting: { text: "text-[#2b5bd7]", cellTint: "bg-[#f6f9ff]", dotHex: "#7ea2f0" },
   context: { text: "text-[#636161]", cellTint: "bg-[#f8f8f8]", dotHex: "#bdbdbd" },
   reference: { text: "text-[#5b21b6]", cellTint: "bg-[#faf5ff]", dotHex: "#c084fc" },
 };
@@ -305,8 +303,17 @@ export const NODE_HEX: Record<MappingState, string> = {
   empty: "#d0a000",
 };
 
+function coerceSourceRole(role: string): SourceRole | undefined {
+  if (role === "text" || role === "table") return "primary";
+  if ((SOURCE_ROLES as readonly string[]).includes(role)) return role as SourceRole;
+  return undefined;
+}
+
 export function effectiveSourceRole(source: RoadmapSource): SourceRole | undefined {
-  if (source.role) return source.role;
+  if (source.role) {
+    const coerced = coerceSourceRole(String(source.role));
+    if (coerced) return coerced;
+  }
   if (source.isReference || source.sourceType === "REFERENCE_SOURCE") return "reference";
   return undefined;
 }
@@ -314,7 +321,7 @@ export function effectiveSourceRole(source: RoadmapSource): SourceRole | undefin
 export function mappingStatus(sources: RoadmapSource[]): MappingState {
   if (sources.length === 0) return "empty";
   if (sources.some((s) => s.status === "proposed")) return "review";
-  if (!sources.some((s) => isInsertRole(effectiveSourceRole(s)))) return "needsPrimary";
+  if (!sources.some((s) => effectiveSourceRole(s) === "primary")) return "needsPrimary";
   return "ready";
 }
 
@@ -325,7 +332,7 @@ export const MAPPING_BADGE: Record<
   ready: { label: "Ready", badge: "bg-[#e6f6ec] text-[#1a8a4a]", dot: "bg-[#1a8a4a]" },
   review: { label: "In review", badge: "bg-[#eef3ff] text-[#2b5bd7]", dot: "bg-[#2b5bd7]" },
   needsPrimary: {
-    label: "Needs text or table",
+    label: "Needs primary",
     badge: "bg-[#fff3cd] text-[#9a6700]",
     dot: "bg-[#e0a800]",
   },

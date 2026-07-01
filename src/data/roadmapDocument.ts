@@ -8,7 +8,7 @@ function src(
   sectionName: string,
   documentCategory: string,
   status: "proposed" | "confirmed" = "confirmed",
-  role: SourceRole = "text",
+  role: SourceRole = "primary",
 ): DataSourceRoadmapSource {
   return {
     id,
@@ -57,7 +57,7 @@ const SOURCES_1_5: RoadmapSource[] = [
     "Section 1",
     "Protocol",
     "confirmed",
-    "context",
+    "supporting",
   ),
   src(
     "s-1-5-3",
@@ -104,7 +104,7 @@ const SOURCES_1_6_DEMOGRAPHICS: RoadmapSource[] = [
     "Analysis Populations",
     "SAP",
     "confirmed",
-    "context",
+    "supporting",
   ),
   src(
     "s-1-6d-3",
@@ -195,7 +195,7 @@ const SOURCES_1_9: RoadmapSource[] = [
     "Secondary Efficacy Endpoints",
     "SAP",
     "confirmed",
-    "context",
+    "supporting",
   ),
   src(
     "s-1-9-3",
@@ -204,7 +204,7 @@ const SOURCES_1_9: RoadmapSource[] = [
     "Efficacy Results — Primary Endpoint",
     "CSR",
     "confirmed",
-    "context",
+    "supporting",
   ),
   src(
     "s-1-9-4",
@@ -233,7 +233,7 @@ const SOURCES_1_10: RoadmapSource[] = [
     "TEAE Overview",
     "TLF",
     "confirmed",
-    "table",
+    "primary",
   ),
   src(
     "s-1-10-3",
@@ -242,7 +242,7 @@ const SOURCES_1_10: RoadmapSource[] = [
     "TEAE by Maximum Severity",
     "TLF",
     "confirmed",
-    "context",
+    "supporting",
   ),
   src(
     "s-1-10-4",
@@ -414,7 +414,7 @@ const CSR_BODY: DocumentBlock[] = [
   h("h-7", 1, "7", "Efficacy Evaluation"),
   c("c-7-1", "Primary endpoint results", "OUTPUT_TYPE_TABLE", [
     src("s-7-1-1", "TLF Package — Efficacy (Tables)", "Table 14.2.1 Primary Endpoint: 5-12", "Table 14.2.1 Primary Endpoint", "TLF"),
-    src("s-7-1-2", "Clinical Study Report", "Efficacy Results — Primary Endpoint: 198-224", "Efficacy Results — Primary Endpoint", "CSR", "confirmed", "context"),
+    src("s-7-1-2", "Clinical Study Report", "Efficacy Results — Primary Endpoint: 198-224", "Efficacy Results — Primary Endpoint", "CSR", "confirmed", "supporting"),
     src("s-7-1-3", "247HV101 SAP Version 2", "Primary Analysis: 50-58", "Primary Analysis", "SAP", "confirmed", "context"),
   ]),
   c("c-7-2", "Secondary endpoint results", "OUTPUT_TYPE_TABLE", [
@@ -434,27 +434,27 @@ const CSR_BODY: DocumentBlock[] = [
   h("h-8", 1, "8", "Safety Evaluation"),
   c("c-8-1", "Extent of exposure", "OUTPUT_TYPE_TABLE", [
     src("s-8-1-1", "TLF Package — Safety (Tables)", "Table 14.3.1 Exposure: 1-5", "Table 14.3.1 Exposure", "TLF"),
-    src("s-8-1-2", "Safety Tables — Treatment-Emergent AEs", "Exposure Summary: 1-3", "Exposure Summary", "TLF", "confirmed", "table"),
+    src("s-8-1-2", "Safety Tables — Treatment-Emergent AEs", "Exposure Summary: 1-3", "Exposure Summary", "TLF", "confirmed", "primary"),
     src("s-8-1-3", "Biogen Clinical Study Report Template", "Section 12.1 Extent of Exposure: 41-42", "Section 12.1", "Template", "confirmed", "reference"),
     src("s-8-1-4", "109MS306 (CONNECT) LTE Statistical Analysis Plan", "Safety Analysis Population: 16-17", "Safety Analysis Population", "SAP", "confirmed", "reference"),
   ]),
   c("c-8-2", "Adverse events", "OUTPUT_TYPE_TABLE", [
     src("s-8-2-1", "Safety Tables — Treatment-Emergent AEs", "TEAE by System Organ Class: 4-28", "TEAE by System Organ Class", "TLF"),
-    src("s-8-2-1b", "Safety Tables — Treatment-Emergent AEs", "TEAE Treatment-Related: 29-35", "Treatment-Related TEAEs", "TLF", "confirmed", "table"),
-    src("s-8-2-2", "Clinical Study Report", "Safety Summary — Adverse Events: 312-348", "Safety Summary — Adverse Events", "CSR", "confirmed", "context"),
+    src("s-8-2-1b", "Safety Tables — Treatment-Emergent AEs", "TEAE Treatment-Related: 29-35", "Treatment-Related TEAEs", "TLF", "confirmed", "primary"),
+    src("s-8-2-2", "Clinical Study Report", "Safety Summary — Adverse Events: 312-348", "Safety Summary — Adverse Events", "CSR", "confirmed", "supporting"),
     src("s-8-2-3", "109MS306 (CONNECT) LTE Statistical Analysis Plan", "Safety Analyses — Treatment-Emergent Adverse Events: 112-128", "Safety Analyses — TEAE", "SAP", "confirmed", "reference"),
     src("s-8-2-4", "Biogen Clinical Study Report Template", "Section 12.2.2 Display of AEs: 44-45", "Section 12.2.2", "Template", "proposed"),
   ]),
   c("c-8-3", "Serious adverse events and deaths", "OUTPUT_TYPE_TABLE", [
     src("s-8-3-1", "Safety Tables — Serious AEs", "SAE Summary: 1-14", "SAE Summary", "TLF"),
-    src("s-8-3-2", "TLF Package — Safety (Listings)", "Listing 16.2.7.2 SAE Listing: 1-40", "SAE Listing", "TLF", "confirmed", "table"),
-    src("s-8-3-3", "Clinical Study Report", "Safety Summary — SAEs: 312-348", "Safety Summary — SAEs", "CSR", "confirmed", "context"),
+    src("s-8-3-2", "TLF Package — Safety (Listings)", "Listing 16.2.7.2 SAE Listing: 1-40", "SAE Listing", "TLF", "confirmed", "primary"),
+    src("s-8-3-3", "Clinical Study Report", "Safety Summary — SAEs: 312-348", "Safety Summary — SAEs", "CSR", "confirmed", "supporting"),
     src("s-8-3-4", "DSUR 2024", "Cumulative SAE Review: 22-46", "Cumulative SAE Review", "Report", "proposed", "reference"),
   ]),
   c("c-8-4", "Clinical laboratory evaluation", "OUTPUT_TYPE_TABLE", [
     src("s-8-4-1", "Safety Tables — Laboratory Abnormalities", "Lab Shift Tables: 1-19", "Lab Shift Tables", "TLF"),
-    src("s-8-4-2", "TLF Package — Safety (Listings)", "Listing 16.2.8 Lab Abnormalities: 80-140", "Listing 16.2.8 Lab Abnormalities", "TLF", "confirmed", "table"),
-    src("s-8-4-3", "TLF Package — Safety (Figures)", "Figure 14.3.1 Lab Trends: 1-8", "Lab Trends Figure", "TLF", "confirmed", "context"),
+    src("s-8-4-2", "TLF Package — Safety (Listings)", "Listing 16.2.8 Lab Abnormalities: 80-140", "Listing 16.2.8 Lab Abnormalities", "TLF", "confirmed", "primary"),
+    src("s-8-4-3", "TLF Package — Safety (Figures)", "Figure 14.3.1 Lab Trends: 1-8", "Lab Trends Figure", "TLF", "confirmed", "supporting"),
     src("s-8-4-4", "109MS306 (CONNECT) LTE Statistical Analysis Plan", "Laboratory Analyses: 128-135", "Laboratory Analyses", "SAP", "confirmed", "reference"),
   ]),
   c("c-8-5", "Vital signs and physical findings", "OUTPUT_TYPE_SUMMARY", [
