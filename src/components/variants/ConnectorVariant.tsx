@@ -417,6 +417,43 @@ function pendingConnectAnchor(
   return { x: pending.x, y: pending.y };
 }
 
+function buildPendingConnectPreview(
+  pending: PendingConnect,
+  viewport: HTMLDivElement,
+  secRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>,
+  headRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>,
+  refRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>,
+): { d: string; stroke: string } | null {
+  const vrect = viewport.getBoundingClientRect();
+  if (pending.kind === "source") {
+    const sEl = secRefs.current[pending.blockId];
+    const tEl = refRefs.current[pending.studySourceId];
+    if (!sEl || !tEl) return null;
+    const sr = sEl.getBoundingClientRect();
+    const tr = tEl.getBoundingClientRect();
+    const x1 = roundPathCoord(sr.right - vrect.left);
+    const y1 = roundPathCoord(sr.top + sr.height / 2 - vrect.top);
+    const x2 = roundPathCoord(tr.left - vrect.left);
+    const y2 = roundPathCoord(tr.top + tr.height / 2 - vrect.top);
+    const dx = Math.max(40, (x2 - x1) / 2);
+    return {
+      d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`,
+      stroke: "#ff4e49",
+    };
+  }
+  const refEl = leftNodeEl(pending.refKind, pending.refId, secRefs, headRefs);
+  const toEl = consumerEl(pending.toBlockId, secRefs, headRefs);
+  if (!refEl || !toEl) return null;
+  const rr = refEl.getBoundingClientRect();
+  const cr = toEl.getBoundingClientRect();
+  const x1 = rr.left - vrect.left + OUTLINE_ROW_ANCHOR_INSET;
+  const y1 = rr.top + rr.height / 2 - vrect.top;
+  const x2 = cr.left - vrect.left + OUTLINE_ROW_ANCHOR_INSET;
+  const y2 = cr.top + cr.height / 2 - vrect.top;
+  const built = buildOutlineEdgePath(x1, y1, x2, y2);
+  return { d: built.d, stroke: "#4338ca" };
+}
+
 function pinFromPath(
   path: EdgePath,
   setPinnedLink: React.Dispatch<React.SetStateAction<PinnedLink | null>>,
@@ -1667,11 +1704,11 @@ export function ConnectorVariant({
 
   return (
     <div
-      className="connector-variant flex h-full min-h-0 w-full flex-col pt-4"
+      className="connector-variant flex h-full min-h-0 w-full flex-col pt-2"
       data-connecting={isConnecting ? "true" : undefined}
     >
       {activeLink && (
-        <div className="connector-toolbar mb-4 shrink-0 px-6 lg:px-10">
+        <div className="connector-toolbar mb-2 shrink-0 px-4 lg:px-4">
           <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-[#ece8ea] bg-white px-3 py-2 shadow-sm">
             <span className="text-[12px] font-medium text-[#636161]">
               {activeLink.kind === "outline" ? "Outline link" : "Document link"}
@@ -1745,7 +1782,7 @@ export function ConnectorVariant({
       <div
         ref={connectorViewportRef}
         data-connector-viewport=""
-        className={`relative flex min-h-0 flex-1 w-full items-stretch justify-between gap-6 overflow-visible px-6 pb-4 lg:gap-12 lg:px-10 ${
+        className={`connector-viewport relative min-h-0 flex-1 w-full overflow-visible ${
           isConnecting ? "select-none" : ""
         }`}
         onClick={(event) => {
@@ -1865,6 +1902,31 @@ export function ConnectorVariant({
                 />
               );
             })()}
+
+            {pendingConnect &&
+              connectorViewportRef.current &&
+              (() => {
+                const preview = buildPendingConnectPreview(
+                  pendingConnect,
+                  connectorViewportRef.current,
+                  secRefs,
+                  headRefs,
+                  refRefs,
+                );
+                if (!preview) return null;
+                return (
+                  <path
+                    d={preview.d}
+                    fill="none"
+                    stroke={preview.stroke}
+                    strokeWidth={2.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeDasharray="5 3"
+                    strokeOpacity={1}
+                  />
+                );
+              })()}
           </g>
 
         </svg>
@@ -1957,23 +2019,26 @@ export function ConnectorVariant({
           );
         })()}
 
-        <div className="connector-column connector-column-shell relative z-[1] w-[min(100%,480px)] shrink-0 sm:w-[533px]">
-          <ColumnHeader
-            label="Outline"
-            count={outlineCount}
-            selected={selectionLabel === "outline"}
-          />
-          <ColumnSearch
-            value={outlineQuery}
-            onChange={setOutlineQuery}
-            placeholder="Search outline"
-          />
-          <div
-            ref={sectionsScrollRef}
-            className="connector-column-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
-            onScroll={markColumnScrolling}
-          >
-            <div className="connector-column-body">
+        <div className="connector-column connector-column--outline relative z-[1]">
+          <div className="connector-column-shell">
+            <div className="connector-column-chrome">
+              <ColumnHeader
+                label="Outline"
+                count={outlineCount}
+                selected={selectionLabel === "outline"}
+              />
+              <ColumnSearch
+                value={outlineQuery}
+                onChange={setOutlineQuery}
+                placeholder="Search outline"
+              />
+            </div>
+            <div
+              ref={sectionsScrollRef}
+              className="connector-column-scroll"
+              onScroll={markColumnScrolling}
+            >
+              <div className="connector-column-body connector-column-content">
               {leftGroups.map((group) => {
                 const headingVisible = group.heading ? headingMatchesQuery(group.heading) : false;
                 const visibleSections = group.sections.filter(sectionMatchesQuery);
@@ -2008,42 +2073,53 @@ export function ConnectorVariant({
                           }
                         />
                       )}
-                      {visibleSections.map((node) => (
-                        <SectionRow
-                          key={node.blockId}
-                          node={node}
-                          rowRef={(el) => {
-                            secRefs.current[node.blockId] = el;
-                          }}
-                          connecting={isConnecting}
-                          dimmed={dimPeers && !outlineNodeHighlighted("section", node.blockId)}
-                          highlighted={outlineNodeHighlighted("section", node.blockId)}
-                          selected={selectedSection === node.blockId}
-                          isTraced={tracedPlacement?.blockId === node.blockId}
-                          isTarget={
-                            connect?.targetType === "section" && connect.targetId === node.blockId
+                      {visibleSections.length > 0 && (
+                        <div
+                          className={
+                            group.heading && headingVisible
+                              ? "connector-group-items connector-group-items--sections"
+                              : "connector-group-items"
                           }
-                          isDragSource={
-                            connect?.fromType === "section" &&
-                            connect.fromId === node.blockId &&
-                            connect.fromAnchor === "right"
-                          }
-                          isOutlineDragSource={
-                            connect?.fromType === "section" &&
-                            connect.fromId === node.blockId &&
-                            connect.fromAnchor === "left"
-                          }
-                          onEnter={() => setRowHover({ type: "section", id: node.blockId })}
-                          onLeave={scheduleClearRowHover}
-                          onClick={() => pinSelect({ type: "section", id: node.blockId })}
-                          onSourceConnectStart={(event) =>
-                            startConnect("section", node.blockId, event, "right")
-                          }
-                          onOutlineConnectStart={(event) =>
-                            startConnect("section", node.blockId, event, "left")
-                          }
-                        />
-                      ))}
+                        >
+                          {visibleSections.map((node) => (
+                            <SectionRow
+                              key={node.blockId}
+                              node={node}
+                              rowRef={(el) => {
+                                secRefs.current[node.blockId] = el;
+                              }}
+                              connecting={isConnecting}
+                              dimmed={dimPeers && !outlineNodeHighlighted("section", node.blockId)}
+                              highlighted={outlineNodeHighlighted("section", node.blockId)}
+                              selected={selectedSection === node.blockId}
+                              isTraced={tracedPlacement?.blockId === node.blockId}
+                              isTarget={
+                                connect?.targetType === "section" &&
+                                connect.targetId === node.blockId
+                              }
+                              isDragSource={
+                                connect?.fromType === "section" &&
+                                connect.fromId === node.blockId &&
+                                connect.fromAnchor === "right"
+                              }
+                              isOutlineDragSource={
+                                connect?.fromType === "section" &&
+                                connect.fromId === node.blockId &&
+                                connect.fromAnchor === "left"
+                              }
+                              onEnter={() => setRowHover({ type: "section", id: node.blockId })}
+                              onLeave={scheduleClearRowHover}
+                              onClick={() => pinSelect({ type: "section", id: node.blockId })}
+                              onSourceConnectStart={(event) =>
+                                startConnect("section", node.blockId, event, "right")
+                              }
+                              onOutlineConnectStart={(event) =>
+                                startConnect("section", node.blockId, event, "left")
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
                       {!group.heading && visibleSections.length === 0 && (
                         <p className="connector-group-empty">No outline rows</p>
                       )}
@@ -2053,30 +2129,34 @@ export function ConnectorVariant({
               })}
             </div>
           </div>
+          </div>
         </div>
 
-        <div className="connector-column connector-column-shell relative z-[1] w-[min(100%,480px)] shrink-0 sm:w-[533px]">
-          <ColumnHeader
-            label="Sources"
-            count={sourceRefCount}
-            selected={selectionLabel === "source"}
-          />
-          <ColumnSearch
-            value={sourceQuery}
-            onChange={setSourceQuery}
-            placeholder="Search sources"
-          />
-          <SourceCategoryFilters
-            categories={graph.categories}
-            visibleCategories={visibleCategories}
-            onToggle={toggleCategory}
-          />
-          <div
-            ref={sourcesScrollRef}
-            className="connector-column-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
-            onScroll={markColumnScrolling}
-          >
-            <div className="connector-column-body">
+        <div className="connector-column connector-column--sources relative z-[1]">
+          <div className="connector-column-shell">
+            <div className="connector-column-chrome">
+              <ColumnHeader
+                label="Sources"
+                count={sourceRefCount}
+                selected={selectionLabel === "source"}
+              />
+              <ColumnSearch
+                value={sourceQuery}
+                onChange={setSourceQuery}
+                placeholder="Search sources"
+              />
+              <SourceCategoryFilters
+                categories={graph.categories}
+                visibleCategories={visibleCategories}
+                onToggle={toggleCategory}
+              />
+            </div>
+            <div
+              ref={sourcesScrollRef}
+              className="connector-column-scroll"
+              onScroll={markColumnScrolling}
+            >
+              <div className="connector-column-body connector-column-content">
               {graph.sourceCatalog.map((group) => {
                 const visibleEntries: (typeof group.entries)[number][] = [];
                 for (const entry of group.entries) {
@@ -2204,6 +2284,7 @@ export function ConnectorVariant({
               })}
             </div>
           </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2220,7 +2301,7 @@ function ColumnSearch({
   placeholder: string;
 }) {
   return (
-    <div className="relative mb-2 shrink-0">
+    <div className="relative mb-1.5 shrink-0">
       <Search
         size={14}
         className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9e9e9e]"
@@ -2231,7 +2312,7 @@ function ColumnSearch({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-md border border-[#d4ced3] bg-white py-1.5 pl-8 pr-2 text-[13px] text-[#302f2f] placeholder:text-[#9e9e9e] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
+        className="w-full rounded-md border border-[#d4ced3] bg-white py-1 pl-8 pr-2 text-[12px] text-[#302f2f] placeholder:text-[#9e9e9e] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
       />
     </div>
   );
@@ -2247,7 +2328,7 @@ function SourceCategoryFilters({
   onToggle: (category: string) => void;
 }) {
   return (
-    <div className="mb-2 flex shrink-0 flex-wrap items-center gap-1">
+    <div className="mb-1.5 flex shrink-0 flex-wrap items-center gap-1">
       {categories.map((category) => {
         const on = visibleCategories.has(category);
         return (
@@ -2287,15 +2368,15 @@ function ColumnHeader({
 }) {
   return (
     <div className="connector-column-head">
-      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+      <span className="connector-column-head-label flex items-center gap-1.5">
         {label}
         {selected && (
-          <span className="rounded bg-white px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-[#636161] shadow-sm">
+          <span className="rounded bg-[#fff5f5] px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-[#9a1c12] ring-1 ring-[#fe9591]/30">
             Selected
           </span>
         )}
       </span>
-      <span className="text-[11px] tabular-nums text-[#b0b0b0]">{count}</span>
+      <span className="connector-column-head-count">{count}</span>
     </div>
   );
 }
@@ -2314,10 +2395,7 @@ function nodeClasses(
     "flex",
     "cursor-pointer",
     "items-center",
-    "gap-2",
     "rounded-md",
-    "px-2",
-    "py-1.5",
     "transition-colors",
   ];
   if (variant === "heading") parts.push("connector-node--heading");
@@ -2558,7 +2636,7 @@ function HeadingRow({
         "heading",
       )}`}
     >
-      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold uppercase tracking-wide text-[#636161]">
+      <span className="connector-heading-label min-w-0 flex-1 truncate">
         {node.label}
       </span>
       <CountBadge n={node.outlineInCount} proposed={node.proposedCount} />
@@ -2609,7 +2687,7 @@ function SectionRow({
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onClick={onClick}
-      className={`group ml-2 ${nodeClasses(
+      className={`group connector-node--section ${nodeClasses(
         highlighted,
         selected,
         dimmed,
@@ -2625,7 +2703,7 @@ function SectionRow({
         isDragSource={isOutlineDragSource}
         onPointerDown={onOutlineConnectStart}
       />
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#302f2f]">
+      <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#302f2f]">
         {node.title}
       </span>
       <CountBadge n={linkCount} proposed={node.proposedCount} />
@@ -2671,7 +2749,7 @@ function DocHeaderRow({
       data-connector-no-deselect=""
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      className={`flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors ${
+      className={`connector-doc-header flex items-center rounded-md transition-colors ${
         highlighted || selected
           ? "bg-[#fff5f5] ring-1 ring-[#fe9591]/35"
           : "hover:bg-[#f5f5f5]"
@@ -2749,7 +2827,7 @@ function ReferenceRow({
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onClick={onClick}
-      className={`group ${nested ? "ml-4" : ""} ${nodeClasses(
+      className={`group ${nested ? "connector-node--nested" : ""} ${nodeClasses(
         highlighted,
         selected,
         dimmed,
