@@ -63,7 +63,6 @@ const OUTLINE_STROKE_HOVER = "#4338ca";
 const ROLE_STROKE_HOVER: Record<SourceRole, string> = {
   text: "#e64641",
   table: "#0d9488",
-  supporting: "#2b5bd7",
   context: "#636161",
   reference: "#5b21b6",
 };

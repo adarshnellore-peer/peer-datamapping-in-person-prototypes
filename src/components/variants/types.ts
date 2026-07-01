@@ -124,7 +124,6 @@ export function sourceCategories(sources: RoadmapSource[]): string[] {
 export const ROLE_BADGE: Record<SourceRole, string> = {
   text: "border-[var(--peer-primary-border)] bg-[var(--peer-primary-tint)] text-[#9a1c12] font-semibold",
   table: "border-[#5eead4] bg-[#f0fdfa] text-[#115e59] font-semibold",
-  supporting: "border-[#bcd0ff] bg-[#eef3ff] text-[#2b5bd7] font-semibold",
   context: "border-[#dcdcdc] bg-[#f3f3f3] text-[#636161] font-semibold",
   reference: "border-[#d8b4fe] bg-[#f3e8ff] text-[#5b21b6] font-semibold",
 };
@@ -133,7 +132,6 @@ export const ROLE_BADGE: Record<SourceRole, string> = {
 export const ROLE_BADGE_PICKER: Record<SourceRole, string> = {
   text: "border-[var(--peer-primary-border)]/30 bg-[var(--peer-primary-tint)]/35 text-[#9a1c12]/65",
   table: "border-[#5eead4]/35 bg-[#f0fdfa]/40 text-[#115e59]/65",
-  supporting: "border-[#bcd0ff]/35 bg-[#eef3ff]/40 text-[#2b5bd7]/65",
   context: "border-[#dcdcdc]/50 bg-[#f3f3f3]/50 text-[#636161]/65",
   reference: "border-[#d8b4fe]/35 bg-[#f3e8ff]/40 text-[#5b21b6]/65",
 };
@@ -146,9 +144,8 @@ export function roleLabel(role: SourceRole): string {
 export const ROLE_HINT: Record<SourceRole, string> = {
   text: "Report narrative text from this source directly in the section.",
   table: "Insert or reproduce tabular results from this source in the section.",
-  supporting:
-    "Inform background or discussion; summarize\u2014do not reproduce tables or listings verbatim.",
-  context: "Cross-check facts and maintain traceability; not drafted from.",
+  context:
+    "Inform background or discussion; summarize and cross-check facts for traceability.",
   reference: "Cross-check facts and maintain traceability; not drafted from.",
 };
 
@@ -178,9 +175,9 @@ export const MATRIX_COLUMNS: {
   },
   {
     id: "interpret",
-    role: "supporting",
+    role: "context",
     label: "Supporting evidence",
-    hint: ROLE_HINT.supporting,
+    hint: ROLE_HINT.context,
     dotHex: "#2b5bd7",
     text: "text-[#2b5bd7]",
     cellTint: "bg-[#eef3fc]",
@@ -188,9 +185,9 @@ export const MATRIX_COLUMNS: {
   },
   {
     id: "reference",
-    role: "context",
+    role: "reference",
     label: "Background reference",
-    hint: ROLE_HINT.context,
+    hint: ROLE_HINT.reference,
     dotHex: "#9e9e9e",
     text: "text-[#636161]",
     cellTint: "bg-[#f2f2f2]",
@@ -205,7 +202,7 @@ export function isInsertRole(role: SourceRole | undefined): boolean {
 export function matrixColumnForSource(source: RoadmapSource): MatrixColumnId {
   const role = effectiveSourceRole(source);
   if (isInsertRole(role)) return "insert";
-  if (role === "supporting") return "interpret";
+  if (role === "context") return "interpret";
   return "reference";
 }
 
@@ -248,7 +245,6 @@ export const ROLE_ACCENT: Record<
 > = {
   text: { text: "text-[#b3261e]", cellTint: "bg-[#fff6f5]", dotHex: "#fe9591" },
   table: { text: "text-[#115e59]", cellTint: "bg-[#f0fdfa]", dotHex: "#5eead4" },
-  supporting: { text: "text-[#2b5bd7]", cellTint: "bg-[#f6f9ff]", dotHex: "#7ea2f0" },
   context: { text: "text-[#636161]", cellTint: "bg-[#f8f8f8]", dotHex: "#bdbdbd" },
   reference: { text: "text-[#5b21b6]", cellTint: "bg-[#faf5ff]", dotHex: "#c084fc" },
 };
