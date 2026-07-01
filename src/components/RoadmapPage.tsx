@@ -1148,7 +1148,10 @@ export function RoadmapPage() {
     setVariant(id);
     if (id === "twoColumn" || id === "mapping") {
       setV2DataPanelOpen(true);
-      if (id === "mapping") setMappingSubview("storyline");
+      if (id === "mapping") {
+        setMappingSubview("storyline");
+        setTocOpen(true);
+      }
     }
     if (id === "matrix") {
       setLibraryTraceSource(null);
@@ -1159,6 +1162,7 @@ export function RoadmapPage() {
     setMappingSubview(view);
     if (view === "storyline") {
       setV2DataPanelOpen(true);
+      setTocOpen(true);
     } else {
       setTocOpen(false);
       setTraceState(null);
