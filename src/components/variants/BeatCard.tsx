@@ -5,7 +5,7 @@ import { isTlfRoadmapSource } from "../../data/studyDataSources";
 import type { ContentBlockData, DocumentBlock } from "../../types";
 import type { OutlineRefPayload } from "../../utils/v2DragPayload";
 import { KeyMessageFooter } from "../KeyMessageFooter";
-import { AddEvidenceDropZone } from "./AddEvidenceDropZone";
+// import { AddEvidenceDropZone } from "./AddEvidenceDropZone";
 import { EvidenceSection } from "./EvidenceSection";
 import {
   effectiveFormatRole,
@@ -56,8 +56,8 @@ export function BeatCard({
   rolePickerMode = "usage",
   isDropTarget = false,
   dropOverlay,
-  showAddZone = false,
-  onAddDrop,
+  showAddZone: _showAddZone = false,
+  onAddDrop: _onAddDrop,
   onEvidenceDragOver,
   onEvidenceDragLeave,
   onEvidenceDrop,
@@ -143,7 +143,6 @@ export function BeatCard({
   const referenceSources = visibleSources.filter(
     (source) => evidenceSectionForSource(source, rolePickerMode) === "reference",
   );
-  const isEmptyEvidence = visibleSources.length === 0;
 
   return (
     <div
@@ -153,6 +152,14 @@ export function BeatCard({
       onDragLeave={onEvidenceDragLeave}
       onDrop={onEvidenceDrop}
     >
+      {onPromptChange ? (
+        <KeyMessageFooter
+          placement="header"
+          value={block.prompt}
+          onChange={onPromptChange}
+        />
+      ) : null}
+
       <div className="peer-card-header peer-card-header--compressed">
         <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-[var(--peer-text-secondary)] line-clamp-2">
           {block.title}
@@ -160,51 +167,42 @@ export function BeatCard({
       </div>
 
       <div className="peer-card-body peer-card-body--compressed">
-        <div
-          className={`peer-card-evidence peer-card-evidence--compressed relative ${
-            isEmptyEvidence ? "peer-card-evidence--empty" : ""
-          }`}
-        >
+        <div className="peer-card-evidence peer-card-evidence--compressed relative">
           {dropOverlay}
 
-          {isEmptyEvidence && onAddDrop ? (
-            <AddEvidenceDropZone onDrop={onAddDrop} solo />
-          ) : (
-            <>
-              <EvidenceSection
-                kind="source"
-                label="Sources"
-                showInfo
-                blockId={block.id}
-                sources={dataSources}
-                blocks={blocks}
-                tracedSourceId={tracedSourceId}
-                onTrace={onTrace}
-                onRemoveSource={onRemoveSource}
-                onMoveMapped={onMoveMapped}
-                onMapStudySource={onMapStudySourceWithRole}
-                mappedDrag={mappedDrag}
-              />
+          <EvidenceSection
+            kind="source"
+            label="Sources"
+            showInfo
+            blockId={block.id}
+            sources={dataSources}
+            blocks={blocks}
+            tracedSourceId={tracedSourceId}
+            onTrace={onTrace}
+            onRemoveSource={onRemoveSource}
+            onMoveMapped={onMoveMapped}
+            onMapStudySource={onMapStudySourceWithRole}
+            mappedDrag={mappedDrag}
+          />
 
-              <EvidenceSection
-                kind="reference"
-                label="References"
-                blockId={block.id}
-                sources={referenceSources}
-                blocks={blocks}
-                tracedSourceId={tracedSourceId}
-                onTrace={onTrace}
-                onNavigateOutlineRef={onNavigateOutlineRef}
-                onRemoveSource={onRemoveSource}
-                onMoveMapped={onMoveMapped}
-                onMapStudySource={onMapStudySourceWithRole}
-                onMapOutlineRef={onMapOutlineRef}
-                mappedDrag={mappedDrag}
-              />
+          <EvidenceSection
+            kind="reference"
+            label="References"
+            blockId={block.id}
+            sources={referenceSources}
+            blocks={blocks}
+            tracedSourceId={tracedSourceId}
+            onTrace={onTrace}
+            onNavigateOutlineRef={onNavigateOutlineRef}
+            onRemoveSource={onRemoveSource}
+            onMoveMapped={onMoveMapped}
+            onMapStudySource={onMapStudySourceWithRole}
+            onMapOutlineRef={onMapOutlineRef}
+            mappedDrag={mappedDrag}
+          />
 
-              {showAddZone && onAddDrop ? <AddEvidenceDropZone onDrop={onAddDrop} /> : null}
-            </>
-          )}
+          {/* {showAddZone && onAddDrop ? <AddEvidenceDropZone onDrop={onAddDrop} /> : null} */}
+          {/* {isEmptyEvidence && onAddDrop ? <AddEvidenceDropZone onDrop={onAddDrop} solo /> : null} */}
         </div>
       </div>
 
@@ -217,9 +215,6 @@ export function BeatCard({
         </div>
       )}
 
-      {onPromptChange && (
-        <KeyMessageFooter value={block.prompt} onChange={onPromptChange} />
-      )}
     </div>
   );
 }

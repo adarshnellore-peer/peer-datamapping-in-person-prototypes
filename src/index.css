@@ -196,6 +196,14 @@ html {
 }
 
 /* Compressed storyline evidence chips */
+.peer-card--compressed {
+  border-color: #c4bec3;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(48, 47, 47, 0.06),
+    0 2px 8px rgba(48, 47, 47, 0.08);
+}
+
 .peer-card--compressed .peer-card-header--compressed {
   padding: 8px 12px;
   border-bottom: none;
@@ -853,6 +861,20 @@ html {
 .peer-format-role-toggle-btn--reference.is-selected {
   background: #f3e8ff;
   color: #5b21b6;
+}
+
+.peer-card-prompt--header {
+  border-top: none;
+  border-bottom: 1px solid var(--peer-border-subtle);
+  background: color-mix(in srgb, var(--peer-surface-muted) 65%, var(--peer-surface));
+  padding: 8px 12px;
+}
+
+@media (min-width: 640px) {
+  .peer-card-prompt--header {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
 }
 
 .peer-card-footer {

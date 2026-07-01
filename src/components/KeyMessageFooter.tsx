@@ -9,9 +9,11 @@ function promptPreview(value: string): string {
 export function KeyMessageFooter({
   value,
   onChange,
+  placement = "footer",
 }: {
   value: string;
   onChange: (value: string) => void;
+  placement?: "header" | "footer";
 }) {
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -26,7 +28,11 @@ export function KeyMessageFooter({
   }, [expanded]);
 
   return (
-    <div className="peer-card-footer">
+    <div
+      className={
+        placement === "header" ? "peer-card-prompt peer-card-prompt--header" : "peer-card-footer"
+      }
+    >
       {expanded ? (
         <div className="flex items-start gap-1.5">
           <button

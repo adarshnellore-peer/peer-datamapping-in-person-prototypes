@@ -213,7 +213,7 @@ export function TwoColumnVariant({
   return (
     <div
       ref={scrollRef}
-      className="h-full min-h-0 overflow-y-auto"
+      className="h-full min-h-0 overflow-y-auto bg-[var(--peer-bg)]"
       onDragOver={handleBoardDragOver}
     >
       <div className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
@@ -258,7 +258,7 @@ export function TwoColumnVariant({
                     onPromptChange ? (prompt) => onPromptChange(block.id, prompt) : undefined
                   }
                   rolePickerMode={rolePickerMode}
-                  showAddZone
+                  // showAddZone
                   onAddDrop={(dataTransfer) => dropOnBlock(block.id, dataTransfer)}
                   onEvidenceDragOver={(event) => handleEvidenceDragOver(event, block.id)}
                   onEvidenceDragLeave={(event) => handleEvidenceDragLeave(event, block.id)}
