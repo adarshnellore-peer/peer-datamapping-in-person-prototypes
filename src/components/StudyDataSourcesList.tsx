@@ -174,11 +174,38 @@ function RowMetric({ metric }: { metric: { value: number; title: string } | null
   );
 }
 
+function SelectionCheckbox({
+  checked,
+  label,
+  onToggle,
+}: {
+  checked: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <span
+      className="flex shrink-0 items-center"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        aria-label={`Select ${label} for mapping`}
+        className="h-3.5 w-3.5 cursor-pointer rounded border-[#c8c0c6] text-[#ff4e49] focus:ring-[#ff4e49]/25"
+      />
+    </span>
+  );
+}
+
 function LibrarySectionRow({
   entry,
   isActive,
   isSelected,
   onSelect,
+  onToggleSelected,
   onStudySourceDragStart,
   enableMappingDrag,
   usageCount,
@@ -189,6 +216,7 @@ function LibrarySectionRow({
   isActive: boolean;
   isSelected: boolean;
   onSelect: (event: MouseEvent) => void;
+  onToggleSelected?: () => void;
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   enableMappingDrag: boolean;
   usageCount?: number;
@@ -228,6 +256,9 @@ function LibrarySectionRow({
       ) : (
         <span className="w-3 shrink-0" aria-hidden />
       )}
+      {enableMappingDrag && onToggleSelected && (
+        <SelectionCheckbox checked={isSelected} label={label} onToggle={onToggleSelected} />
+      )}
       <button
         type="button"
         draggable={false}
@@ -256,6 +287,7 @@ function LibraryDocumentRow({
   isActive,
   isSelected,
   onSelect,
+  onToggleSelected,
   onStudySourceDragStart,
   usageCount,
 }: {
@@ -265,6 +297,7 @@ function LibraryDocumentRow({
   isActive: boolean;
   isSelected: boolean;
   onSelect: (event: MouseEvent) => void;
+  onToggleSelected: () => void;
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   usageCount?: number;
 }) {
@@ -298,6 +331,11 @@ function LibraryDocumentRow({
         strokeWidth={2}
         className="pointer-events-none shrink-0 text-[#d8d8d8]"
         aria-hidden
+      />
+      <SelectionCheckbox
+        checked={isSelected}
+        label={group.documentLabel}
+        onToggle={onToggleSelected}
       />
       <ChevronRight
         size={13}
@@ -336,6 +374,7 @@ function DocumentGroupSection({
   expanded,
   onToggleCollapse,
   onSelectEntry,
+  onToggleSelected,
   onStudySourceDragStart,
   onHoverStart,
   onHoverEnd,
@@ -349,6 +388,7 @@ function DocumentGroupSection({
   expanded: boolean;
   onToggleCollapse: () => void;
   onSelectEntry: (source: StudyDataSource, event: MouseEvent) => void;
+  onToggleSelected: (source: StudyDataSource) => void;
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   onHoverStart?: () => void;
   onHoverEnd?: () => void;
@@ -374,6 +414,7 @@ function DocumentGroupSection({
           isActive={dragEntry.id === activeSourceId}
           isSelected={selectedIds.has(dragEntry.id)}
           onSelect={(event) => onSelectEntry(dragEntry, event)}
+          onToggleSelected={() => onToggleSelected(dragEntry)}
           onStudySourceDragStart={onStudySourceDragStart}
           usageCount={usageCountByStudySourceId?.[dragEntry.id]}
         />
@@ -390,6 +431,7 @@ function DocumentGroupSection({
                 isActive={entry.id === activeSourceId}
                 isSelected={selectedIds.has(entry.id)}
                 onSelect={(event) => onSelectEntry(entry, event)}
+                onToggleSelected={() => onToggleSelected(entry)}
                 onStudySourceDragStart={onStudySourceDragStart}
                 enableMappingDrag={enableMappingDrag}
                 usageCount={usageCountByStudySourceId?.[entry.id]}
@@ -460,6 +502,7 @@ function CategorySection({
   onToggleDocument,
   onHoverDocument,
   onSelectEntry,
+  onToggleSelected,
   onStudySourceDragStart,
   enableMappingDrag = false,
   usageCountByStudySourceId,
@@ -473,6 +516,7 @@ function CategorySection({
   onToggleDocument: (key: string) => void;
   onHoverDocument: (key: string | null) => void;
   onSelectEntry: (source: StudyDataSource, event: MouseEvent) => void;
+  onToggleSelected: (source: StudyDataSource) => void;
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   enableMappingDrag?: boolean;
   usageCountByStudySourceId?: Record<string, number>;
@@ -523,6 +567,7 @@ function CategorySection({
               expanded={docIsExpanded(key, group)}
               onToggleCollapse={() => onToggleDocument(key)}
               onSelectEntry={onSelectEntry}
+              onToggleSelected={onToggleSelected}
               onStudySourceDragStart={onStudySourceDragStart}
               onHoverStart={
                 enableMappingDrag
@@ -547,6 +592,9 @@ function CategorySection({
             isActive={entry.id === activeSourceId}
             isSelected={selectedIds.has(entry.id)}
             onSelect={(event) => onSelectEntry(entry, event)}
+            onToggleSelected={
+              enableMappingDrag ? () => onToggleSelected(entry) : undefined
+            }
             onStudySourceDragStart={onStudySourceDragStart}
             enableMappingDrag={enableMappingDrag}
             usageCount={usageCountByStudySourceId?.[entry.id]}
@@ -590,34 +638,25 @@ export function StudyDataSourcesList({
   const setQuery = onQueryChange ?? setInternalQuery;
 
   const handleSelectEntry = useCallback(
-    (entry: StudyDataSource, event: MouseEvent) => {
-      if (!enableMappingDrag) {
-        onSelect(entry);
-        return;
-      }
-      if (event.metaKey || event.ctrlKey) {
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          if (next.has(entry.id)) next.delete(entry.id);
-          else next.add(entry.id);
-          return next;
-        });
-        onSelect(entry);
-        return;
-      }
-      setSelectedIds(new Set([entry.id]));
+    (entry: StudyDataSource, _event: MouseEvent) => {
       onSelect(entry);
     },
-    [enableMappingDrag, onSelect],
+    [onSelect],
   );
+
+  const handleToggleSelected = useCallback((entry: StudyDataSource) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(entry.id)) next.delete(entry.id);
+      else next.add(entry.id);
+      return next;
+    });
+  }, []);
 
   const handleStudySourceDragStart = useCallback(
     (entry: StudyDataSource, event: DragEvent) => {
       const ids =
         selectedIds.has(entry.id) && selectedIds.size > 0 ? [...selectedIds] : [entry.id];
-      if (!selectedIds.has(entry.id)) {
-        setSelectedIds(new Set([entry.id]));
-      }
       startStudySourceDrag(ids, event);
     },
     [selectedIds],
@@ -746,7 +785,7 @@ export function StudyDataSourcesList({
           <p className="mt-2 text-[10px] leading-snug text-[#9e9e9e]">
             {selectedIds.size > 0
               ? `${selectedIds.size} selected — drag to map all`
-              : "⌘-click to select multiple"}
+              : "Check sources to select, then drag to map"}
           </p>
         )}
       </div>
@@ -767,6 +806,7 @@ export function StudyDataSourcesList({
               onToggleDocument={toggleDocument}
               onHoverDocument={setHoverDocKey}
               onSelectEntry={handleSelectEntry}
+              onToggleSelected={handleToggleSelected}
               onStudySourceDragStart={handleStudySourceDragStart}
               enableMappingDrag={enableMappingDrag}
               usageCountByStudySourceId={usageCountByStudySourceId}
