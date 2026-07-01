@@ -1,13 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { OUTPUT_TYPE_LABELS, OUTPUT_TYPES } from "../data/roadmap";
 
-const SUMMARY = "OUTPUT_TYPE_SUMMARY";
-const TABLE = "OUTPUT_TYPE_TABLE";
-
-const OPTIONS = [
-  { value: SUMMARY, label: "Paragraph" },
-  { value: TABLE, label: "Table" },
-] as const;
+const OPTIONS = OUTPUT_TYPES.map((value) => ({
+  value,
+  label: OUTPUT_TYPE_LABELS[value],
+}));
 
 export function GenerateAsSelect({
   value,

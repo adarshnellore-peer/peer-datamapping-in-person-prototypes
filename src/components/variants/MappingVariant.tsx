@@ -1,10 +1,10 @@
 import { LayoutList, Table2 } from "lucide-react";
 import type { StudyDataSource } from "../../data/studyDataSources";
-import type { RoadmapSource, SourceRole } from "../../data/roadmap";
+import type { RoadmapSource } from "../../data/roadmap";
 import type { OutlineRefPayload, V2DragPayload } from "../../utils/v2DragPayload";
 import { MatrixVariant } from "./MatrixVariant";
 import { TwoColumnVariant } from "./TwoColumnVariant";
-import type { VariantProps } from "./types";
+import type { MatrixTagRole, VariantProps } from "./types";
 
 export type MappingSubview = "storyline" | "matrix";
 
@@ -23,7 +23,7 @@ const SUBVIEWS: {
   {
     id: "matrix",
     label: "Matrix",
-    title: "Primary, supporting, and reference columns",
+    title: "Source and reference columns",
     icon: Table2,
   },
 ];
@@ -85,35 +85,39 @@ type StorylineProps = Omit<VariantProps, "onAddSource"> & {
     toIndex?: number,
   ) => void;
   onPromptChange?: (blockId: string, prompt: string) => void;
+  onOutputTypeChange?: (blockId: string, outputType: string) => void;
+  rolePickerMode?: "usage" | "format";
 };
 
 type MatrixProps = VariantProps & {
   activeBlockId?: string | null;
+  columnMode?: "usage" | "format";
+  rolePickerMode?: "usage" | "format";
   onMapStudySourceWithRole: (
     blockId: string,
     studySourceId: string,
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => void;
   onMapStudySourcesWithRole?: (
     blockId: string,
     studySourceIds: string[],
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => void;
   onMapOutlineRefWithRole: (
     toBlockId: string,
     payload: OutlineRefPayload,
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => void;
   onHeadingSlotDrop: (
     slotHeadingId: string,
-    role: SourceRole,
+    role: MatrixTagRole,
     payload: V2DragPayload,
   ) => void;
   onMoveSourceToMatrixCell: (
     fromBlockId: string,
     sourceId: string,
     toBlockId: string,
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => void;
   usageCountByStudySourceId?: Record<string, number>;
   onStudySourceSelect?: (entry: StudyDataSource) => void;

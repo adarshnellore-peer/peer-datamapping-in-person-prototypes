@@ -205,8 +205,14 @@ export const REFERENCE_DISPLAY_NAMES: Record<string, Record<string, string>> = {
 export const OUTPUT_TYPES = [
   "OUTPUT_TYPE_SUMMARY",
   "OUTPUT_TYPE_TABLE",
-  "OUTPUT_TYPE_TEXT",
+  "OUTPUT_TYPE_FIGURE",
 ] as const;
+
+export const OUTPUT_TYPE_LABELS: Record<(typeof OUTPUT_TYPES)[number], string> = {
+  OUTPUT_TYPE_SUMMARY: "Paragraph",
+  OUTPUT_TYPE_TABLE: "Table",
+  OUTPUT_TYPE_FIGURE: "Figure",
+};
 
 export const DEFAULT_PROMPT =
   "Generate the CSR Title-Page table. Use the exact two-column structure provided below; the left column labels must remain verbatim. Populate the right-hand cells with values extracted from the Protocol Title Page / Synopsis and the Sponsor corporate roster. If a value is missing, insert the text 'TBD.'";
@@ -222,11 +228,33 @@ export const SOURCE_ROLE_LABELS: Record<SourceRole, string> = {
   reference: "Reference",
 };
 
+/** V1 / V6 storyline: source vs reference tagging on mapped evidence. */
+export const SOURCE_FORMAT_ROLES = ["source", "reference"] as const;
+
+export type SourceFormatRole = (typeof SOURCE_FORMAT_ROLES)[number];
+
+export const SOURCE_FORMAT_ROLE_LABELS: Record<SourceFormatRole, string> = {
+  source: "Source",
+  reference: "Reference",
+};
+
+export function isSourceFormatRole(role: string): role is SourceFormatRole {
+  return (SOURCE_FORMAT_ROLES as readonly string[]).includes(role);
+}
+
+/** Legacy V6 format values stored before source/reference rename. */
+export function normalizeSourceFormatRole(role: string): SourceFormatRole | undefined {
+  if (isSourceFormatRole(role)) return role;
+  if (role === "paragraph" || role === "table") return "source";
+  if (role === "figure") return "reference";
+  return undefined;
+}
+
 type RoadmapSourceBase = {
   id: string;
   status?: "proposed" | "confirmed";
-  /** How the source is used in this section: primary / supporting / context. */
-  role?: SourceRole;
+  /** Usage role (matrix) or format role (V1/V6 storyline). */
+  role?: SourceRole | SourceFormatRole;
   /** Bibliographic / citation reference — orthogonal to usage role. */
   isReference?: boolean;
 };
@@ -234,7 +262,10 @@ type RoadmapSourceBase = {
 export type DataSourceRoadmapSource = RoadmapSourceBase & {
   sourceType: "DATA_SOURCE";
   dataSource: string;
+  /** Primary section / page range — first of `referenceKeys` when multiple. */
   referenceKey: string;
+  /** Additional sections from the same document on one mapped entry. */
+  referenceKeys?: string[];
   /** Human-readable section name shown on the card, e.g. "Template Section 9.2". */
   sectionName?: string;
   /** Short document-type tag, e.g. "Template", "Protocol", "SAP". */

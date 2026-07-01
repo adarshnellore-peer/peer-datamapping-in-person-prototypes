@@ -53,6 +53,8 @@ export function TwoColumnVariant({
   onMapOutlineToSection,
   onMoveSource,
   onPromptChange,
+  onOutputTypeChange,
+  rolePickerMode = "usage",
   focusId,
 }: Omit<VariantProps, "onAddSource"> & {
   onMapStudySource: (blockId: string, studySourceId: string) => void;
@@ -69,6 +71,8 @@ export function TwoColumnVariant({
     toIndex?: number,
   ) => void;
   onPromptChange?: (blockId: string, prompt: string) => void;
+  onOutputTypeChange?: (blockId: string, outputType: string) => void;
+  rolePickerMode?: "usage" | "format";
   focusId?: string | null;
 }) {
   const [externalDrag, setExternalDrag] = useState(false);
@@ -213,6 +217,12 @@ export function TwoColumnVariant({
                   onPromptChange={
                     onPromptChange ? (prompt) => onPromptChange(block.id, prompt) : undefined
                   }
+                  onOutputTypeChange={
+                    onOutputTypeChange
+                      ? (outputType) => onOutputTypeChange(block.id, outputType)
+                      : undefined
+                  }
+                  rolePickerMode={rolePickerMode}
                 />
               </div>
             );

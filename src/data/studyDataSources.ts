@@ -1,4 +1,4 @@
-import { DATA_SOURCES, enrichDataSourceSource, getReferenceKeysForDataSource, inferSectionName } from "./roadmap";
+import { DATA_SOURCES, enrichDataSourceSource, getReferenceKeysForDataSource, inferSectionName, type SourceFormatRole } from "./roadmap";
 import type { DataSourceRoadmapSource } from "./roadmap";
 
 export type StudySourceStatus = "processed" | "uploaded";
@@ -156,6 +156,10 @@ function buildStudySources(): StudyDataSource[] {
 
 export const STUDY_DATA_SOURCES: StudyDataSource[] = buildStudySources();
 
+export function defaultFormatRoleForStudySource(_entry: StudyDataSource): SourceFormatRole {
+  return "source";
+}
+
 export function studySourceToRoadmapSource(entry: StudyDataSource): DataSourceRoadmapSource {
   return enrichDataSourceSource({
     id: entry.id,
@@ -171,9 +175,11 @@ export function findStudySourceById(id: string): StudyDataSource | undefined {
 }
 
 export function findStudySourceForRoadmapSource(source: DataSourceRoadmapSource): StudyDataSource | undefined {
+  const keys = [source.referenceKey, ...(source.referenceKeys ?? [])].filter(Boolean);
   const matches = STUDY_DATA_SOURCES.filter(
     (entry) =>
-      entry.dataSource === source.dataSource && entry.referenceKey === source.referenceKey,
+      entry.dataSource === source.dataSource &&
+      keys.some((key) => entry.referenceKey === key),
   );
   return (
     matches.find((entry) => entry.kind === "figure" || entry.kind === "listing") ?? matches[0]

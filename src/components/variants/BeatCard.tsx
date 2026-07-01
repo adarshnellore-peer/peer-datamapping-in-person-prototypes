@@ -2,7 +2,9 @@ import { type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import type { ContentBlockData, DocumentBlock } from "../../types";
 import { KeyMessageFooter } from "../KeyMessageFooter";
+import { GenerateAsSelect } from "../OutputTypeToggle";
 import { SectionMapper } from "./SectionMapper";
+import { effectiveFormatRole, effectiveSourceRole } from "./types";
 
 /** Nearest preceding heading label for a content block. */
 export function headingLabelFor(blocks: DocumentBlock[], blockId: string): string | null {
@@ -25,6 +27,8 @@ export function BeatCard({
   onUpdateSource,
   onRemoveSource,
   onPromptChange,
+  onOutputTypeChange,
+  rolePickerMode = "usage",
   isDropTarget = false,
   dropOverlay,
 }: {
@@ -39,11 +43,19 @@ export function BeatCard({
   onUpdateSource: (source: import("../../data/roadmap").RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
   onPromptChange?: (prompt: string) => void;
+  onOutputTypeChange?: (outputType: string) => void;
+  rolePickerMode?: "usage" | "format";
   isDropTarget?: boolean;
   dropOverlay?: ReactNode;
 }) {
-  const primaryCount = block.sources.filter((s) => s.role === "primary").length;
-  const showGap = block.sources.length > 0 && primaryCount === 0;
+  const sourceTagCount = block.sources.filter(
+    (source) => effectiveFormatRole(source) === "source",
+  ).length;
+  const showGap =
+    rolePickerMode === "format"
+      ? block.sources.length > 0 && sourceTagCount === 0
+      : block.sources.length > 0 &&
+        !block.sources.some((source) => effectiveSourceRole(source) === "primary");
 
   return (
     <div
@@ -55,7 +67,14 @@ export function BeatCard({
       {dropOverlay}
 
       <div className="peer-card-header">
-        <p className="text-[14px] font-medium leading-snug text-[var(--peer-text)]">{block.title}</p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+          <p className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-[var(--peer-text)]">
+            {block.title}
+          </p>
+          {onOutputTypeChange && (
+            <GenerateAsSelect value={block.outputType} onChange={onOutputTypeChange} />
+          )}
+        </div>
       </div>
 
       <div className="peer-card-body">
@@ -66,13 +85,16 @@ export function BeatCard({
           onTrace={onTrace}
           onUpdateSource={onUpdateSource}
           onRemoveSource={onRemoveSource}
+          rolePickerMode={rolePickerMode}
         />
       </div>
 
       {showGap && (
         <div className="mx-3 mb-3 flex items-center gap-2 rounded-md bg-[#fff8e6] px-3 py-2 text-[12px] text-[#9a6700] sm:mx-4">
           <AlertTriangle size={14} className="shrink-0" />
-          Consider marking a source as primary before filing.
+          {rolePickerMode === "format"
+            ? "Consider marking a source as Source before filing."
+            : "Consider marking a source as primary before filing."}
         </div>
       )}
 

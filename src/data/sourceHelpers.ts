@@ -1,9 +1,12 @@
 import {
   getDocumentCategory,
   inferSectionName,
+  OUTPUT_TYPE_LABELS,
   type DataSourceRoadmapSource,
   type RoadmapSource,
 } from "./roadmap";
+import { findStudySourceForRoadmapSource } from "./studyDataSources";
+import { getDataSourceReferenceKeys } from "../utils/dataSourceReferences";
 
 const SOURCE_TYPE_TAGS: Record<RoadmapSource["sourceType"], string> = {
   DATA_SOURCE: "Data source",
@@ -132,7 +135,10 @@ export function getSourceName(source: RoadmapSource): string {
 
 export function getPageRange(source: RoadmapSource): string {
   if (source.sourceType === "DATA_SOURCE") {
-    return source.referenceKey;
+    const keys = getDataSourceReferenceKeys(source);
+    if (keys.length === 0) return "";
+    if (keys.length === 1) return keys[0];
+    return keys.join(" · ");
   }
   if (source.sourceType === "SUBCONTENT" || source.sourceType === "CONTENT") {
     return source.content || "—";
@@ -166,9 +172,44 @@ export function sourceKey(blockId: string, sourceId: string) {
 }
 
 export function formatOutputType(outputType: string): string {
+  if (outputType in OUTPUT_TYPE_LABELS) {
+    return OUTPUT_TYPE_LABELS[outputType as keyof typeof OUTPUT_TYPE_LABELS].toLowerCase();
+  }
   return outputType.replace("OUTPUT_TYPE_", "").toLowerCase();
 }
 
 export function isDataSourceSource(source: RoadmapSource): source is DataSourceRoadmapSource {
   return source.sourceType === "DATA_SOURCE";
+}
+
+/** Matrix / pill artifact tag — table, listing, figure, content, subcontent. */
+export function getArtifactTypeLabel(source: RoadmapSource): string {
+  if (source.sourceType === "SUBCONTENT") return "Subcontent";
+  if (source.sourceType === "CONTENT") return "Content";
+  if (source.sourceType === "REFERENCE_SOURCE") return "Reference";
+
+  if (source.sourceType === "DATA_SOURCE") {
+    const studyMatch = findStudySourceForRoadmapSource(source);
+    if (studyMatch?.kind === "figure") return "Figure";
+    if (studyMatch?.kind === "listing") return "Listing";
+    return inferDocumentArtifactLabel(source);
+  }
+
+  return "Content";
+}
+
+function inferDocumentArtifactLabel(source: DataSourceRoadmapSource): string {
+  const keys = getDataSourceReferenceKeys(source);
+  const names = [
+    source.sectionName ?? "",
+    ...keys.map((key) => inferSectionName(source.dataSource, key)),
+    ...keys,
+  ];
+  const haystack = names.join(" ").toLowerCase();
+
+  if (haystack.includes("listing")) return "Listing";
+  if (haystack.includes("figure") || /\bfig\.?\b/.test(haystack)) return "Figure";
+  if (haystack.includes("table") && !haystack.includes("table of contents")) return "Table";
+
+  return "Content";
 }

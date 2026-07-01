@@ -5,7 +5,7 @@ import {
   type SourceRole,
 } from "../../data/roadmap";
 import type { DocumentBlock } from "../../types";
-import { CATEGORY_ORDER } from "./types";
+import { CATEGORY_ORDER, effectiveSourceRole } from "./types";
 
 /** One place a document is mapped: a section + its per-placement page range / usage. */
 export type Placement = {
@@ -38,7 +38,8 @@ export type TypeGroup = {
 function computeDefaultUsage(sources: DataSourceRoadmapSource[]): SourceRole | null {
   const counts = new Map<SourceRole, number>();
   for (const source of sources) {
-    if (source.role) counts.set(source.role, (counts.get(source.role) ?? 0) + 1);
+    const role = effectiveSourceRole(source);
+    if (role) counts.set(role, (counts.get(role) ?? 0) + 1);
   }
   if (counts.size === 0) return null;
   let best: SourceRole | null = null;

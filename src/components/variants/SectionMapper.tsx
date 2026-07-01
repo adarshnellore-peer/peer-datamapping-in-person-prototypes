@@ -14,6 +14,7 @@ export function SectionMapper({
   onUpdateSource,
   onRemoveSource,
   allowSourceTypeChange = false,
+  rolePickerMode = "usage",
 }: {
   block: ContentBlockData;
   tracedSourceId: string | null;
@@ -21,6 +22,7 @@ export function SectionMapper({
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
   allowSourceTypeChange?: boolean;
+  rolePickerMode?: "usage" | "format";
 }) {
   const traceOnFieldClick = Boolean(onTrace) && !allowSourceTypeChange;
   return (
@@ -36,6 +38,7 @@ export function SectionMapper({
             source={source}
             variant="v2"
             allowSourceTypeChange={allowSourceTypeChange}
+            rolePickerMode={rolePickerMode}
             traceOnFieldClick={traceOnFieldClick}
             isTraced={tracedSourceId === source.id}
             onChange={onUpdateSource}

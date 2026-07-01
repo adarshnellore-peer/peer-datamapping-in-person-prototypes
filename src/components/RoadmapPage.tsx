@@ -40,13 +40,19 @@ import { SourceViewVariant } from "./variants/SourceViewVariant";
 import { ConnectorVariant } from "./variants/ConnectorVariant";
 import { findStudySourcePlacement } from "./variants/connectorGraph";
 import { MatrixVariant } from "./variants/MatrixVariant";
-import { MATRIX_COLUMNS } from "./variants/types";
+import { MATRIX_COLUMNS, effectiveFormatRole, type MatrixTagRole } from "./variants/types";
 import { SourcePickerOverlay } from "./SourcePickerOverlay";
 // import { SourceLibraryOverlay } from "./SourceLibraryOverlay";
 import { DOCUMENT_BLOCKS } from "../data/roadmapDocument";
 import type { OutlineRefPayload } from "../utils/v2DragPayload";
-import { createSourceForType, type RoadmapSource, type SourceRole } from "../data/roadmap";
-import { findStudySourceById, findStudySourceForRoadmapSource, studySourceToRoadmapSource, STUDY_DATA_SOURCES, type StudyDataSource } from "../data/studyDataSources";
+import {
+  appendReferenceKeyToDataSource,
+  consolidateContentBlockSourcesIfNeeded,
+  getDataSourceReferenceKeys,
+  normalizeDataSourceReferenceKeys,
+} from "../utils/dataSourceReferences";
+import { createSourceForType, type DataSourceRoadmapSource, type RoadmapSource, type SourceFormatRole, type SourceRole } from "../data/roadmap";
+import { findStudySourceById, findStudySourceForRoadmapSource, studySourceToRoadmapSource, defaultFormatRoleForStudySource, STUDY_DATA_SOURCES, type StudyDataSource } from "../data/studyDataSources";
 // import { getDefaultSectionForDocument } from "../data/documentPreview";
 import type { ContentBlockData, DocumentBlock, HeadingBlock, ViewMode } from "../types";
 import {
@@ -281,6 +287,8 @@ export function RoadmapPage() {
   const storylineLayout = usesStorylineLayout(variant, mappingSubview);
   const matrixLayout = usesMatrixLayout(variant, mappingSubview);
   const showGlobalToc = usesMappingToc(variant, mappingSubview);
+  /** V2 only: drag outline rows onto mapping targets. V6 storyline matches V1 sidebar controls. */
+  const tocUsesOutlineMappingDrag = variant === "twoColumn";
 
   const handleTocNavigate = useCallback(
     (id: string) => {
@@ -471,17 +479,205 @@ export function RoadmapPage() {
     }
   }, []);
 
+  const mapStudySourceToStorylineSection = useCallback((blockId: string, studySourceId: string) => {
+    const entry = findStudySourceById(studySourceId);
+    if (!entry) return;
+    const role = defaultFormatRoleForStudySource(entry);
+    const incoming = normalizeDataSourceReferenceKeys({
+      ...studySourceToRoadmapSource(entry),
+      role,
+    });
+
+    setBlocks((prev) =>
+      prev.map((block) => {
+        if (block.type !== "content" || block.id !== blockId) return block;
+
+        const existingIndex = block.sources.findIndex(
+          (source) =>
+            source.sourceType === "DATA_SOURCE" &&
+            source.dataSource === incoming.dataSource &&
+            effectiveFormatRole(source) === role,
+        );
+
+        if (existingIndex === -1) {
+          return {
+            ...block,
+            sources: [...block.sources, { ...incoming, id: crypto.randomUUID() }],
+          };
+        }
+
+        const existing = block.sources[existingIndex] as DataSourceRoadmapSource;
+        const merged = appendReferenceKeyToDataSource(existing, incoming.referenceKey);
+        const nextSources = [...block.sources];
+        nextSources[existingIndex] = { ...merged, id: existing.id, role };
+        return { ...block, sources: nextSources };
+      }),
+    );
+    setToast("Source mapped");
+  }, []);
+
+  const mapStudySourcesToStorylineSection = useCallback((blockId: string, studySourceIds: string[]) => {
+    if (studySourceIds.length === 0) return;
+    let added = 0;
+    setBlocks((prev) =>
+      prev.map((block) => {
+        if (block.type !== "content" || block.id !== blockId) return block;
+        let nextSources = [...block.sources];
+
+        for (const studySourceId of studySourceIds) {
+          const entry = findStudySourceById(studySourceId);
+          if (!entry) continue;
+          const role = defaultFormatRoleForStudySource(entry);
+          const incoming = normalizeDataSourceReferenceKeys({
+            ...studySourceToRoadmapSource(entry),
+            role,
+          });
+
+          const existingIndex = nextSources.findIndex(
+            (source) =>
+              source.sourceType === "DATA_SOURCE" &&
+              source.dataSource === incoming.dataSource &&
+              effectiveFormatRole(source) === role,
+          );
+
+          if (existingIndex === -1) {
+            nextSources.push({ ...incoming, id: crypto.randomUUID() });
+            added += 1;
+            continue;
+          }
+
+          const existing = nextSources[existingIndex] as DataSourceRoadmapSource;
+          const before = getDataSourceReferenceKeys(existing).length;
+          const merged = appendReferenceKeyToDataSource(existing, incoming.referenceKey);
+          if (getDataSourceReferenceKeys(merged).length > before) {
+            added += 1;
+          }
+          nextSources[existingIndex] = { ...merged, id: existing.id, role };
+        }
+
+        if (added === 0) return block;
+        return { ...block, sources: nextSources };
+      }),
+    );
+    if (added > 0) {
+      setToast(added === 1 ? "Source mapped" : `${added} sections mapped`);
+    }
+  }, []);
+
+  const mapStudySourceToSectionWithFormatRole = useCallback(
+    (blockId: string, studySourceId: string, role: MatrixTagRole): string | undefined => {
+      const formatRole: SourceFormatRole = role === "reference" ? "reference" : "source";
+      const entry = findStudySourceById(studySourceId);
+      if (!entry) return undefined;
+      const incoming = normalizeDataSourceReferenceKeys({
+        ...studySourceToRoadmapSource(entry),
+        role: formatRole,
+      });
+
+      let createdId: string | undefined;
+      setBlocks((prev) =>
+        prev.map((block) => {
+          if (block.id !== blockId) return block;
+          if (block.type !== "content" && block.type !== "heading") return block;
+          const sources = block.type === "content" ? block.sources : (block.sources ?? []);
+
+          const existingIndex = sources.findIndex(
+            (source) =>
+              source.sourceType === "DATA_SOURCE" &&
+              source.dataSource === incoming.dataSource &&
+              effectiveFormatRole(source) === formatRole,
+          );
+
+          if (existingIndex === -1) {
+            createdId = crypto.randomUUID();
+            const nextSources = [...sources, { ...incoming, id: createdId }];
+            return block.type === "content"
+              ? { ...block, sources: nextSources }
+              : { ...block, sources: nextSources };
+          }
+
+          const existing = sources[existingIndex] as DataSourceRoadmapSource;
+          const merged = appendReferenceKeyToDataSource(existing, incoming.referenceKey);
+          createdId = existing.id;
+          const nextSources = [...sources];
+          nextSources[existingIndex] = { ...merged, id: existing.id, role: formatRole };
+          return block.type === "content"
+            ? { ...block, sources: nextSources }
+            : { ...block, sources: nextSources };
+        }),
+      );
+      setToast("Source mapped");
+      return createdId;
+    },
+    [],
+  );
+
+  const mapStudySourcesToSectionWithFormatRole = useCallback(
+    (blockId: string, studySourceIds: string[], role: MatrixTagRole) => {
+      const formatRole: SourceFormatRole = role === "reference" ? "reference" : "source";
+      if (studySourceIds.length === 0) return;
+      let added = 0;
+      setBlocks((prev) =>
+        prev.map((block) => {
+          if (block.id !== blockId) return block;
+          if (block.type !== "content" && block.type !== "heading") return block;
+          let nextSources = block.type === "content" ? [...block.sources] : [...(block.sources ?? [])];
+
+          for (const studySourceId of studySourceIds) {
+            const entry = findStudySourceById(studySourceId);
+            if (!entry) continue;
+            const incoming = normalizeDataSourceReferenceKeys({
+              ...studySourceToRoadmapSource(entry),
+              role: formatRole,
+            });
+
+            const existingIndex = nextSources.findIndex(
+              (source) =>
+                source.sourceType === "DATA_SOURCE" &&
+                source.dataSource === incoming.dataSource &&
+                effectiveFormatRole(source) === formatRole,
+            );
+
+            if (existingIndex === -1) {
+              nextSources.push({ ...incoming, id: crypto.randomUUID() });
+              added += 1;
+              continue;
+            }
+
+            const existing = nextSources[existingIndex] as DataSourceRoadmapSource;
+            const before = getDataSourceReferenceKeys(existing).length;
+            const merged = appendReferenceKeyToDataSource(existing, incoming.referenceKey);
+            if (getDataSourceReferenceKeys(merged).length > before) {
+              added += 1;
+            }
+            nextSources[existingIndex] = { ...merged, id: existing.id, role: formatRole };
+          }
+
+          if (added === 0) return block;
+          return block.type === "content"
+            ? { ...block, sources: nextSources }
+            : { ...block, sources: nextSources };
+        }),
+      );
+      if (added > 0) {
+        setToast(added === 1 ? "Source mapped" : `${added} sections mapped`);
+      }
+    },
+    [],
+  );
+
   const mapStudySourceToSectionWithRole = (
     blockId: string,
     studySourceId: string,
-    role: SourceRole,
+    role: MatrixTagRole,
   ): string | undefined => {
+    const usageRole: SourceRole = role === "source" ? "primary" : (role as SourceRole);
     const entry = findStudySourceById(studySourceId);
     if (!entry) return undefined;
     const created = {
       ...studySourceToRoadmapSource(entry),
       id: crypto.randomUUID(),
-      role,
+      role: usageRole,
     };
     setBlocks((prev) =>
       prev.map((block) => {
@@ -502,8 +698,9 @@ export function RoadmapPage() {
   const mapStudySourcesToSectionWithRole = (
     blockId: string,
     studySourceIds: string[],
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => {
+    const usageRole: SourceRole = role === "source" ? "primary" : (role as SourceRole);
     if (studySourceIds.length === 0) return;
     let added = 0;
     setBlocks((prev) =>
@@ -518,7 +715,7 @@ export function RoadmapPage() {
           nextSources.push({
             ...studySourceToRoadmapSource(entry),
             id: crypto.randomUUID(),
-            role,
+            role: usageRole,
           });
           added += 1;
         }
@@ -534,7 +731,7 @@ export function RoadmapPage() {
   };
 
   const mapOutlineRefToSectionWithRole = useCallback(
-    (toBlockId: string, payload: OutlineRefPayload, role: SourceRole): string | undefined => {
+    (toBlockId: string, payload: OutlineRefPayload, role: MatrixTagRole): string | undefined => {
       if (payload.fromBlockId === toBlockId) return undefined;
       const base = createSourceForType(payload.sourceType, {
         content: payload.label,
@@ -571,7 +768,7 @@ export function RoadmapPage() {
   );
 
   const matrixDropOnHeadingSlot = useCallback(
-    (slotHeadingId: string, role: SourceRole, payload: V2DragPayload) => {
+    (slotHeadingId: string, role: MatrixTagRole, payload: V2DragPayload) => {
       setBlocks((prev) => {
         if (!isHeadingInsertionSlot(prev, slotHeadingId)) return prev;
 
@@ -796,7 +993,7 @@ export function RoadmapPage() {
     fromBlockId: string,
     sourceId: string,
     toBlockId: string,
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => {
     setBlocks((prev) => {
       let moved: RoadmapSource | null = null;
@@ -1090,6 +1287,25 @@ export function RoadmapPage() {
     [blocks],
   );
 
+  useEffect(() => {
+    if (variant !== "mapping" || mappingSubview !== "storyline") return;
+    setBlocks((prev) => {
+      let anyChanged = false;
+      const next = prev.map((block) => {
+        if (block.type !== "content") return block;
+        const { sources, changed } = consolidateContentBlockSourcesIfNeeded(
+          block.sources,
+          (source) =>
+            source.sourceType === "DATA_SOURCE" ? effectiveFormatRole(source) ?? "" : source.id,
+        );
+        if (!changed) return block;
+        anyChanged = true;
+        return { ...block, sources };
+      });
+      return anyChanged ? next : prev;
+    });
+  }, [variant, mappingSubview]);
+
   const usageCountByStudySourceId = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const block of blocks) {
@@ -1097,10 +1313,11 @@ export function RoadmapPage() {
       const sources = block.type === "content" ? block.sources : (block.sources ?? []);
       for (const source of sources) {
         if (source.sourceType !== "DATA_SOURCE") continue;
+        const referenceKeys = getDataSourceReferenceKeys(source);
         for (const entry of STUDY_DATA_SOURCES) {
           if (
             entry.dataSource === source.dataSource &&
-            entry.referenceKey === source.referenceKey
+            referenceKeys.includes(entry.referenceKey)
           ) {
             counts[entry.id] = (counts[entry.id] ?? 0) + 1;
           }
@@ -1458,8 +1675,8 @@ export function RoadmapPage() {
               onAddContentAfter={addContentAfter}
               onDeleteHeading={deleteHeading}
               onDeleteContent={deleteContentBlock}
-              outlineMappingDrag={storylineLayout}
-              hideAddActions={storylineLayout}
+              outlineMappingDrag={tocUsesOutlineMappingDrag}
+              hideAddActions={tocUsesOutlineMappingDrag}
             />
           </aside>
         )}
@@ -1549,23 +1766,27 @@ export function RoadmapPage() {
                 onTraceSource: openTrace,
                 onUpdateSource: updateSourceInBlock,
                 onRemoveSource: removeSourceFromBlock,
-                onMapStudySource: mapStudySourceToSection,
-                onMapStudySources: mapStudySourcesToSection,
+                onMapStudySource: mapStudySourceToStorylineSection,
+                onMapStudySources: mapStudySourcesToStorylineSection,
                 onMapOutlineToSection: mapOutlineToSection,
                 onMoveSource: moveSourceToSection,
                 onPromptChange: updatePrompt,
+                onOutputTypeChange: updateOutputType,
+                rolePickerMode: "format",
               }}
               matrix={{
                 blocks,
                 activeBlockId: activeTocId,
+                columnMode: "format",
+                rolePickerMode: "format",
                 tracedSource: traceState
                   ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
                   : null,
                 onTraceSource: openTrace,
                 onUpdateSource: updateSourceInBlock,
                 onRemoveSource: removeSourceFromBlock,
-                onMapStudySourceWithRole: mapStudySourceToSectionWithRole,
-                onMapStudySourcesWithRole: mapStudySourcesToSectionWithRole,
+                onMapStudySourceWithRole: mapStudySourceToSectionWithFormatRole,
+                onMapStudySourcesWithRole: mapStudySourcesToSectionWithFormatRole,
                 onMapOutlineRefWithRole: mapOutlineRefToSectionWithRole,
                 onHeadingSlotDrop: matrixDropOnHeadingSlot,
                 onMoveSourceToMatrixCell: moveSourceToMatrixCell,

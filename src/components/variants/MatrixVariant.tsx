@@ -9,15 +9,20 @@ import {
   ROADMAP_OUTLINE_HEAD_CLASS,
 } from "../roadmap/RoadmapOutlineRow";
 import type { StudyDataSource } from "../../data/studyDataSources";
-import type { RoadmapSource, SourceRole } from "../../data/roadmap";
+import type { RoadmapSource } from "../../data/roadmap";
 import type { HeadingBlock } from "../../types";
 import { buildTocFlatList, isHeadingInsertionSlot } from "../../utils/documentBlocks";
 import {
-  MATRIX_COLUMNS,
+  FORMAT_MATRIX_COLUMNS,
+  formatRoleForFormatMatrixColumn,
   isOutlineReferenceSource,
+  matrixColumnForFormatSource,
   matrixColumnForSource,
+  MATRIX_COLUMNS,
   roleForMatrixColumn,
+  type FormatMatrixColumnId,
   type MatrixColumnId,
+  type MatrixTagRole,
   type VariantProps,
 } from "./types";
 import { SourcePill } from "./SourcePill";
@@ -31,12 +36,49 @@ import {
   type V2DragPayload,
 } from "../../utils/v2DragPayload";
 
-function sourceWithMatrixRole(source: RoadmapSource, role: SourceRole): RoadmapSource {
+function sourceWithColumnRole(source: RoadmapSource, role: MatrixTagRole): RoadmapSource {
   return {
     ...source,
     role,
     isReference: role === "reference" ? true : undefined,
   };
+}
+
+type MatrixColumnDef = {
+  id: string;
+  label: string;
+  hint: string;
+  dotHex: string;
+  text: string;
+  cellTint: string;
+  cellAccent: string;
+  primaryColumn?: boolean;
+};
+
+function matrixColumnsForMode(columnMode: "usage" | "format"): MatrixColumnDef[] {
+  if (columnMode === "format") {
+    return FORMAT_MATRIX_COLUMNS.map((col) => ({
+      ...col,
+      primaryColumn: col.id === "source",
+    }));
+  }
+  return MATRIX_COLUMNS.map((col) => ({
+    ...col,
+    primaryColumn: col.id === "insert",
+  }));
+}
+
+function columnForSource(source: RoadmapSource, columnMode: "usage" | "format"): string {
+  return columnMode === "format"
+    ? matrixColumnForFormatSource(source)
+    : matrixColumnForSource(source);
+}
+
+function roleForColumn(colId: string, columnMode: "usage" | "format"): MatrixTagRole {
+  if (columnMode === "format") {
+    return formatRoleForFormatMatrixColumn(colId as FormatMatrixColumnId);
+  }
+  return roleForMatrixColumn(colId as MatrixColumnId);
 }
 
 function headingDragLabel(heading: HeadingBlock): string {
@@ -51,6 +93,8 @@ function headingDragLabel(heading: HeadingBlock): string {
 export function MatrixVariant({
   blocks,
   activeBlockId,
+  columnMode = "usage",
+  rolePickerMode = "usage",
   tracedSource,
   onTraceSource,
   onUpdateSource,
@@ -72,31 +116,33 @@ export function MatrixVariant({
   onUpdateMappedSource,
 }: VariantProps & {
   activeBlockId?: string | null;
+  columnMode?: "usage" | "format";
+  rolePickerMode?: "usage" | "format";
   onMapStudySourceWithRole: (
     blockId: string,
     studySourceId: string,
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => void;
   onMapStudySourcesWithRole?: (
     blockId: string,
     studySourceIds: string[],
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => void;
   onMapOutlineRefWithRole: (
     toBlockId: string,
     payload: OutlineRefPayload,
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => void;
   onHeadingSlotDrop: (
     slotHeadingId: string,
-    role: SourceRole,
+    role: MatrixTagRole,
     payload: V2DragPayload,
   ) => void;
   onMoveSourceToMatrixCell: (
     fromBlockId: string,
     sourceId: string,
     toBlockId: string,
-    role: SourceRole,
+    role: MatrixTagRole,
   ) => void;
   usageCountByStudySourceId?: Record<string, number>;
   onStudySourceSelect?: (entry: StudyDataSource) => void;
@@ -111,6 +157,8 @@ export function MatrixVariant({
 }) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const draggingRef = useRef<V2DragPayload | null>(null);
+  const columns = useMemo(() => matrixColumnsForMode(columnMode), [columnMode]);
+  const tableMinWidth = columnMode === "format" ? "min-w-[720px]" : "min-w-[960px]";
 
   const outlineByBlockId = useMemo(() => {
     const map = new Map<string, ReturnType<typeof buildTocFlatList>[number]>();
@@ -131,23 +179,23 @@ export function MatrixVariant({
   };
 
 
-  const sourcesInColumn = (sources: RoadmapSource[], col: MatrixColumnId) =>
-    sources.filter((s) => matrixColumnForSource(s) === col);
+  const sourcesInColumn = (sources: RoadmapSource[], colId: string) =>
+    sources.filter((s) => columnForSource(s, columnMode) === colId);
 
-  const roleTotals = (col: MatrixColumnId) =>
+  const roleTotals = (colId: string) =>
     blocks.reduce((n, b) => {
-      if (b.type === "content") return n + sourcesInColumn(b.sources, col).length;
-      if (b.type === "heading") return n + sourcesInColumn(b.sources ?? [], col).length;
+      if (b.type === "content") return n + sourcesInColumn(b.sources, colId).length;
+      if (b.type === "heading") return n + sourcesInColumn(b.sources ?? [], colId).length;
       return n;
     }, 0);
 
   const dropMappedOnCell = (
     toBlockId: string,
-    col: MatrixColumnId,
+    colId: string,
     fromBlockId: string,
     sourceId: string,
   ) => {
-    const role = roleForMatrixColumn(col);
+    const role = roleForColumn(colId, columnMode);
     if (fromBlockId === toBlockId) {
       const block = blocks.find((b) => b.id === toBlockId);
       const sources =
@@ -158,7 +206,7 @@ export function MatrixVariant({
             : [];
       const source = sources.find((s) => s.id === sourceId);
       if (!source) return;
-      onUpdateSource(toBlockId, sourceWithMatrixRole(source, role));
+      onUpdateSource(toBlockId, sourceWithColumnRole(source, role));
     } else {
       onMoveSourceToMatrixCell(fromBlockId, sourceId, toBlockId, role);
     }
@@ -167,7 +215,7 @@ export function MatrixVariant({
 
   const dropOnCell = (
     toBlockId: string,
-    col: MatrixColumnId,
+    colId: string,
     dataTransfer: DataTransfer,
     options?: {
       rejectOutlineRef?: (payload: OutlineRefPayload) => boolean;
@@ -180,19 +228,19 @@ export function MatrixVariant({
     if (options?.headingSlotId) {
       const studySourceIds = studySourceIdsFromPayload(payload);
       if (studySourceIds || payload.kind === "mapped") {
-        onHeadingSlotDrop(options.headingSlotId, roleForMatrixColumn(col), payload);
+        onHeadingSlotDrop(options.headingSlotId, roleForColumn(colId, columnMode), payload);
       }
       setDropTarget(null);
       return;
     }
 
     if (payload?.kind === "mapped") {
-      dropMappedOnCell(toBlockId, col, payload.fromBlockId, payload.sourceId);
+      dropMappedOnCell(toBlockId, colId, payload.fromBlockId, payload.sourceId);
       return;
     }
     const studySourceIds = studySourceIdsFromPayload(payload);
     if (studySourceIds) {
-      const role = roleForMatrixColumn(col);
+      const role = roleForColumn(colId, columnMode);
       if (studySourceIds.length === 1) {
         onMapStudySourceWithRole(toBlockId, studySourceIds[0]!, role);
       } else if (onMapStudySourcesWithRole) {
@@ -207,7 +255,7 @@ export function MatrixVariant({
         setDropTarget(null);
         return;
       }
-      onMapOutlineRefWithRole(toBlockId, payload, roleForMatrixColumn(col));
+      onMapOutlineRefWithRole(toBlockId, payload, roleForColumn(colId, columnMode));
     } else if (payload?.kind === "toc") {
       onMapOutlineRefWithRole(
         toBlockId,
@@ -216,7 +264,7 @@ export function MatrixVariant({
           sourceType: payload.sourceType,
           label: payload.label,
         },
-        roleForMatrixColumn(col),
+        roleForColumn(colId, columnMode),
       );
     }
     setDropTarget(null);
@@ -240,7 +288,7 @@ export function MatrixVariant({
       dropDisabled?: boolean;
     },
   ) =>
-    MATRIX_COLUMNS.map((col) => {
+    columns.map((col) => {
       const cellId = `${rowId}|${col.id}`;
       const cellSources = sourcesInColumn(rowSources, col.id);
       const isOver = !options?.dropDisabled && dropTarget === cellId;
@@ -285,7 +333,8 @@ export function MatrixVariant({
                 traceOnFieldClick={Boolean(
                   onTraceSource && !isOutlineReferenceSource(source),
                 )}
-                dragHandleAlwaysVisible={col.id === "insert"}
+                dragHandleAlwaysVisible={Boolean(col.primaryColumn)}
+                rolePickerMode={rolePickerMode}
                 matrixCellDrop={cellDropHandlers}
                 matrixDrag={{
                   onDragStart: (event) => {
@@ -318,13 +367,13 @@ export function MatrixVariant({
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="flex min-h-0 flex-1">
         <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-          <table className="w-full min-w-[960px] border-separate border-spacing-0">
+          <table className={`w-full ${tableMinWidth} border-separate border-spacing-0`}>
             <thead>
               <tr>
                 <th className={ROADMAP_OUTLINE_HEAD_CLASS}>
                   <RoadmapOutlineHeader />
                 </th>
-                {MATRIX_COLUMNS.map((col) => (
+                {columns.map((col) => (
                   <th
                     key={col.id}
                     className={`sticky top-0 z-20 min-w-[220px] border-b border-r border-[#d4ced3] px-2.5 py-1.5 text-left align-top ${col.cellTint} ${col.cellAccent}`}

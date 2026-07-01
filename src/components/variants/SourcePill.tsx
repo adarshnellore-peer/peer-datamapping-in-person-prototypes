@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { Check, GripVertical, X } from "lucide-react";
+import { Check, GripVertical, Plus, X } from "lucide-react";
 import { PillOptionPicker } from "../CollapsiblePillField";
 import {
   CONTENT_OPTIONS,
@@ -13,20 +13,36 @@ import {
   getDocumentCategory,
   getReferenceKeysForDataSource,
   withSourceType,
+  type DataSourceRoadmapSource,
   type RoadmapSource,
+  type SourceFormatRole,
   type SourceRole,
   type SourceType,
 } from "../../data/roadmap";
 import {
   ARTIFACT_TYPE_CHIP,
+  FORMAT_ROLE_BADGE,
+  FORMAT_ROLE_BADGE_PICKER,
   ROLE_BADGE,
   ROLE_BADGE_PICKER,
+  SOURCE_FORMAT_ROLES,
+  effectiveFormatRole,
   effectiveSourceRole,
+  formatRoleHint,
+  formatRoleLabel,
   roleLabel,
+  ROLE_HINT,
   artifactTypeLabel,
 } from "./types";
+import {
+  appendReferenceKeyToDataSource,
+  getDataSourceReferenceKeys,
+  removeReferenceKeyFromDataSource,
+  replaceReferenceKeyOnDataSource,
+} from "../../utils/dataSourceReferences";
 
 type ActiveField = "sourceType" | "document" | "pages" | "role" | null;
+type PagesTarget = string | "__add__";
 
 const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   DATA_SOURCE: "Data source",
@@ -41,6 +57,8 @@ const ROLE_CHIP_BASE =
 function SourceTypeAndRole({
   source,
   role,
+  formatRole,
+  rolePickerMode,
   activeField,
   allowSourceTypeChange,
   onToggleType,
@@ -48,6 +66,8 @@ function SourceTypeAndRole({
 }: {
   source: RoadmapSource;
   role: SourceRole | undefined;
+  formatRole: SourceFormatRole | undefined;
+  rolePickerMode: "usage" | "format";
   activeField: ActiveField;
   allowSourceTypeChange: boolean;
   onToggleType: () => void;
@@ -63,6 +83,8 @@ function SourceTypeAndRole({
       />
       <RoleBadge
         role={role}
+        formatRole={formatRole}
+        rolePickerMode={rolePickerMode}
         active={activeField === "role"}
         onClick={onToggleRole}
       />
@@ -124,6 +146,7 @@ export function SourcePill({
   layout = "default",
   compact = false,
   allowSourceTypeChange = false,
+  rolePickerMode = "usage",
   traceOnFieldClick = false,
   matrixDrag,
   matrixCellDrop,
@@ -139,6 +162,8 @@ export function SourcePill({
   layout?: "default" | "matrix";
   compact?: boolean;
   allowSourceTypeChange?: boolean;
+  /** V6 storyline: Paragraph / Table / Figure instead of usage roles. */
+  rolePickerMode?: "usage" | "format";
   /** When true, document/pages fields open trace panel instead of inline pickers. */
   traceOnFieldClick?: boolean;
   /** V3 matrix: drag handle wired to retag / move across cells. */
@@ -161,25 +186,40 @@ export function SourcePill({
   const isMatrixLayout = isV2 && layout === "matrix";
   const rootRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<ActiveField>(null);
+  const [pagesTarget, setPagesTarget] = useState<PagesTarget | null>(null);
   const fieldOpensTrace = traceOnFieldClick && !!onTrace;
 
   useEffect(() => {
-    if (!active) return;
+    if (!active && pagesTarget === null) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setActive(null);
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setActive(null);
+        setPagesTarget(null);
+      }
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [active]);
+  }, [active, pagesTarget]);
 
-  const toggle = (field: ActiveField) =>
+  const toggle = (field: ActiveField) => {
+    setPagesTarget(null);
     setActive((current) => (current === field ? null : field));
+  };
+
+  const dataSource =
+    source.sourceType === "DATA_SOURCE" ? (source as DataSourceRoadmapSource) : null;
+  const referenceKeys = dataSource ? getDataSourceReferenceKeys(dataSource) : [];
+  const multiRange = rolePickerMode === "format" && !!dataSource;
 
   const isProposed = source.status === "proposed";
   const displayRole = effectiveSourceRole(source);
+  const displayFormatRole = effectiveFormatRole(source);
 
-  const handleRootClick = () => {
-    if (!isV2 || !onTrace || active) return;
+  const handleRootClick = (event: React.MouseEvent) => {
+    if ((event.target as Element).closest("button, .peer-field-chip, .peer-source-actions")) {
+      return;
+    }
+    if (!isV2 || !onTrace || active || pagesTarget) return;
     onTrace();
   };
 
@@ -198,8 +238,21 @@ export function SourcePill({
     toggle(field);
   };
 
-  const setRole = (role: SourceRole) => {
-    onChange({ ...source, role, isReference: role === "reference" ? true : undefined });
+  const setRole = (role: SourceRole | SourceFormatRole) => {
+    if (rolePickerMode === "format") {
+      const formatRole = role as SourceFormatRole;
+      onChange({
+        ...source,
+        role: formatRole,
+        isReference: formatRole === "reference" ? true : undefined,
+      });
+    } else {
+      onChange({
+        ...source,
+        role: role as SourceRole,
+        isReference: role === "reference" ? true : undefined,
+      });
+    }
     setActive(null);
   };
 
@@ -209,7 +262,11 @@ export function SourcePill({
   };
 
   const menuOpen =
-    active === "document" || active === "pages" || active === "role" || active === "sourceType";
+    active === "document" ||
+    active === "pages" ||
+    active === "role" ||
+    active === "sourceType" ||
+    pagesTarget !== null;
 
   const primaryTitle =
     source.sourceType === "DATA_SOURCE"
@@ -372,6 +429,8 @@ export function SourcePill({
             <SourceTypeAndRole
               source={source}
               role={displayRole}
+              formatRole={displayFormatRole}
+              rolePickerMode={rolePickerMode}
               activeField={active}
               allowSourceTypeChange={allowSourceTypeChange}
               onToggleType={() => toggle("sourceType")}
@@ -407,7 +466,12 @@ export function SourcePill({
             </div>
             </div>
             {active === "role" && (
-              <RolePickerInline role={displayRole} onSelectRole={setRole} />
+              <RolePickerInline
+                rolePickerMode={rolePickerMode}
+                role={displayRole}
+                formatRole={displayFormatRole}
+                onSelectRole={setRole}
+              />
             )}
             {allowSourceTypeChange && active === "sourceType" && (
               <SourceTypePickerInline
@@ -416,8 +480,46 @@ export function SourcePill({
               />
             )}
           </div>
-          <div className={`peer-source-body ${compact ? "" : ""}`}>
-            {source.sourceType === "DATA_SOURCE" ? (
+          <div className={`peer-source-body ${compact ? "" : ""} ${multiRange ? "flex-col !items-stretch gap-1.5" : ""}`}>
+            {dataSource ? (
+              multiRange ? (
+                <>
+                  <FieldButton
+                    active={!fieldOpensTrace && active === "document"}
+                    onClick={() => handleFieldClick("document")}
+                    className="min-w-0 w-full"
+                    compact={compact}
+                    traceHint={fieldOpensTrace}
+                  >
+                    <span className="truncate font-medium text-[#1f1f1f]">
+                      {dataSource.dataSource || "Select document…"}
+                    </span>
+                  </FieldButton>
+                  <DataSourceReferenceKeys
+                    keys={referenceKeys}
+                    activeKey={pagesTarget}
+                    disabled={!dataSource.dataSource}
+                    traceHint={fieldOpensTrace && !multiRange}
+                    onSelectKey={(key) => {
+                      if (fieldOpensTrace && !multiRange && onTrace) {
+                        onTrace();
+                        return;
+                      }
+                      setActive(null);
+                      setPagesTarget((current) => (current === key ? null : key));
+                    }}
+                    onAddKey={() => {
+                      if (!dataSource.dataSource) return;
+                      setActive(null);
+                      setPagesTarget("__add__");
+                    }}
+                    onRemoveKey={(key) => {
+                      onChange(removeReferenceKeyFromDataSource(dataSource, key));
+                      setPagesTarget((current) => (current === key ? null : current));
+                    }}
+                  />
+                </>
+              ) : (
               <>
                 <FieldButton
                   active={!fieldOpensTrace && active === "document"}
@@ -427,22 +529,23 @@ export function SourcePill({
                   traceHint={fieldOpensTrace}
                 >
                   <span className="truncate font-medium text-[#1f1f1f]">
-                    {source.dataSource || "Select document…"}
+                    {dataSource.dataSource || "Select document…"}
                   </span>
                 </FieldButton>
                 <FieldButton
                   active={!fieldOpensTrace && active === "pages"}
                   onClick={() => handleFieldClick("pages")}
-                  disabled={!source.dataSource && !fieldOpensTrace}
+                  disabled={!dataSource.dataSource && !fieldOpensTrace}
                   className="shrink-0 max-w-[46%]"
                   compact={compact}
                   traceHint={fieldOpensTrace}
                 >
                   <span className="truncate text-[#454545]">
-                    {source.referenceKey || "Pages…"}
+                    {dataSource.referenceKey || "Pages…"}
                   </span>
                 </FieldButton>
               </>
+              )
             ) : (
               <FieldButton
                 active={!fieldOpensTrace && active === "document"}
@@ -464,6 +567,8 @@ export function SourcePill({
             <SourceTypeAndRole
               source={source}
               role={displayRole}
+              formatRole={displayFormatRole}
+              rolePickerMode={rolePickerMode}
               activeField={active}
               allowSourceTypeChange={allowSourceTypeChange}
               onToggleType={() => toggle("sourceType")}
@@ -532,7 +637,12 @@ export function SourcePill({
             </button>
           </div>
           {active === "role" && (
-            <RolePickerInline role={displayRole} onSelectRole={setRole} />
+            <RolePickerInline
+              rolePickerMode={rolePickerMode}
+              role={displayRole}
+              formatRole={displayFormatRole}
+              onSelectRole={setRole}
+            />
           )}
           {allowSourceTypeChange && active === "sourceType" && (
             <SourceTypePickerInline
@@ -543,28 +653,40 @@ export function SourcePill({
         </>
       )}
 
-      {active && !fieldOpensTrace && active !== "role" && active !== "sourceType" && (
+      {(active || pagesTarget) &&
+        (!fieldOpensTrace || (multiRange && pagesTarget)) &&
+        active !== "role" &&
+        active !== "sourceType" && (
         <div className="border-t border-[#ececec] px-3 py-2.5 sm:px-3">
-          {active === "document" && source.sourceType === "DATA_SOURCE" && (
+          {active === "document" && source.sourceType === "DATA_SOURCE" && !fieldOpensTrace && (
             <PillOptionPicker
               value={source.dataSource}
               options={DATA_SOURCES}
               getCategory={getDocumentCategory}
               categoryOrder={DATA_SOURCE_CATEGORY_ORDER}
               searchPlaceholder="Search data sources"
-              onSelect={(dataSource) => {
+              onSelect={(dataSourceName) => {
                 onChange({
                   ...source,
-                  dataSource,
+                  dataSource: dataSourceName,
                   referenceKey: "",
+                  referenceKeys: undefined,
                   sectionName: undefined,
                   documentCategory: undefined,
                 });
-                setActive("pages");
+                if (multiRange) {
+                  setActive(null);
+                  setPagesTarget("__add__");
+                } else {
+                  setActive("pages");
+                }
               }}
             />
           )}
-          {active === "pages" && source.sourceType === "DATA_SOURCE" && source.dataSource && (
+          {active === "pages" &&
+            source.sourceType === "DATA_SOURCE" &&
+            source.dataSource &&
+            !multiRange && (
             <PillOptionPicker
               value={source.referenceKey}
               options={getReferenceKeysForDataSource(source.dataSource)}
@@ -573,6 +695,23 @@ export function SourcePill({
                   enrichDataSourceSource({ ...source, referenceKey, sectionName: undefined }),
                 );
                 setActive(null);
+              }}
+            />
+          )}
+          {pagesTarget &&
+            dataSource?.dataSource && (
+            <PillOptionPicker
+              value={pagesTarget === "__add__" ? "" : pagesTarget}
+              options={getReferenceKeysForDataSource(dataSource.dataSource)}
+              onSelect={(referenceKey) => {
+                if (pagesTarget === "__add__") {
+                  onChange(appendReferenceKeyToDataSource(dataSource, referenceKey));
+                } else {
+                  onChange(
+                    replaceReferenceKeyOnDataSource(dataSource, pagesTarget, referenceKey),
+                  );
+                }
+                setPagesTarget(null);
               }}
             />
           )}
@@ -605,15 +744,114 @@ export function SourcePill({
   );
 }
 
+function DataSourceReferenceKeys({
+  keys,
+  activeKey,
+  disabled,
+  traceHint,
+  onSelectKey,
+  onAddKey,
+  onRemoveKey,
+}: {
+  keys: string[];
+  activeKey: PagesTarget | null;
+  disabled?: boolean;
+  traceHint?: boolean;
+  onSelectKey: (key: string) => void;
+  onAddKey: () => void;
+  onRemoveKey: (key: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {keys.map((key) => {
+        const isActive = activeKey === key;
+        return (
+          <span
+            key={key}
+            className={`peer-field-chip group/ref-key inline-flex max-w-full items-center gap-0.5 ${
+              isActive ? "ring-2 ring-[var(--peer-primary)] ring-offset-1" : ""
+            }`}
+          >
+            <button
+              type="button"
+              disabled={disabled}
+              title={traceHint ? "Trace to data" : key}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelectKey(key);
+              }}
+              className="min-w-0 truncate text-left text-[12px] leading-snug text-[#454545] disabled:opacity-50"
+            >
+              {key}
+            </button>
+            <button
+              type="button"
+              aria-label={`Remove ${key}`}
+              title="Remove section"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRemoveKey(key);
+              }}
+              className="shrink-0 rounded p-0.5 text-[#bdbdbd] opacity-0 transition-opacity hover:bg-[#fff0f0] hover:text-[var(--peer-primary)] group-hover/ref-key:opacity-100"
+            >
+              <X size={10} strokeWidth={2} />
+            </button>
+          </span>
+        );
+      })}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={(event) => {
+          event.stopPropagation();
+          onAddKey();
+        }}
+        title="Add section or page range"
+        className="inline-flex items-center gap-0.5 rounded-md border border-dashed border-[#d4ced3] px-1.5 py-0.5 text-[11px] font-medium text-[#757575] transition-colors hover:border-[#bdbdbd] hover:bg-[#fafafa] hover:text-[#302f2f] disabled:opacity-50"
+      >
+        <Plus size={11} strokeWidth={2} aria-hidden />
+        Section
+      </button>
+    </div>
+  );
+}
+
 function RoleBadge({
   role,
+  formatRole,
+  rolePickerMode,
   active,
   onClick,
 }: {
   role: SourceRole | undefined;
+  formatRole: SourceFormatRole | undefined;
+  rolePickerMode: "usage" | "format";
   active: boolean;
   onClick: () => void;
 }) {
+  const isFormat = rolePickerMode === "format";
+  const label = isFormat
+    ? formatRole
+      ? formatRoleLabel(formatRole)
+      : "Tag"
+    : role
+      ? roleLabel(role)
+      : "Role";
+  const badgeClass = isFormat
+    ? formatRole
+      ? FORMAT_ROLE_BADGE[formatRole]
+      : "border-dashed border-[#c0b8be] bg-white text-[var(--peer-muted)]"
+    : role
+      ? ROLE_BADGE[role]
+      : "border-dashed border-[#c0b8be] bg-white text-[var(--peer-muted)]";
+  const hint = isFormat
+    ? formatRole
+      ? formatRoleHint(formatRole)
+      : "Choose how this evidence is used in the section."
+    : role
+      ? ROLE_HINT[role]
+      : "Choose how this source is used in the section.";
+
   return (
     <button
       type="button"
@@ -623,28 +861,62 @@ function RoleBadge({
       }}
       aria-expanded={active}
       aria-haspopup="listbox"
-      aria-label={role ? `Section role: ${roleLabel(role)}` : "Set section role"}
-      title={role ? `Section role: ${roleLabel(role)}` : "Set section role"}
+      aria-label={isFormat ? `Source tag: ${label}` : `Section role: ${label}`}
+      title={hint}
       className={`${ROLE_CHIP_BASE} ${
         active
           ? "border-[var(--peer-primary)] bg-[var(--peer-primary-tint)] text-[var(--peer-text)]"
-          : role
-            ? ROLE_BADGE[role]
-            : "border-dashed border-[#c0b8be] bg-white text-[var(--peer-muted)]"
+          : badgeClass
       }`}
     >
-      {role ? roleLabel(role) : "Role"}
+      {label}
     </button>
   );
 }
 
 function RolePickerInline({
+  rolePickerMode,
   role,
+  formatRole,
   onSelectRole,
 }: {
+  rolePickerMode: "usage" | "format";
   role: SourceRole | undefined;
-  onSelectRole: (role: SourceRole) => void;
+  formatRole: SourceFormatRole | undefined;
+  onSelectRole: (role: SourceRole | SourceFormatRole) => void;
 }) {
+  if (rolePickerMode === "format") {
+    return (
+      <div
+        role="listbox"
+        aria-label="Source format"
+        className="peer-source-inline-picker"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {SOURCE_FORMAT_ROLES.map((option) => {
+          const selected = formatRole === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              role="option"
+              aria-selected={selected}
+              title={formatRoleHint(option)}
+              onClick={() => onSelectRole(option)}
+              className={`${ROLE_CHIP_BASE} ${
+                selected
+                  ? FORMAT_ROLE_BADGE[option]
+                  : `${FORMAT_ROLE_BADGE_PICKER[option]} hover:border-opacity-60 hover:bg-opacity-70`
+              }`}
+            >
+              {formatRoleLabel(option)}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div
       role="listbox"
@@ -660,6 +932,7 @@ function RolePickerInline({
             type="button"
             role="option"
             aria-selected={selected}
+            title={ROLE_HINT[option]}
             onClick={() => onSelectRole(option)}
             className={`${ROLE_CHIP_BASE} ${
               selected

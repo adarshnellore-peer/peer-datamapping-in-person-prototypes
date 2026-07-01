@@ -18,7 +18,7 @@ import {
 } from "../../data/roadmap";
 import type { DocumentBlock } from "../../types";
 import { buildSourceTree, type DocNode, type Placement } from "./sourceTree";
-import { CATEGORY_DOT, ROLE_BADGE, roleLabel, type VariantProps } from "./types";
+import { CATEGORY_DOT, ROLE_BADGE, effectiveSourceRole, roleLabel, type VariantProps } from "./types";
 
 const HAS_UPDATE: Record<string, string> = {
   "247HV101 Protocol Version 3": "v4",
@@ -385,6 +385,7 @@ function PlacementLeaf({
   const rootRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<ActiveField>(null);
   const source = placement.source;
+  const usageRole = effectiveSourceRole(source);
   const isProposed = source.status === "proposed";
 
   useEffect(() => {
@@ -446,12 +447,12 @@ function PlacementLeaf({
             className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
               active === "usage"
                 ? "bg-[#fedbda] text-[#302f2f]"
-                : source.role
-                  ? ROLE_BADGE[source.role]
+                : usageRole
+                  ? ROLE_BADGE[usageRole]
                   : "border border-dashed border-[#d4ced3] text-[#9e9e9e]"
             }`}
           >
-            {source.role ? roleLabel(source.role) : "role"}
+            {usageRole ? roleLabel(usageRole) : "role"}
             {placement.isOverride && <span className="text-[#6b4ed6]">*</span>}
           </button>
           {isProposed && (
@@ -502,7 +503,7 @@ function PlacementLeaf({
           {active === "usage" && (
             <div className="flex flex-wrap gap-1">
               {SOURCE_ROLES.map((option) => {
-                const selected = source.role === option;
+                const selected = usageRole === option;
                 return (
                   <button
                     key={option}

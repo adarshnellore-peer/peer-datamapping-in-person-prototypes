@@ -1,5 +1,14 @@
-import { SOURCE_ROLE_LABELS, SOURCE_ROLES, type RoadmapSource, type SourceRole } from "../../data/roadmap";
-import { getSourceTypeTag } from "../../data/sourceHelpers";
+import {
+  normalizeSourceFormatRole,
+  SOURCE_FORMAT_ROLE_LABELS,
+  SOURCE_FORMAT_ROLES,
+  SOURCE_ROLE_LABELS,
+  SOURCE_ROLES,
+  type RoadmapSource,
+  type SourceFormatRole,
+  type SourceRole,
+} from "../../data/roadmap";
+import { getSourceTypeTag, getArtifactTypeLabel } from "../../data/sourceHelpers";
 import type { DocumentBlock } from "../../types";
 
 export type SourceRef = { blockId: string; sourceId: string };
@@ -128,6 +137,13 @@ export const ROLE_BADGE: Record<SourceRole, string> = {
   reference: "border-[#d8b4fe] bg-[#f3e8ff] text-[#5b21b6] font-semibold",
 };
 
+/** Badge styling per V1/V6 storyline format role. */
+export const FORMAT_ROLE_BADGE: Record<SourceFormatRole, string> = {
+  source:
+    "border-[var(--peer-primary-border)] bg-[var(--peer-primary-tint)] text-[#9a1c12] font-semibold",
+  reference: "border-[#d8b4fe] bg-[#f3e8ff] text-[#5b21b6] font-semibold",
+};
+
 /** Faded chips in the inline role picker (unselected). */
 export const ROLE_BADGE_PICKER: Record<SourceRole, string> = {
   primary:
@@ -137,9 +153,74 @@ export const ROLE_BADGE_PICKER: Record<SourceRole, string> = {
   reference: "border-[#d8b4fe]/35 bg-[#f3e8ff]/40 text-[#5b21b6]/65",
 };
 
+export const FORMAT_ROLE_BADGE_PICKER: Record<SourceFormatRole, string> = {
+  source:
+    "border-[var(--peer-primary-border)]/30 bg-[var(--peer-primary-tint)]/35 text-[#9a1c12]/65",
+  reference: "border-[#d8b4fe]/35 bg-[#f3e8ff]/40 text-[#5b21b6]/65",
+};
+
 export function roleLabel(role: SourceRole): string {
   return SOURCE_ROLE_LABELS[role];
 }
+
+export function formatRoleLabel(role: SourceFormatRole): string {
+  return SOURCE_FORMAT_ROLE_LABELS[role];
+}
+
+/** Tooltip copy for V6 storyline source / reference tags. */
+export const FORMAT_ROLE_HINT: Record<SourceFormatRole, string> = {
+  source: "Draft from this evidence — pull values in and interpret them.",
+  reference: "Cross-check only — cite for traceability, not drafted from directly.",
+};
+
+export function formatRoleHint(role: SourceFormatRole): string {
+  return FORMAT_ROLE_HINT[role];
+}
+
+/** V6 matrix: two columns aligned with storyline Source / Reference tags. */
+export type FormatMatrixColumnId = "source" | "reference";
+
+export const FORMAT_MATRIX_COLUMNS: {
+  id: FormatMatrixColumnId;
+  role: SourceFormatRole;
+  label: string;
+  hint: string;
+  dotHex: string;
+  text: string;
+  cellTint: string;
+  cellAccent: string;
+}[] = [
+  {
+    id: "source",
+    role: "source",
+    label: "Source",
+    hint: FORMAT_ROLE_HINT.source,
+    dotHex: "#fe9591",
+    text: "text-[#9a1c12]",
+    cellTint: "bg-[#fff6f5]",
+    cellAccent: "shadow-[inset_0_3px_0_0_rgba(254,149,145,0.35)]",
+  },
+  {
+    id: "reference",
+    role: "reference",
+    label: "Reference",
+    hint: FORMAT_ROLE_HINT.reference,
+    dotHex: "#c084fc",
+    text: "text-[#5b21b6]",
+    cellTint: "bg-[#faf5ff]",
+    cellAccent: "shadow-[inset_0_3px_0_0_rgba(192,132,252,0.28)]",
+  },
+];
+
+export function matrixColumnForFormatSource(source: RoadmapSource): FormatMatrixColumnId {
+  return effectiveFormatRole(source) === "reference" ? "reference" : "source";
+}
+
+export function formatRoleForFormatMatrixColumn(col: FormatMatrixColumnId): SourceFormatRole {
+  return FORMAT_MATRIX_COLUMNS.find((c) => c.id === col)!.role;
+}
+
+export type MatrixTagRole = SourceRole | SourceFormatRole;
 
 /** Short hint describing how a source is used in the section — shown in matrix column heads. */
 export const ROLE_HINT: Record<SourceRole, string> = {
@@ -227,7 +308,7 @@ export function isOutlineReferenceSource(source: RoadmapSource): boolean {
 }
 
 export function artifactTypeLabel(source: RoadmapSource): string {
-  return ARTIFACT_TYPE_CHIP[source.sourceType].label;
+  return getArtifactTypeLabel(source);
 }
 
 export function matrixStatusLabel(state: MappingState): string {
@@ -304,7 +385,10 @@ export const NODE_HEX: Record<MappingState, string> = {
 };
 
 function coerceSourceRole(role: string): SourceRole | undefined {
-  if (role === "text" || role === "table") return "primary";
+  if (role === "source" || role === "paragraph" || role === "text") return "primary";
+  if (role === "table") return "supporting";
+  if (role === "figure") return "context";
+  if (role === "reference") return "reference";
   if ((SOURCE_ROLES as readonly string[]).includes(role)) return role as SourceRole;
   return undefined;
 }
@@ -317,6 +401,20 @@ export function effectiveSourceRole(source: RoadmapSource): SourceRole | undefin
   if (source.isReference || source.sourceType === "REFERENCE_SOURCE") return "reference";
   return undefined;
 }
+
+export function effectiveFormatRole(source: RoadmapSource): SourceFormatRole | undefined {
+  const role = source.role;
+  if (role) {
+    const normalized = normalizeSourceFormatRole(String(role));
+    if (normalized) return normalized;
+  }
+  const usage = effectiveSourceRole(source);
+  if (usage === "reference") return "reference";
+  if (usage) return "source";
+  return undefined;
+}
+
+export { SOURCE_FORMAT_ROLES };
 
 export function mappingStatus(sources: RoadmapSource[]): MappingState {
   if (sources.length === 0) return "empty";
