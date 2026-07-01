@@ -29,6 +29,7 @@ import { StudyDataSourcesList } from "./StudyDataSourcesList";
 import { TableOfContents } from "./TableOfContents";
 import { VariantSwitcher, type VariantId } from "./VariantSwitcher";
 import {
+  MappingSubviewControl,
   MappingVariant,
   usesMatrixLayout,
   usesMappingToc,
@@ -44,7 +45,7 @@ import {
   type StudySourcePlacement,
 } from "../utils/studySourcePlacements";
 import { MatrixVariant } from "./variants/MatrixVariant";
-import { MATRIX_COLUMNS, effectiveFormatRole, type MatrixTagRole } from "./variants/types";
+import { MATRIX_COLUMNS, outlineRefTocTargetId, type MatrixTagRole } from "./variants/types";
 import { SourcePickerOverlay } from "./SourcePickerOverlay";
 // import { SourceLibraryOverlay } from "./SourceLibraryOverlay";
 import { DOCUMENT_BLOCKS } from "../data/roadmapDocument";
@@ -52,6 +53,8 @@ import type { OutlineRefPayload } from "../utils/v2DragPayload";
 import {
   appendReferenceKeyToDataSource,
   consolidateContentBlockSourcesIfNeeded,
+  consolidateDocumentBlocks,
+  dataSourceConsolidationKey,
   getDataSourceReferenceKeys,
   normalizeDataSourceReferenceKeys,
 } from "../utils/dataSourceReferences";
@@ -168,13 +171,25 @@ function createContentBlock(): ContentBlockData {
 
 const ROADMAP_BLOCKS_STORAGE_KEY = "peer-roadmap-blocks-v1";
 
+function findMatchingDataSourceIndex(
+  sources: RoadmapSource[],
+  incoming: DataSourceRoadmapSource,
+): number {
+  const incomingKey = dataSourceConsolidationKey(incoming);
+  return sources.findIndex(
+    (source) =>
+      source.sourceType === "DATA_SOURCE" &&
+      dataSourceConsolidationKey(source) === incomingKey,
+  );
+}
+
 function loadRoadmapBlocks(): DocumentBlock[] {
   try {
     const raw = localStorage.getItem(ROADMAP_BLOCKS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as unknown;
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed as DocumentBlock[];
+        return consolidateDocumentBlocks(parsed as DocumentBlock[]);
       }
     }
   } catch {
@@ -190,6 +205,7 @@ export function RoadmapPage() {
   const [variant, setVariant] = useState<VariantId>("baseline");
   const [tocOpen, setTocOpen] = useState(true);
   const [activeTocId, setActiveTocId] = useState<string | null>("c-1-3");
+  const [tocScrollTick, setTocScrollTick] = useState(0);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [traceState, setTraceState] = useState<TraceState>(null);
   const [libraryTraceSource, setLibraryTraceSource] = useState<RoadmapSource | null>(null);
@@ -220,13 +236,18 @@ export function RoadmapPage() {
   const storylineLayout = usesStorylineLayout(variant, mappingSubview);
   const matrixLayout = usesMatrixLayout(variant, mappingSubview);
   const showGlobalToc = usesMappingToc(variant, mappingSubview);
-  /** V2 only: drag outline rows onto mapping targets. V6 storyline matches V1 sidebar controls. */
-  const tocUsesOutlineMappingDrag = variant === "twoColumn";
+  /** V2 / V6 storyline: drag heading rows onto mapping targets. */
+  const tocUsesOutlineMappingDrag = storylineLayout;
+  /** V2 only: hide V1 add/delete hover actions on outline rows. */
+  const tocHideAddActions = variant === "twoColumn";
 
   const handleTocNavigate = useCallback(
-    (id: string) => {
+    (id: string, options?: { scrollCenter?: boolean }) => {
       if (storylineLayout) {
         setActiveTocId(id);
+        if (options?.scrollCenter !== false) {
+          setTocScrollTick((tick) => tick + 1);
+        }
         if (window.innerWidth < 768) setTocOpen(false);
         return;
       }
@@ -258,16 +279,6 @@ export function RoadmapPage() {
       prev.map((block) =>
         block.type === "content" && block.id === blockId
           ? { ...block, additionalContext }
-          : block,
-      ),
-    );
-  };
-
-  const updateOutputType = (blockId: string, outputType: string) => {
-    setBlocks((prev) =>
-      prev.map((block) =>
-        block.type === "content" && block.id === blockId
-          ? { ...block, outputType }
           : block,
       ),
     );
@@ -376,13 +387,26 @@ export function RoadmapPage() {
   const mapStudySourceToSection = (blockId: string, studySourceId: string) => {
     const entry = findStudySourceById(studySourceId);
     if (!entry) return;
-    const created = { ...studySourceToRoadmapSource(entry), id: crypto.randomUUID() };
+    const incoming = normalizeDataSourceReferenceKeys({
+      ...studySourceToRoadmapSource(entry),
+      id: crypto.randomUUID(),
+    });
+
     setBlocks((prev) =>
-      prev.map((block) =>
-        block.type === "content" && block.id === blockId
-          ? { ...block, sources: [...block.sources, created] }
-          : block,
-      ),
+      prev.map((block) => {
+        if (block.type !== "content" || block.id !== blockId) return block;
+
+        const existingIndex = findMatchingDataSourceIndex(block.sources, incoming);
+        if (existingIndex === -1) {
+          return { ...block, sources: [...block.sources, incoming] };
+        }
+
+        const existing = block.sources[existingIndex] as DataSourceRoadmapSource;
+        const merged = appendReferenceKeyToDataSource(existing, incoming.referenceKey);
+        const nextSources = [...block.sources];
+        nextSources[existingIndex] = { ...merged, id: existing.id };
+        return { ...block, sources: nextSources };
+      }),
     );
     setToast("Source mapped");
   };
@@ -397,11 +421,25 @@ export function RoadmapPage() {
         for (const studySourceId of studySourceIds) {
           const entry = findStudySourceById(studySourceId);
           if (!entry) continue;
-          nextSources.push({
+          const incoming = normalizeDataSourceReferenceKeys({
             ...studySourceToRoadmapSource(entry),
             id: crypto.randomUUID(),
           });
-          added += 1;
+
+          const existingIndex = findMatchingDataSourceIndex(nextSources, incoming);
+          if (existingIndex === -1) {
+            nextSources.push(incoming);
+            added += 1;
+            continue;
+          }
+
+          const existing = nextSources[existingIndex] as DataSourceRoadmapSource;
+          const before = getDataSourceReferenceKeys(existing).length;
+          const merged = appendReferenceKeyToDataSource(existing, incoming.referenceKey);
+          if (getDataSourceReferenceKeys(merged).length > before) {
+            added += 1;
+          }
+          nextSources[existingIndex] = { ...merged, id: existing.id };
         }
         if (added === 0) return block;
         return { ...block, sources: nextSources };
@@ -425,12 +463,7 @@ export function RoadmapPage() {
       prev.map((block) => {
         if (block.type !== "content" || block.id !== blockId) return block;
 
-        const existingIndex = block.sources.findIndex(
-          (source) =>
-            source.sourceType === "DATA_SOURCE" &&
-            source.dataSource === incoming.dataSource &&
-            effectiveFormatRole(source) === role,
-        );
+        const existingIndex = findMatchingDataSourceIndex(block.sources, incoming);
 
         if (existingIndex === -1) {
           return {
@@ -466,12 +499,7 @@ export function RoadmapPage() {
             role,
           });
 
-          const existingIndex = nextSources.findIndex(
-            (source) =>
-              source.sourceType === "DATA_SOURCE" &&
-              source.dataSource === incoming.dataSource &&
-              effectiveFormatRole(source) === role,
-          );
+          const existingIndex = findMatchingDataSourceIndex(nextSources, incoming);
 
           if (existingIndex === -1) {
             nextSources.push({ ...incoming, id: crypto.randomUUID() });
@@ -514,12 +542,7 @@ export function RoadmapPage() {
           if (block.type !== "content" && block.type !== "heading") return block;
           const sources = block.type === "content" ? block.sources : (block.sources ?? []);
 
-          const existingIndex = sources.findIndex(
-            (source) =>
-              source.sourceType === "DATA_SOURCE" &&
-              source.dataSource === incoming.dataSource &&
-              effectiveFormatRole(source) === formatRole,
-          );
+          const existingIndex = findMatchingDataSourceIndex(sources, incoming);
 
           if (existingIndex === -1) {
             createdId = crypto.randomUUID();
@@ -564,12 +587,7 @@ export function RoadmapPage() {
               role: formatRole,
             });
 
-            const existingIndex = nextSources.findIndex(
-              (source) =>
-                source.sourceType === "DATA_SOURCE" &&
-                source.dataSource === incoming.dataSource &&
-                effectiveFormatRole(source) === formatRole,
-            );
+            const existingIndex = findMatchingDataSourceIndex(nextSources, incoming);
 
             if (existingIndex === -1) {
               nextSources.push({ ...incoming, id: crypto.randomUUID() });
@@ -607,25 +625,40 @@ export function RoadmapPage() {
     const usageRole: SourceRole = role === "source" ? "primary" : (role as SourceRole);
     const entry = findStudySourceById(studySourceId);
     if (!entry) return undefined;
-    const created = {
+    const incoming = normalizeDataSourceReferenceKeys({
       ...studySourceToRoadmapSource(entry),
       id: crypto.randomUUID(),
       role: usageRole,
-    };
+    });
+
+    let createdId: string | undefined;
     setBlocks((prev) =>
       prev.map((block) => {
         if (block.id !== blockId) return block;
-        if (block.type === "content") {
-          return { ...block, sources: [...block.sources, created] };
+        if (block.type !== "content" && block.type !== "heading") return block;
+        const sources = block.type === "content" ? block.sources : (block.sources ?? []);
+        const existingIndex = findMatchingDataSourceIndex(sources, incoming);
+
+        if (existingIndex === -1) {
+          createdId = incoming.id;
+          const nextSources = [...sources, incoming];
+          return block.type === "content"
+            ? { ...block, sources: nextSources }
+            : { ...block, sources: nextSources };
         }
-        if (block.type === "heading") {
-          return { ...block, sources: [...(block.sources ?? []), created] };
-        }
-        return block;
+
+        const existing = sources[existingIndex] as DataSourceRoadmapSource;
+        const merged = appendReferenceKeyToDataSource(existing, incoming.referenceKey);
+        createdId = existing.id;
+        const nextSources = [...sources];
+        nextSources[existingIndex] = { ...merged, id: existing.id, role: usageRole };
+        return block.type === "content"
+          ? { ...block, sources: nextSources }
+          : { ...block, sources: nextSources };
       }),
     );
     setToast("Source mapped");
-    return created.id;
+    return createdId;
   };
 
   const mapStudySourcesToSectionWithRole = (
@@ -645,12 +678,26 @@ export function RoadmapPage() {
         for (const studySourceId of studySourceIds) {
           const entry = findStudySourceById(studySourceId);
           if (!entry) continue;
-          nextSources.push({
+          const incoming = normalizeDataSourceReferenceKeys({
             ...studySourceToRoadmapSource(entry),
             id: crypto.randomUUID(),
             role: usageRole,
           });
-          added += 1;
+
+          const existingIndex = findMatchingDataSourceIndex(nextSources, incoming);
+          if (existingIndex === -1) {
+            nextSources.push(incoming);
+            added += 1;
+            continue;
+          }
+
+          const existing = nextSources[existingIndex] as DataSourceRoadmapSource;
+          const before = getDataSourceReferenceKeys(existing).length;
+          const merged = appendReferenceKeyToDataSource(existing, incoming.referenceKey);
+          if (getDataSourceReferenceKeys(merged).length > before) {
+            added += 1;
+          }
+          nextSources[existingIndex] = { ...merged, id: existing.id, role: usageRole };
         }
         if (added === 0) return block;
         return block.type === "content"
@@ -659,7 +706,7 @@ export function RoadmapPage() {
       }),
     );
     if (added > 0) {
-      setToast(added === 1 ? "Source mapped" : `${added} sources mapped`);
+      setToast(added === 1 ? "Source mapped" : `${added} sections mapped`);
     }
   };
 
@@ -784,19 +831,47 @@ export function RoadmapPage() {
   );
 
   // V2 board: drag an outline row (TOC) onto a section as subcontent or content.
-  const mapOutlineToSection = (
+  const mapOutlineRefToSection = (
     blockId: string,
-    sourceType: "SUBCONTENT" | "CONTENT",
-    label: string,
+    payload: import("../utils/v2DragPayload").OutlineRefPayload,
   ) => {
+    if (payload.sourceType === "SUBCONTENT" && payload.fromBlockId === blockId) return;
+    let added = false;
     setBlocks((prev) =>
       prev.map((block) => {
         if (block.type !== "content" || block.id !== blockId) return block;
-        const created = createSourceForType(sourceType, { content: label });
+        const duplicate = block.sources.some((source) =>
+          payload.sourceType === "SUBCONTENT"
+            ? source.sourceType === "SUBCONTENT" &&
+              source.referencedBlockId === payload.fromBlockId
+            : source.sourceType === "CONTENT" &&
+              source.referencedHeadingId === payload.fromHeadingId,
+        );
+        if (duplicate) return block;
+        const base = createSourceForType(payload.sourceType, {
+          content: payload.label,
+          status: "confirmed",
+        });
+        const created =
+          payload.sourceType === "SUBCONTENT"
+            ? {
+                ...base,
+                referencedBlockId: payload.fromBlockId,
+              }
+            : {
+                ...base,
+                referencedHeadingId: payload.fromHeadingId,
+              };
+        added = true;
         return { ...block, sources: [...block.sources, created] };
       }),
     );
-    setToast("Outline mapped");
+    if (!added) return;
+    setToast(
+      payload.sourceType === "SUBCONTENT"
+        ? "Subcontent linked to section"
+        : "Content linked to section",
+    );
   };
 
   // V2 board / V6 source view: map a specific library document onto a section,
@@ -867,27 +942,6 @@ export function RoadmapPage() {
       }),
     );
     setToast("Role updated");
-  };
-
-  // V6 source view: accept all proposed placements of one document at once.
-  const confirmAllForDataSource = (dataSource: string) => {
-    setBlocks((prev) =>
-      prev.map((block) =>
-        block.type === "content"
-          ? {
-              ...block,
-              sources: block.sources.map((s) =>
-                s.sourceType === "DATA_SOURCE" &&
-                s.dataSource === dataSource &&
-                s.status === "proposed"
-                  ? { ...s, status: "confirmed" }
-                  : s,
-              ),
-            }
-          : block,
-      ),
-    );
-    setToast("Placements confirmed");
   };
 
   // V2 board: move or reorder a mapped source within / across sections.
@@ -1045,6 +1099,17 @@ export function RoadmapPage() {
     setLibraryTraceSource(null);
     setV2DataPanelOpen(true);
   }, []);
+
+  const navigateOutlineRef = useCallback(
+    (source: import("../data/roadmap").RoadmapSource) => {
+      const targetId = outlineRefTocTargetId(source, blocks);
+      if (!targetId) return;
+      closeTrace();
+      setTocOpen(true);
+      handleTocNavigate(targetId, { scrollCenter: false });
+    },
+    [blocks, closeTrace, handleTocNavigate],
+  );
 
   const openTrace = useCallback(
     (blockId: string, sourceId: string) => {
@@ -1226,23 +1291,27 @@ export function RoadmapPage() {
   );
 
   useEffect(() => {
-    if (variant !== "mapping" || mappingSubview !== "storyline") return;
+    if (variant !== "mapping") return;
     setBlocks((prev) => {
       let anyChanged = false;
       const next = prev.map((block) => {
-        if (block.type !== "content") return block;
-        const { sources, changed } = consolidateContentBlockSourcesIfNeeded(
-          block.sources,
-          (source) =>
-            source.sourceType === "DATA_SOURCE" ? effectiveFormatRole(source) ?? "" : source.id,
-        );
-        if (!changed) return block;
-        anyChanged = true;
-        return { ...block, sources };
+        if (block.type === "content") {
+          const { sources, changed } = consolidateContentBlockSourcesIfNeeded(block.sources);
+          if (!changed) return block;
+          anyChanged = true;
+          return { ...block, sources };
+        }
+        if (block.type === "heading" && block.sources?.length) {
+          const { sources, changed } = consolidateContentBlockSourcesIfNeeded(block.sources);
+          if (!changed) return block;
+          anyChanged = true;
+          return { ...block, sources };
+        }
+        return block;
       });
       return anyChanged ? next : prev;
     });
-  }, [variant, mappingSubview]);
+  }, [variant]);
 
   const usageCountByStudySourceId = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -1521,8 +1590,18 @@ export function RoadmapPage() {
           </button>
         )}
 
-        <div>
+        <div className="flex items-center gap-2">
           <VariantSwitcher variant={variant} onChange={handleVariantChange} />
+          {variant === "mapping" && (
+            <>
+              <div className="hidden h-5 w-px bg-[var(--peer-border)] sm:block" aria-hidden />
+              <MappingSubviewControl
+                inline
+                view={mappingSubview}
+                onChange={handleMappingSubviewChange}
+              />
+            </>
+          )}
         </div>
 
         {variant === "baseline" && (
@@ -1631,7 +1710,7 @@ export function RoadmapPage() {
               onDeleteHeading={deleteHeading}
               onDeleteContent={deleteContentBlock}
               outlineMappingDrag={tocUsesOutlineMappingDrag}
-              hideAddActions={tocUsesOutlineMappingDrag}
+              hideAddActions={tocHideAddActions}
             />
           </aside>
         )}
@@ -1689,10 +1768,10 @@ export function RoadmapPage() {
           {variant === "mapping" && (
             <MappingVariant
               subview={mappingSubview}
-              onSubviewChange={handleMappingSubviewChange}
               storyline={{
                 blocks,
                 focusId: activeTocId,
+                scrollTick: tocScrollTick,
                 tracedSource: traceState
                   ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
                   : null,
@@ -1701,11 +1780,11 @@ export function RoadmapPage() {
                 onRemoveSource: removeSourceFromBlock,
                 onMapStudySource: mapStudySourceToStorylineSection,
                 onMapStudySources: mapStudySourcesToStorylineSection,
-                onMapOutlineToSection: mapOutlineToSection,
+                onMapOutlineRefToSection: mapOutlineRefToSection,
                 onMoveSource: moveSourceToSection,
                 onPromptChange: updatePrompt,
-                onOutputTypeChange: updateOutputType,
                 rolePickerMode: "format",
+                onNavigateOutlineRef: navigateOutlineRef,
               }}
               matrix={{
                 blocks,
@@ -1743,6 +1822,7 @@ export function RoadmapPage() {
             <TwoColumnVariant
               blocks={blocks}
               focusId={activeTocId}
+              scrollTick={tocScrollTick}
               tracedSource={
                 traceState
                   ? { blockId: traceState.blockId, sourceId: traceState.sourceId }
@@ -1753,9 +1833,10 @@ export function RoadmapPage() {
               onRemoveSource={removeSourceFromBlock}
               onMapStudySource={mapStudySourceToSection}
               onMapStudySources={mapStudySourcesToSection}
-              onMapOutlineToSection={mapOutlineToSection}
+              onMapOutlineRefToSection={mapOutlineRefToSection}
               onMoveSource={moveSourceToSection}
               onPromptChange={updatePrompt}
+              onNavigateOutlineRef={navigateOutlineRef}
             />
           )}
 
@@ -1804,7 +1885,6 @@ export function RoadmapPage() {
               onRemoveSource={removeSourceFromBlock}
               onAddSource={addSourceToSection}
               onMapDataSource={mapDataSourceToSection}
-              onConfirmAllForDataSource={confirmAllForDataSource}
             />
           )}
 
@@ -1895,7 +1975,7 @@ export function RoadmapPage() {
           v2DataPanelOpen && (
             <aside
               data-datasource-panel=""
-              className="fixed inset-y-0 right-0 z-40 flex w-[min(90vw,360px)] shrink-0 flex-col border-l border-[#d4ced3] bg-[#fafafa] shadow-lg md:relative md:z-0 md:w-[360px] md:shadow-none"
+              className="peer-library-sidebar fixed inset-y-0 right-0 z-40 shadow-lg md:relative md:z-0 md:shadow-none"
             >
               <StudyDataSourcesList
                 enableMappingDrag

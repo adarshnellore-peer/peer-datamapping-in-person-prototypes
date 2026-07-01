@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
-import { ChevronRight, GripVertical, Link2, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
+import { ChevronRight, GripVertical, Search, X } from "lucide-react";
 import { parsePageRange, getReferenceDisplayName } from "../data/documentPreview";
 import { getDocumentCategory } from "../data/roadmap";
 import type { StudyDataSource } from "../data/studyDataSources";
@@ -9,17 +10,12 @@ import type { StudySourcePlacement } from "../utils/studySourcePlacements";
 
 const CATEGORY_ORDER = ["Protocol", "SAP", "CSR", "Template", "Figures", "Listings", "Document"];
 
-const CATEGORY_SWATCH: Record<string, string> = {
-  Template: "#8b8b8b",
-  Protocol: "#1a8a4a",
-  SAP: "#e0a800",
-  CSR: "#0a9e9a",
-  Figures: "#ec4899",
-  Listings: "#6366f1",
-  Document: "#bdbdbd",
-};
-
-const HOVER_EXPAND_LEAVE_MS = 160;
+import { libraryCategoryAccent } from "../data/categoryColors";
+const HOVER_EXPAND_ENTER_MS = 140;
+const HOVER_EXPAND_LEAVE_MS = 320;
+const USAGE_MENU_WIDTH_PX = 224;
+const USAGE_MENU_MAX_HEIGHT_PX = 320;
+const USAGE_MENU_VIEWPORT_MARGIN_PX = 8;
 
 type DocumentGroup = {
   key: string;
@@ -132,71 +128,28 @@ function startStudySourceDrag(studySourceIds: string[], event: DragEvent) {
 }
 
 function rowSurfaceClass(isActive: boolean, isSelected: boolean, draggable: boolean): string {
-  const parts = ["transition-colors"];
+  const parts = ["peer-library-row"];
   if (draggable) parts.push("cursor-grab touch-none active:cursor-grabbing");
-  if (isSelected) {
-    parts.push("bg-[#eff6ff] ring-1 ring-inset ring-[#93c5fd]");
-  } else if (isActive) {
-    parts.push("bg-[#fff5f5]");
-  } else {
-    parts.push("hover:bg-[#f7f7f7]");
-  }
+  if (isSelected) parts.push("is-selected");
+  else if (isActive) parts.push("is-active");
   return parts.join(" ");
 }
 
-function rowMetric(
-  usageCount: number | undefined,
-  fallback?: number,
-): { value: number; title: string } | null {
-  if (usageCount != null && usageCount > 0) {
-    return {
-      value: usageCount,
-      title: `Mapped in ${usageCount} section${usageCount === 1 ? "" : "s"}`,
-    };
-  }
-  if (fallback != null && fallback > 0) {
-    return {
-      value: fallback,
-      title: `${fallback} section${fallback === 1 ? "" : "s"}`,
-    };
-  }
-  return null;
-}
-
-function RowMetric({
-  metric,
-  onClick,
-}: {
-  metric: { value: number; title: string } | null;
-  onClick?: () => void;
-}) {
-  if (!metric) return <span className="w-5 shrink-0" aria-hidden />;
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onClick();
-        }}
-        className="w-5 shrink-0 text-right text-[11px] font-medium tabular-nums text-[#9e9e9e] hover:text-[#ff4e49]"
-        title={metric.title}
-      >
-        {metric.value}
-      </button>
-    );
-  }
+function UnusedUsageBadge({ title = "Not mapped to any section" }: { title?: string }) {
   return (
-    <span
-      className="w-5 shrink-0 text-right text-[11px] font-medium tabular-nums text-[#9e9e9e]"
-      title={metric.title}
-    >
-      {metric.value}
+    <span className="peer-usage-badge is-empty" title={title} aria-label={title}>
+      0
     </span>
   );
 }
 
-function PlacementMenu({
+function placementTocLabel(placement: StudySourcePlacement): string {
+  return placement.blockNumber
+    ? `${placement.blockNumber} ${placement.blockTitle}`
+    : placement.blockTitle;
+}
+
+function UsageMenu({
   placements,
   onNavigateToPlacement,
 }: {
@@ -204,26 +157,110 @@ function PlacementMenu({
   onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
+  const count = placements.length;
+  const label = `Click to view ${count} mapped section${count === 1 ? "" : "s"}`;
+
+  const updateMenuPosition = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const margin = USAGE_MENU_VIEWPORT_MARGIN_PX;
+    let left = rect.right - USAGE_MENU_WIDTH_PX;
+    left = Math.max(margin, Math.min(left, window.innerWidth - USAGE_MENU_WIDTH_PX - margin));
+
+    const spaceBelow = window.innerHeight - rect.bottom - margin;
+    const spaceAbove = rect.top - margin;
+    const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+    const maxHeight = Math.min(
+      USAGE_MENU_MAX_HEIGHT_PX,
+      openUp ? spaceAbove - 4 : spaceBelow - 4,
+    );
+    const top = openUp ? rect.top - maxHeight - 4 : rect.bottom + 4;
+
+    setMenuStyle({
+      top: Math.max(margin, top),
+      left,
+      width: USAGE_MENU_WIDTH_PX,
+      maxHeight: Math.max(120, maxHeight),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updateMenuPosition();
+    const onLayoutChange = () => updateMenuPosition();
+    window.addEventListener("resize", onLayoutChange);
+    window.addEventListener("scroll", onLayoutChange, true);
+    return () => {
+      window.removeEventListener("resize", onLayoutChange);
+      window.removeEventListener("scroll", onLayoutChange, true);
+    };
+  }, [open, updateMenuPosition]);
 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: Event) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open]);
 
-  if (placements.length === 0) return null;
+  if (count === 0) return null;
 
-  const label = `Used in ${placements.length} section${placements.length === 1 ? "" : "s"}`;
+  const menu =
+    open &&
+    createPortal(
+      <div
+        ref={menuRef}
+        role="menu"
+        aria-label={label}
+        className="peer-usage-menu peer-usage-menu--portal"
+        style={menuStyle}
+      >
+        <div className="peer-usage-menu-head">
+          <span className="peer-library-eyebrow">Used in</span>
+        </div>
+        <div className="max-h-80 overflow-y-auto py-0.5">
+          {placements.map((placement) => (
+            <button
+              key={`${placement.blockId}:${placement.sourceId}`}
+              type="button"
+              role="menuitem"
+              onClick={(event) => {
+                event.stopPropagation();
+                onNavigateToPlacement?.(placement);
+              }}
+              className="peer-usage-menu-item"
+              title={placementTocLabel(placement)}
+            >
+              {placement.blockNumber ? (
+                <span className="shrink-0 tabular-nums text-[11px] font-medium text-[var(--peer-text-caption)]">
+                  {placement.blockNumber}
+                </span>
+              ) : null}
+              <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-snug text-[var(--peer-text)]">
+                {placement.blockTitle}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>,
+      document.body,
+    );
 
   return (
-    <div ref={rootRef} className="relative shrink-0">
+    <div ref={triggerRef} className="relative ml-0.5 shrink-0">
       <button
+        ref={buttonRef}
         type="button"
         onClick={(event) => {
           event.stopPropagation();
@@ -233,55 +270,57 @@ function PlacementMenu({
         aria-haspopup="menu"
         aria-label={label}
         title={label}
-        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
-          open
-            ? "bg-[#fff0f0] text-[#ff4e49]"
-            : "text-[#c8c8c8] hover:bg-[#f5f5f5] hover:text-[#757575]"
-        }`}
+        className={`peer-usage-badge is-clickable ${open ? "is-open" : ""}`}
       >
-        <Link2 size={11} strokeWidth={2} aria-hidden />
+        <span>{count}</span>
       </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-[calc(100%+4px)] z-50 w-52 overflow-hidden rounded-md border border-[#e4dfe3] bg-white shadow-[0_8px_24px_rgba(48,47,47,0.12)]"
-        >
-          <p className="border-b border-[#f0f0f0] px-2.5 py-1.5 text-[10px] font-medium text-[#9e9e9e]">
-            {label}
-          </p>
-          <div className="max-h-44 overflow-y-auto py-0.5">
-            {placements.map((placement) => (
-              <button
-                key={`${placement.blockId}:${placement.sourceId}`}
-                type="button"
-                role="menuitem"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onNavigateToPlacement?.(placement);
-                  setOpen(false);
-                }}
-                className="block w-full truncate px-2.5 py-1.5 text-left text-[11px] text-[#454545] transition-colors hover:bg-[#fafafa] hover:text-[#ff4e49]"
-                title={placement.blockTitle}
-              >
-                {placement.blockTitle}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {menu}
     </div>
   );
 }
 
+function RowUsageSlot({
+  placements,
+  usageCount,
+  onNavigateToPlacement,
+  showUnused = false,
+}: {
+  placements?: StudySourcePlacement[];
+  usageCount?: number;
+  onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
+  showUnused?: boolean;
+}) {
+  const mapped = placements ?? [];
+  if (mapped.length > 0) {
+    return (
+      <UsageMenu placements={mapped} onNavigateToPlacement={onNavigateToPlacement} />
+    );
+  }
+  if (showUnused && !usageCount) {
+    return <UnusedUsageBadge />;
+  }
+  return <span className="w-2 shrink-0" aria-hidden />;
+}
+
 function SelectionCheckbox({
   checked,
+  indeterminate = false,
   label,
   onToggle,
 }: {
   checked: boolean;
+  indeterminate?: boolean;
   label: string;
   onToggle: () => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.indeterminate = indeterminate;
+    }
+  }, [indeterminate]);
+
   return (
     <span
       className="flex shrink-0 items-center"
@@ -289,6 +328,7 @@ function SelectionCheckbox({
       onPointerDown={(event) => event.stopPropagation()}
     >
       <input
+        ref={inputRef}
         type="checkbox"
         checked={checked}
         onChange={onToggle}
@@ -310,6 +350,7 @@ function LibrarySectionRow({
   usageCount,
   placements,
   onNavigateToPlacement,
+  showUsageIndicators = false,
   label,
   pageRef,
 }: {
@@ -323,12 +364,12 @@ function LibrarySectionRow({
   usageCount?: number;
   placements?: StudySourcePlacement[];
   onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
+  showUsageIndicators?: boolean;
   label: string;
   pageRef?: string | null;
 }) {
   const didDragRef = useRef(false);
   const draggable = enableMappingDrag;
-  const metric = rowMetric(usageCount);
 
   return (
     <div
@@ -343,7 +384,7 @@ function LibrarySectionRow({
           didDragRef.current = false;
         }, 0);
       }}
-      className={`group/lib-row flex items-center gap-1.5 border-b border-[#f0f0f0] px-3 py-1.5 last:border-b-0 ${rowSurfaceClass(
+      className={`group/lib-row flex min-w-0 items-center gap-1.5 border-b border-[var(--peer-border-subtle)] py-1.5 pl-2.5 pr-3 last:border-b-0 ${rowSurfaceClass(
         isActive,
         isSelected,
         draggable,
@@ -369,18 +410,21 @@ function LibrarySectionRow({
           if (didDragRef.current) return;
           onSelect(event);
         }}
-        className="min-w-0 flex-1 truncate text-left"
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-left"
       >
-        <span className="text-[11px] text-[#454545]">{label}</span>
-        {pageRef && <span className="ml-1.5 text-[10px] text-[#b0b0b0]">{pageRef}</span>}
+        <span className="min-w-0 truncate text-[11px] text-[var(--peer-text-secondary)]">
+          {label}
+        </span>
+        {pageRef && (
+          <span className="shrink-0 text-[10px] text-[var(--peer-text-caption)]">{pageRef}</span>
+        )}
       </button>
-      {placements && placements.length > 0 && (
-        <PlacementMenu
-          placements={placements}
-          onNavigateToPlacement={onNavigateToPlacement}
-        />
-      )}
-      <RowMetric metric={metric} />
+      <RowUsageSlot
+        placements={placements}
+        usageCount={usageCount}
+        onNavigateToPlacement={onNavigateToPlacement}
+        showUnused={showUsageIndicators}
+      />
     </div>
   );
 }
@@ -395,30 +439,33 @@ function LibraryDocumentRow({
   expanded,
   isActive,
   isSelected,
+  isIndeterminate = false,
   onSelect,
   onToggleSelected,
   onStudySourceDragStart,
   usageCount,
   placements,
   onNavigateToPlacement,
+  showUsageIndicators = false,
 }: {
   group: DocumentGroup;
   category: string;
   expanded: boolean;
   isActive: boolean;
   isSelected: boolean;
+  isIndeterminate?: boolean;
   onSelect: (event: MouseEvent) => void;
   onToggleSelected: () => void;
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   usageCount?: number;
   placements?: StudySourcePlacement[];
   onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
+  showUsageIndicators?: boolean;
 }) {
   const didDragRef = useRef(false);
   const dragEntry = defaultDragEntryForGroup(group);
-  const swatch = CATEGORY_SWATCH[category] ?? CATEGORY_SWATCH.Document;
+  const swatch = libraryCategoryAccent(category);
   const pageRef = pageRefFor(dragEntry);
-  const metric = rowMetric(usageCount, group.sections.length);
 
   return (
     <div
@@ -433,7 +480,7 @@ function LibraryDocumentRow({
           didDragRef.current = false;
         }, 0);
       }}
-      className={`group/lib-doc flex items-center gap-1.5 px-3 py-2 ${rowSurfaceClass(
+      className={`group/lib-doc flex min-w-0 items-center gap-1.5 py-2 pl-3 pr-3 ${rowSurfaceClass(
         isActive,
         isSelected,
         true,
@@ -447,6 +494,7 @@ function LibraryDocumentRow({
       />
       <SelectionCheckbox
         checked={isSelected}
+        indeterminate={isIndeterminate}
         label={group.documentLabel}
         onToggle={onToggleSelected}
       />
@@ -468,19 +516,24 @@ function LibraryDocumentRow({
           if (didDragRef.current) return;
           onSelect(event);
         }}
-        className="min-w-0 flex-1 truncate text-left"
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-left"
         title={pageRef ? `Default section: ${pageRef}` : undefined}
       >
-        <span className="text-[12px] font-semibold text-[#302f2f]">{group.documentLabel}</span>
-        {pageRef && <span className="ml-1.5 text-[10px] font-normal text-[#b0b0b0]">{pageRef}</span>}
+        <span className="min-w-0 truncate text-[12px] font-semibold text-[var(--peer-text)]">
+          {group.documentLabel}
+        </span>
+        {pageRef && (
+          <span className="shrink-0 text-[10px] font-normal text-[var(--peer-text-caption)]">
+            {pageRef}
+          </span>
+        )}
       </button>
-      {placements && placements.length > 0 && (
-        <PlacementMenu
-          placements={placements}
-          onNavigateToPlacement={onNavigateToPlacement}
-        />
-      )}
-      <RowMetric metric={metric} />
+      <RowUsageSlot
+        placements={placements}
+        usageCount={usageCount}
+        onNavigateToPlacement={onNavigateToPlacement}
+        showUnused={showUsageIndicators}
+      />
     </div>
   );
 }
@@ -494,9 +547,11 @@ function DocumentGroupSection({
   onToggleCollapse,
   onSelectEntry,
   onToggleSelected,
+  onToggleGroupSelected,
   onStudySourceDragStart,
   onHoverStart,
   onHoverEnd,
+  onHoverSection,
   enableMappingDrag = false,
   usageCountByStudySourceId,
   placementsByStudySourceId,
@@ -508,11 +563,13 @@ function DocumentGroupSection({
   selectedIds: Set<string>;
   expanded: boolean;
   onToggleCollapse: () => void;
-  onSelectEntry: (source: StudyDataSource, event: MouseEvent) => void;
+  onSelectEntry: (source: StudyDataSource, event: MouseEvent, group?: DocumentGroup) => void;
   onToggleSelected: (source: StudyDataSource) => void;
+  onToggleGroupSelected: (group: DocumentGroup) => void;
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   onHoverStart?: () => void;
   onHoverEnd?: () => void;
+  onHoverSection?: () => void;
   enableMappingDrag?: boolean;
   usageCountByStudySourceId?: Record<string, number>;
   placementsByStudySourceId?: Record<string, StudySourcePlacement[]>;
@@ -544,11 +601,16 @@ function DocumentGroupSection({
     }
     return total > 0 ? total : undefined;
   }, [entries, usageCountByStudySourceId]);
+  const showUsageIndicators = Boolean(placementsByStudySourceId);
+  const groupEntryIds = entries.map((entry) => entry.id);
+  const groupAllSelected =
+    groupEntryIds.length > 0 && groupEntryIds.every((id) => selectedIds.has(id));
+  const groupSomeSelected = groupEntryIds.some((id) => selectedIds.has(id));
 
   if (enableMappingDrag) {
     return (
       <div
-        className="border-b border-[#e8e4ea] last:border-b-0"
+        className="border-b border-[var(--peer-border-subtle)] last:border-b-0"
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}
       >
@@ -557,37 +619,51 @@ function DocumentGroupSection({
           category={category}
           expanded={expanded}
           isActive={dragEntry.id === activeSourceId}
-          isSelected={selectedIds.has(dragEntry.id)}
-          onSelect={(event) => onSelectEntry(dragEntry, event)}
-          onToggleSelected={() => onToggleSelected(dragEntry)}
+          isSelected={groupAllSelected}
+          isIndeterminate={groupSomeSelected && !groupAllSelected}
+          onSelect={(event) => onSelectEntry(dragEntry, event, group)}
+          onToggleSelected={() => onToggleGroupSelected(group)}
           onStudySourceDragStart={onStudySourceDragStart}
           usageCount={groupUsageCount}
           placements={groupPlacements}
           onNavigateToPlacement={onNavigateToPlacement}
+          showUsageIndicators={showUsageIndicators}
         />
 
-        {expanded && hasSections && (
+        {hasSections && (
           <div
-            id={`doc-sections-${collapseKey}`}
-            className="border-t border-[#ececec] bg-[#fcfcfc] pl-4"
+            className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+              expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+            }`}
           >
-            {group.sections.map((entry) => (
-              <LibrarySectionRow
-                key={entry.id}
-                entry={entry}
-                isActive={entry.id === activeSourceId}
-                isSelected={selectedIds.has(entry.id)}
-                onSelect={(event) => onSelectEntry(entry, event)}
-                onToggleSelected={() => onToggleSelected(entry)}
-                onStudySourceDragStart={onStudySourceDragStart}
-                enableMappingDrag={enableMappingDrag}
-                usageCount={usageCountByStudySourceId?.[entry.id]}
-                placements={placementsByStudySourceId?.[entry.id]}
-                onNavigateToPlacement={onNavigateToPlacement}
-                label={sectionLabelFor(entry)}
-                pageRef={pageRefFor(entry)}
-              />
-            ))}
+            <div className="min-h-0 overflow-hidden">
+              <div
+                id={`doc-sections-${collapseKey}`}
+                className={`bg-[var(--peer-surface-raised)] pl-3 pr-1 ${
+                  expanded ? "border-t border-[var(--peer-border-subtle)]" : ""
+                }`}
+                onMouseEnter={onHoverSection}
+              >
+                {group.sections.map((entry) => (
+                <LibrarySectionRow
+                  key={entry.id}
+                  entry={entry}
+                  isActive={entry.id === activeSourceId}
+                  isSelected={selectedIds.has(entry.id)}
+                  onSelect={(event) => onSelectEntry(entry, event)}
+                  onToggleSelected={() => onToggleSelected(entry)}
+                  onStudySourceDragStart={onStudySourceDragStart}
+                  enableMappingDrag={enableMappingDrag}
+                  usageCount={usageCountByStudySourceId?.[entry.id]}
+                  placements={placementsByStudySourceId?.[entry.id]}
+                  onNavigateToPlacement={onNavigateToPlacement}
+                  showUsageIndicators={showUsageIndicators}
+                  label={sectionLabelFor(entry)}
+                  pageRef={pageRefFor(entry)}
+                />
+              ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -595,13 +671,13 @@ function DocumentGroupSection({
   }
 
   return (
-    <div className="border-b border-[#e8e4ea] last:border-b-0">
+    <div className="border-b border-[var(--peer-border-subtle)] last:border-b-0">
       <button
         type="button"
         aria-expanded={expanded}
         aria-controls={`doc-sections-${collapseKey}`}
         onClick={onToggleCollapse}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-[#f7f7f7]"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-[var(--peer-surface-muted)]"
       >
         <ChevronRight
           size={13}
@@ -610,17 +686,19 @@ function DocumentGroupSection({
         />
         <span
           className="h-2 w-2 shrink-0 rounded-full"
-          style={{ backgroundColor: CATEGORY_SWATCH[category] ?? CATEGORY_SWATCH.Document }}
+          style={{ backgroundColor: libraryCategoryAccent(category) }}
           aria-hidden
         />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#302f2f]">
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--peer-text)]">
           {group.documentLabel}
         </span>
-        <RowMetric metric={rowMetric(undefined, entries.length)} />
+        <span className="shrink-0 text-[10px] font-medium tabular-nums text-[#9e9e9e]">
+          {entries.length}
+        </span>
       </button>
 
       {expanded && (
-        <div id={`doc-sections-${collapseKey}`} className="border-t border-[#ececec] bg-[#fcfcfc]">
+        <div id={`doc-sections-${collapseKey}`} className="border-t border-[var(--peer-border-subtle)] bg-[var(--peer-surface-raised)]">
           {entries.map((entry) => (
             <LibrarySectionRow
               key={entry.id}
@@ -633,6 +711,7 @@ function DocumentGroupSection({
               usageCount={usageCountByStudySourceId?.[entry.id]}
               placements={placementsByStudySourceId?.[entry.id]}
               onNavigateToPlacement={onNavigateToPlacement}
+              showUsageIndicators={showUsageIndicators}
               label={sectionLabelFor(entry)}
               pageRef={pageRefFor(entry)}
             />
@@ -651,9 +730,12 @@ function CategorySection({
   collapsedDocs,
   hoverDocKey,
   onToggleDocument,
-  onHoverDocument,
+  onHoverDocumentStart,
+  onHoverDocumentEnd,
+  onHoverDocumentSection,
   onSelectEntry,
   onToggleSelected,
+  onToggleGroupSelected,
   onStudySourceDragStart,
   enableMappingDrag = false,
   usageCountByStudySourceId,
@@ -667,9 +749,12 @@ function CategorySection({
   collapsedDocs: Set<string>;
   hoverDocKey: string | null;
   onToggleDocument: (key: string) => void;
-  onHoverDocument: (key: string | null) => void;
-  onSelectEntry: (source: StudyDataSource, event: MouseEvent) => void;
+  onHoverDocumentStart: (key: string) => void;
+  onHoverDocumentEnd: () => void;
+  onHoverDocumentSection: (key: string) => void;
+  onSelectEntry: (source: StudyDataSource, event: MouseEvent, group?: DocumentGroup) => void;
   onToggleSelected: (source: StudyDataSource) => void;
+  onToggleGroupSelected: (group: DocumentGroup) => void;
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   enableMappingDrag?: boolean;
   usageCountByStudySourceId?: Record<string, number>;
@@ -677,8 +762,8 @@ function CategorySection({
   onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
 }) {
   const { documents, standalone } = useMemo(() => groupDocuments(items), [items]);
-  const swatch = CATEGORY_SWATCH[category] ?? CATEGORY_SWATCH.Document;
-  const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const swatch = libraryCategoryAccent(category);
+  const showUsageIndicators = Boolean(placementsByStudySourceId);
 
   const docIsExpanded = (key: string, group: DocumentGroup) => {
     const hasActiveChild = documentEntriesForGroup(group).some((entry) => entry.id === activeSourceId);
@@ -687,24 +772,12 @@ function CategorySection({
     return !collapsedDocs.has(key);
   };
 
-  const scheduleHoverEnd = () => {
-    if (!enableMappingDrag) return;
-    if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
-    hoverLeaveTimerRef.current = setTimeout(() => onHoverDocument(null), HOVER_EXPAND_LEAVE_MS);
-  };
-
-  const cancelHoverEnd = () => {
-    if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
-  };
-
   return (
-    <section className="border-b border-[#d4ced3] last:border-b-0">
-      <div className="flex items-center gap-2 border-b border-[#e8e4ea] bg-[#f3f3f3] px-3 py-2">
+    <section className="border-b border-[var(--peer-border)] last:border-b-0">
+      <div className="peer-library-category-head">
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: swatch }} />
-        <h4 className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#636161]">
-          {category}
-        </h4>
-        <span className="ml-auto text-[10px] font-medium tabular-nums text-[#9e9e9e]">
+        <h4 className="peer-library-eyebrow">{category}</h4>
+        <span className="ml-auto text-[10px] font-medium tabular-nums text-[var(--peer-text-caption)]">
           {items.length}
         </span>
       </div>
@@ -723,16 +796,17 @@ function CategorySection({
               onToggleCollapse={() => onToggleDocument(key)}
               onSelectEntry={onSelectEntry}
               onToggleSelected={onToggleSelected}
+              onToggleGroupSelected={onToggleGroupSelected}
               onStudySourceDragStart={onStudySourceDragStart}
               onHoverStart={
                 enableMappingDrag
-                  ? () => {
-                      cancelHoverEnd();
-                      onHoverDocument(key);
-                    }
+                  ? () => onHoverDocumentStart(key)
                   : undefined
               }
-              onHoverEnd={enableMappingDrag ? scheduleHoverEnd : undefined}
+              onHoverEnd={enableMappingDrag ? onHoverDocumentEnd : undefined}
+              onHoverSection={
+                enableMappingDrag ? () => onHoverDocumentSection(key) : undefined
+              }
               enableMappingDrag={enableMappingDrag}
               usageCountByStudySourceId={usageCountByStudySourceId}
               placementsByStudySourceId={placementsByStudySourceId}
@@ -757,6 +831,7 @@ function CategorySection({
             usageCount={usageCountByStudySourceId?.[entry.id]}
             placements={placementsByStudySourceId?.[entry.id]}
             onNavigateToPlacement={onNavigateToPlacement}
+            showUsageIndicators={showUsageIndicators}
           />
         ))}
       </div>
@@ -797,14 +872,88 @@ export function StudyDataSourcesList({
   );
   const [hoverDocKey, setHoverDocKey] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const hoverEnterTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hoverDocKeyRef = useRef<string | null>(null);
   const query = controlledQuery ?? internalQuery;
   const setQuery = onQueryChange ?? setInternalQuery;
 
-  const handleSelectEntry = useCallback(
-    (entry: StudyDataSource, _event: MouseEvent) => {
-      onSelect(entry);
+  useEffect(() => {
+    hoverDocKeyRef.current = hoverDocKey;
+  }, [hoverDocKey]);
+
+  useEffect(
+    () => () => {
+      if (hoverEnterTimerRef.current) clearTimeout(hoverEnterTimerRef.current);
+      if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
     },
-    [onSelect],
+    [],
+  );
+
+  const cancelHoverLeave = useCallback(() => {
+    if (hoverLeaveTimerRef.current) {
+      clearTimeout(hoverLeaveTimerRef.current);
+      hoverLeaveTimerRef.current = undefined;
+    }
+  }, []);
+
+  const handleHoverDocumentStart = useCallback(
+    (key: string) => {
+      if (!enableMappingDrag) return;
+      cancelHoverLeave();
+      if (hoverEnterTimerRef.current) clearTimeout(hoverEnterTimerRef.current);
+
+      if (hoverDocKeyRef.current === key) return;
+
+      const delay = hoverDocKeyRef.current !== null ? 0 : HOVER_EXPAND_ENTER_MS;
+      hoverEnterTimerRef.current = setTimeout(() => {
+        hoverEnterTimerRef.current = undefined;
+        setHoverDocKey(key);
+      }, delay);
+    },
+    [cancelHoverLeave, enableMappingDrag],
+  );
+
+  const handleHoverDocumentSection = useCallback(
+    (key: string) => {
+      if (!enableMappingDrag) return;
+      cancelHoverLeave();
+      if (hoverEnterTimerRef.current) {
+        clearTimeout(hoverEnterTimerRef.current);
+        hoverEnterTimerRef.current = undefined;
+      }
+      if (hoverDocKeyRef.current !== key) {
+        setHoverDocKey(key);
+      }
+    },
+    [cancelHoverLeave, enableMappingDrag],
+  );
+
+  const handleHoverDocumentEnd = useCallback(() => {
+    if (!enableMappingDrag) return;
+    if (hoverEnterTimerRef.current) {
+      clearTimeout(hoverEnterTimerRef.current);
+      hoverEnterTimerRef.current = undefined;
+    }
+    cancelHoverLeave();
+    hoverLeaveTimerRef.current = setTimeout(() => {
+      hoverLeaveTimerRef.current = undefined;
+      setHoverDocKey(null);
+    }, HOVER_EXPAND_LEAVE_MS);
+  }, [cancelHoverLeave, enableMappingDrag]);
+
+  const handleSelectEntry = useCallback(
+    (entry: StudyDataSource, _event: MouseEvent, group?: DocumentGroup) => {
+      onSelect(entry);
+      if (!enableMappingDrag || !group) return;
+      const ids = documentEntriesForGroup(group).map((item) => item.id);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.add(id);
+        return next;
+      });
+    },
+    [enableMappingDrag, onSelect],
   );
 
   const handleToggleSelected = useCallback((entry: StudyDataSource) => {
@@ -812,6 +961,19 @@ export function StudyDataSourcesList({
       const next = new Set(prev);
       if (next.has(entry.id)) next.delete(entry.id);
       else next.add(entry.id);
+      return next;
+    });
+  }, []);
+
+  const handleToggleGroupSelected = useCallback((group: DocumentGroup) => {
+    const ids = documentEntriesForGroup(group).map((entry) => entry.id);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = ids.length > 0 && ids.every((id) => next.has(id));
+      for (const id of ids) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
       return next;
     });
   }, []);
@@ -884,19 +1046,21 @@ export function StudyDataSourcesList({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-      <div className="shrink-0 border-b border-[#d4ced3] bg-white px-3 py-3">
+    <div className="peer-library-shell">
+      <div className="peer-library-header">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 className="text-[13px] font-semibold text-[#302f2f]">
+          <h3 className="text-[13px] font-semibold text-[var(--peer-text)]">
             Data Source
-            <span className="ml-1.5 font-normal tabular-nums text-[#bdbdbd]">({sources.length})</span>
+            <span className="ml-1.5 font-normal tabular-nums text-[var(--peer-icon-muted)]">
+              ({sources.length})
+            </span>
           </h3>
           {onClose && (
             <button
               type="button"
               onClick={onClose}
               aria-label="Close data source panel"
-              className="-mr-1 rounded p-1 text-[#636161] hover:bg-[#f0f0f0]"
+              className="-mr-1 rounded p-1 text-[var(--peer-muted)] hover:bg-[var(--peer-surface-muted)]"
             >
               <X size={18} />
             </button>
@@ -905,25 +1069,21 @@ export function StudyDataSourcesList({
         <label className="relative mb-2.5 block">
           <Search
             size={13}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#bdbdbd]"
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--peer-icon-muted)]"
           />
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search…"
-            className="w-full rounded-md border border-[#d4ced3] bg-[#fafafa] py-1.5 pl-8 pr-2.5 text-[12px] text-[#302f2f] placeholder:text-[#bdbdbd] focus:border-[#c8c0c6] focus:bg-white focus:outline-none focus-visible:ring-1 focus-visible:ring-[#ff4e49]/20"
+            className="peer-library-search"
           />
         </label>
         <div className="flex flex-wrap gap-1">
           <button
             type="button"
             onClick={() => setCategoryFilter(null)}
-            className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
-              categoryFilter === null
-                ? "border-[#302f2f] bg-[#302f2f] text-white"
-                : "border-[#d4ced3] bg-white text-[#636161] hover:border-[#c8c0c6]"
-            }`}
+            className={`peer-library-filter ${categoryFilter === null ? "is-active" : ""}`}
           >
             All
           </button>
@@ -934,28 +1094,26 @@ export function StudyDataSourcesList({
               onClick={() =>
                 setCategoryFilter((current) => (current === category ? null : category))
               }
-              className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                categoryFilter === category
-                  ? "border-[#ff4e49] bg-[#fedbda] text-[#302f2f]"
-                  : "border-[#d4ced3] bg-white text-[#636161] hover:border-[#c8c0c6]"
+              className={`peer-library-filter ${
+                categoryFilter === category ? "is-brand" : ""
               }`}
             >
               {category}
             </button>
           ))}
         </div>
-        {enableMappingDrag && (
-          <p className="mt-2 text-[10px] leading-snug text-[#9e9e9e]">
-            {selectedIds.size > 0
-              ? `${selectedIds.size} selected — drag to map all`
-              : "Check sources to select, then drag to map"}
+        {enableMappingDrag && placementsByStudySourceId && (
+          <p className="peer-library-usage-hint">
+            Click a count to jump to where that source is mapped.
           </p>
         )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {categories.length === 0 ? (
-          <p className="px-3 py-8 text-center text-[12px] text-[#8a8a8a]">No matches.</p>
+          <p className="px-3 py-8 text-center text-[12px] text-[var(--peer-text-caption)]">
+            No matches.
+          </p>
         ) : (
           categories.map(({ category, items }) => (
             <CategorySection
@@ -967,9 +1125,12 @@ export function StudyDataSourcesList({
               collapsedDocs={collapsedDocs}
               hoverDocKey={hoverDocKey}
               onToggleDocument={toggleDocument}
-              onHoverDocument={setHoverDocKey}
+              onHoverDocumentStart={handleHoverDocumentStart}
+              onHoverDocumentEnd={handleHoverDocumentEnd}
+              onHoverDocumentSection={handleHoverDocumentSection}
               onSelectEntry={handleSelectEntry}
               onToggleSelected={handleToggleSelected}
+              onToggleGroupSelected={handleToggleGroupSelected}
               onStudySourceDragStart={handleStudySourceDragStart}
               enableMappingDrag={enableMappingDrag}
               usageCountByStudySourceId={usageCountByStudySourceId}

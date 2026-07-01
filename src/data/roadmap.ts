@@ -297,26 +297,20 @@ export type RoadmapSource =
   | ContentRoadmapSource
   | ReferenceSourceRoadmapSource;
 
+import { normalizeDataSourceReferenceKeys } from "../utils/dataSourceReferences";
+
 export const INITIAL_SOURCES: RoadmapSource[] = [
-  {
+  normalizeDataSourceReferenceKeys({
     id: "1",
     sourceType: "DATA_SOURCE",
     dataSource: "C4591001 Protocol Amendment 9",
     referenceKey: "Protocol Title Page: 1-1",
-  },
-  {
-    id: "2",
-    sourceType: "DATA_SOURCE",
-    dataSource: "C4591001 Protocol Amendment 9",
-    referenceKey:
+    referenceKeys: [
+      "Protocol Title Page: 1-1",
       "Protocol Amendment Summary of Changes / Document History: 2-9",
-  },
-  {
-    id: "3",
-    sourceType: "DATA_SOURCE",
-    dataSource: "C4591001 Protocol Amendment 9",
-    referenceKey: "Table of Contents: 10-15",
-  },
+      "Table of Contents: 10-15",
+    ],
+  }),
   {
     id: "4",
     sourceType: "SUBCONTENT",
@@ -376,7 +370,7 @@ export function createSourceForType(
   },
 ): RoadmapSource {
   const id = crypto.randomUUID();
-  const status = options?.status ?? "proposed";
+  const status = options?.status ?? "confirmed";
   const dataSource = options?.dataSource ?? DATA_SOURCES[0];
 
   switch (sourceType) {

@@ -36,6 +36,17 @@ import {
   type V2DragPayload,
 } from "../../utils/v2DragPayload";
 
+function sourcesForMatrixCell(sources: RoadmapSource[]): RoadmapSource[] {
+  return [...sources].sort((a, b) => {
+    const aIsOutline =
+      a.sourceType === "CONTENT" || a.sourceType === "SUBCONTENT";
+    const bIsOutline =
+      b.sourceType === "CONTENT" || b.sourceType === "SUBCONTENT";
+    if (aIsOutline === bIsOutline) return 0;
+    return aIsOutline ? 1 : -1;
+  });
+}
+
 function sourceWithColumnRole(source: RoadmapSource, role: MatrixTagRole): RoadmapSource {
   return {
     ...source,
@@ -162,7 +173,7 @@ export function MatrixVariant({
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const draggingRef = useRef<V2DragPayload | null>(null);
   const columns = useMemo(() => matrixColumnsForMode(columnMode), [columnMode]);
-  const tableMinWidth = columnMode === "format" ? "min-w-[720px]" : "min-w-[960px]";
+  const tableMinWidth = columnMode === "format" ? "min-w-[640px]" : "min-w-[840px]";
 
   const outlineByBlockId = useMemo(() => {
     const map = new Map<string, ReturnType<typeof buildTocFlatList>[number]>();
@@ -260,6 +271,12 @@ export function MatrixVariant({
         return;
       }
       onMapOutlineRefWithRole(toBlockId, payload, roleForColumn(colId, columnMode));
+    } else if (payload?.kind === "outline-refs") {
+      const role = roleForColumn(colId, columnMode);
+      for (const ref of payload.refs) {
+        if (options?.rejectOutlineRef?.(ref)) continue;
+        onMapOutlineRefWithRole(toBlockId, ref, role);
+      }
     } else if (payload?.kind === "toc") {
       onMapOutlineRefWithRole(
         toBlockId,
@@ -294,7 +311,7 @@ export function MatrixVariant({
   ) =>
     columns.map((col) => {
       const cellId = `${rowId}|${col.id}`;
-      const cellSources = sourcesInColumn(rowSources, col.id);
+      const cellSources = sourcesForMatrixCell(sourcesInColumn(rowSources, col.id));
       const isOver = !options?.dropDisabled && dropTarget === cellId;
       const cellDropHandlers = options?.dropDisabled
         ? undefined
@@ -312,8 +329,8 @@ export function MatrixVariant({
       return (
         <td
           key={col.id}
-          className={`group/cell border-b border-r border-[#d4ced3] align-top transition-colors ${col.cellTint} ${
-            isOver ? "outline outline-2 -outline-offset-2 outline-[#ff4e49]" : ""
+          className={`group/cell border-b border-r border-[var(--peer-border)] align-top transition-colors ${col.cellTint} ${
+            isOver ? "outline outline-2 -outline-offset-2 outline-[var(--peer-primary)]" : ""
           } ${options?.dropDisabled ? "opacity-90" : ""}`}
           {...(cellDropHandlers
             ? {
@@ -324,7 +341,9 @@ export function MatrixVariant({
             : {})}
         >
           <div
-            className="min-h-[2.5rem] space-y-1.5 p-2"
+            className={`matrix-cell-sources px-1.5 py-1.5 ${
+              cellSources.length > 0 ? "flex flex-col gap-2" : ""
+            }`}
             {...(cellDropHandlers ?? {})}
           >
             {cellSources.map((source) => (
@@ -369,7 +388,7 @@ export function MatrixVariant({
     });
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--peer-surface)]">
       <div className="flex min-h-0 flex-1">
         <div className="min-h-0 min-w-0 flex-1 overflow-auto">
           <table className={`w-full ${tableMinWidth} border-separate border-spacing-0`}>
@@ -381,7 +400,7 @@ export function MatrixVariant({
                 {columns.map((col) => (
                   <th
                     key={col.id}
-                    className={`sticky top-0 z-20 min-w-[220px] border-b border-r border-[#d4ced3] px-2.5 py-1.5 text-left align-top ${col.cellTint} ${col.cellAccent}`}
+                    className={`sticky top-0 z-20 min-w-[200px] border-b border-r border-[var(--peer-border)] px-2 py-1 text-left align-top ${col.cellTint} ${col.cellAccent}`}
                   >
                     <div className="flex items-center gap-2">
                       <span
@@ -393,9 +412,7 @@ export function MatrixVariant({
                         {col.label}
                       </span>
                       <ColumnHintTooltip hint={col.hint} />
-                      <span className="ml-auto rounded-full border border-[#d4ced3] bg-white px-1.5 text-[11px] font-semibold tabular-nums text-[#636161]">
-                        {roleTotals(col.id)}
-                      </span>
+                      <span className="peer-matrix-count-badge">{roleTotals(col.id)}</span>
                     </div>
                   </th>
                 ))}
@@ -411,12 +428,12 @@ export function MatrixVariant({
                     <tr key={block.id} className="group/heading">
                       <td className={ROADMAP_OUTLINE_COLUMN_CLASS}>
                         <RoadmapOutlineRow
+                          compact
                           depth={depth}
                           isHeading
                           isActive={activeBlockId === block.id}
                           number={block.number}
                           title={block.title}
-                          draggable
                           onDragStart={(event) => {
                             beginDrag(event, {
                               kind: "outline-ref",
@@ -445,11 +462,11 @@ export function MatrixVariant({
                   <tr key={block.id} className="group">
                     <td className={ROADMAP_OUTLINE_COLUMN_CLASS}>
                       <RoadmapOutlineRow
+                        compact
                         depth={depth}
                         isHeading={false}
                         isActive={activeBlockId === block.id}
                         title={block.title}
-                        draggable
                         onDragStart={(event) => {
                           beginDrag(event, {
                             kind: "outline-ref",
@@ -472,10 +489,7 @@ export function MatrixVariant({
           </table>
         </div>
 
-        <aside
-          data-datasource-panel=""
-          className="flex h-full min-h-0 w-[360px] shrink-0 flex-col overflow-hidden border-l border-[#d4ced3] bg-[#fafafa]"
-        >
+        <aside data-datasource-panel="" className="peer-library-sidebar">
           {traceSource && onCloseTrace ? (
             <DataSourcePanel
               embedded

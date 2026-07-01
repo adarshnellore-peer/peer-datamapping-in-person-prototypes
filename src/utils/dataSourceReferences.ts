@@ -3,6 +3,7 @@ import {
   type DataSourceRoadmapSource,
   type RoadmapSource,
 } from "../data/roadmap";
+import type { DocumentBlock } from "../types";
 
 export function getDataSourceReferenceKeys(source: DataSourceRoadmapSource): string[] {
   const fromArray = source.referenceKeys?.filter((key) => key.trim()) ?? [];
@@ -100,6 +101,32 @@ function sourcesSerialized(sources: RoadmapSource[]): string {
   );
 }
 
+/** Stable merge key: same document + usage + source/reference tag fold together. */
+export function dataSourceConsolidationKey(source: RoadmapSource): string {
+  if (source.sourceType !== "DATA_SOURCE" || !source.dataSource) {
+    return `id:${source.id}`;
+  }
+
+  const usage =
+    source.role === "primary" ||
+    source.role === "supporting" ||
+    source.role === "context" ||
+    source.role === "reference"
+      ? source.role
+      : source.isReference
+        ? "reference"
+        : "primary";
+
+  const format =
+    source.role === "source" || source.role === "reference"
+      ? source.role
+      : usage === "reference"
+        ? "reference"
+        : "source";
+
+  return `${source.dataSource}::${usage}::${format}`;
+}
+
 /** Merge duplicate data-source rows that share document + role tag. */
 export function consolidateDataSourceEntries(
   sources: RoadmapSource[],
@@ -136,9 +163,29 @@ export function consolidateDataSourceEntries(
 
 export function consolidateContentBlockSourcesIfNeeded(
   sources: RoadmapSource[],
-  mergeRoleKey: (source: RoadmapSource) => string,
+  mergeRoleKey: (source: RoadmapSource) => string = dataSourceConsolidationKey,
 ): { sources: RoadmapSource[]; changed: boolean } {
   const consolidated = consolidateDataSourceEntries(sources, mergeRoleKey);
   const changed = sourcesSerialized(sources) !== sourcesSerialized(consolidated);
   return { sources: consolidated, changed };
+}
+
+export function consolidateDocumentBlock(block: DocumentBlock): DocumentBlock {
+  if (block.type === "content") {
+    return {
+      ...block,
+      sources: consolidateDataSourceEntries(block.sources, dataSourceConsolidationKey),
+    };
+  }
+  if (block.type === "heading" && block.sources?.length) {
+    return {
+      ...block,
+      sources: consolidateDataSourceEntries(block.sources, dataSourceConsolidationKey),
+    };
+  }
+  return block;
+}
+
+export function consolidateDocumentBlocks(blocks: DocumentBlock[]): DocumentBlock[] {
+  return blocks.map(consolidateDocumentBlock);
 }

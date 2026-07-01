@@ -28,55 +28,51 @@ const SUBVIEWS: {
   },
 ];
 
-function MappingSubviewControl({
+export function MappingSubviewControl({
   view,
   onChange,
+  inline = false,
 }: {
   view: MappingSubview;
   onChange: (view: MappingSubview) => void;
+  inline?: boolean;
 }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-4 sm:top-4">
-      <div
-        role="tablist"
-        aria-label="Mapping layout"
-        className="pointer-events-auto inline-flex items-center rounded-full border border-[#e4dfe3] bg-white/90 p-1 shadow-[0_4px_20px_rgba(48,47,47,0.07)] backdrop-blur-md"
-      >
-        {SUBVIEWS.map((option) => {
-          const active = view === option.id;
-          const Icon = option.icon;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              title={option.title}
-              onClick={() => onChange(option.id)}
-              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-medium leading-none transition-all duration-200 ${
-                active
-                  ? "bg-[#302f2f] text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
-                  : "text-[#636161] hover:bg-[#f7f4f6] hover:text-[#302f2f]"
-              }`}
-            >
-              <Icon size={14} strokeWidth={active ? 2.25 : 1.75} aria-hidden />
-              <span>{option.label}</span>
-            </button>
-          );
-        })}
-      </div>
+    <div
+      role="tablist"
+      aria-label="Mapping layout"
+      className={`peer-mapping-toggle ${inline ? "peer-mapping-toggle--inline" : ""}`}
+    >
+      {SUBVIEWS.map((option) => {
+        const active = view === option.id;
+        const Icon = option.icon;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            title={option.title}
+            onClick={() => onChange(option.id)}
+            className={`peer-mapping-tab ${active ? "is-active" : ""}`}
+          >
+            <Icon size={14} strokeWidth={active ? 2.25 : 1.75} aria-hidden />
+            <span>{option.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 type StorylineProps = Omit<VariantProps, "onAddSource"> & {
   focusId?: string | null;
+  scrollTick?: number;
   onMapStudySource: (blockId: string, studySourceId: string) => void;
   onMapStudySources?: (blockId: string, studySourceIds: string[]) => void;
-  onMapOutlineToSection: (
+  onMapOutlineRefToSection: (
     blockId: string,
-    sourceType: "SUBCONTENT" | "CONTENT",
-    label: string,
+    payload: OutlineRefPayload,
   ) => void;
   onMoveSource?: (
     fromBlockId: string,
@@ -85,8 +81,8 @@ type StorylineProps = Omit<VariantProps, "onAddSource"> & {
     toIndex?: number,
   ) => void;
   onPromptChange?: (blockId: string, prompt: string) => void;
-  onOutputTypeChange?: (blockId: string, outputType: string) => void;
   rolePickerMode?: "usage" | "format";
+  onNavigateOutlineRef?: (source: RoadmapSource) => void;
 };
 
 type MatrixProps = VariantProps & {
@@ -138,25 +134,20 @@ type MatrixProps = VariantProps & {
  */
 export function MappingVariant({
   subview,
-  onSubviewChange,
   storyline,
   matrix,
 }: {
   subview: MappingSubview;
-  onSubviewChange: (view: MappingSubview) => void;
   storyline: StorylineProps;
   matrix: MatrixProps;
 }) {
   return (
-    <div className="relative flex h-full min-h-0 flex-col">
-      <MappingSubviewControl view={subview} onChange={onSubviewChange} />
-      <div className="min-h-0 flex-1 pt-12">
-        {subview === "storyline" ? (
-          <TwoColumnVariant {...storyline} />
-        ) : (
-          <MatrixVariant {...matrix} />
-        )}
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
+      {subview === "storyline" ? (
+        <TwoColumnVariant {...storyline} />
+      ) : (
+        <MatrixVariant {...matrix} />
+      )}
     </div>
   );
 }

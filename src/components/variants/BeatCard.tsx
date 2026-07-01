@@ -1,10 +1,39 @@
-import { type ReactNode } from "react";
+import { type DragEvent, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import type { ContentBlockData, DocumentBlock } from "../../types";
 import { KeyMessageFooter } from "../KeyMessageFooter";
-import { GenerateAsSelect } from "../OutputTypeToggle";
+import { AddEvidenceDropZone } from "./AddEvidenceDropZone";
 import { SectionMapper } from "./SectionMapper";
 import { effectiveFormatRole, effectiveSourceRole } from "./types";
+
+function sourceHasMappedEvidence(source: import("../../data/roadmap").RoadmapSource): boolean {
+  switch (source.sourceType) {
+    case "DATA_SOURCE":
+      return Boolean(source.dataSource?.trim() || source.referenceKey?.trim());
+    case "REFERENCE_SOURCE":
+      return Boolean(source.referenceSource?.trim());
+    case "CONTENT":
+    case "SUBCONTENT":
+      return Boolean(source.content?.trim());
+    default:
+      return true;
+  }
+}
+
+function sourcesForEvidenceKind(
+  sources: import("../../data/roadmap").RoadmapSource[],
+  kind: "data" | "outline",
+): import("../../data/roadmap").RoadmapSource[] {
+  if (kind === "data") {
+    return sources.filter(
+      (source) =>
+        source.sourceType === "DATA_SOURCE" || source.sourceType === "REFERENCE_SOURCE",
+    );
+  }
+  return sources.filter(
+    (source) => source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT",
+  );
+}
 
 /** Nearest preceding heading label for a content block. */
 export function headingLabelFor(blocks: DocumentBlock[], blockId: string): string | null {
@@ -28,10 +57,17 @@ export function BeatCard({
   onUpdateSource,
   onRemoveSource,
   onPromptChange,
-  onOutputTypeChange,
   rolePickerMode = "usage",
   isDropTarget = false,
   dropOverlay,
+  showAddZone = false,
+  onAddDrop,
+  onEvidenceDragOver,
+  onEvidenceDragLeave,
+  onEvidenceDrop,
+  onMappedDragStart,
+  onMappedDragEnd,
+  onNavigateOutlineRef,
 }: {
   cardRef?: (el: HTMLDivElement | null) => void;
   block: ContentBlockData;
@@ -45,55 +81,119 @@ export function BeatCard({
   onUpdateSource: (source: import("../../data/roadmap").RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
   onPromptChange?: (prompt: string) => void;
-  onOutputTypeChange?: (outputType: string) => void;
   rolePickerMode?: "usage" | "format";
   isDropTarget?: boolean;
   dropOverlay?: ReactNode;
+  showAddZone?: boolean;
+  onAddDrop?: (dataTransfer: DataTransfer) => void;
+  onEvidenceDragOver?: (event: DragEvent) => void;
+  onEvidenceDragLeave?: (event: DragEvent) => void;
+  onEvidenceDrop?: (event: DragEvent) => void;
+  onMappedDragStart?: (sourceId: string, event: DragEvent) => void;
+  onMappedDragEnd?: () => void;
+  onNavigateOutlineRef?: (source: import("../../data/roadmap").RoadmapSource) => void;
 }) {
   const sourceTagCount = block.sources.filter(
     (source) => effectiveFormatRole(source) === "source",
   ).length;
   const showGap =
     rolePickerMode === "format"
-      ? block.sources.length > 0 && sourceTagCount === 0
-      : block.sources.length > 0 &&
+      ? block.sources.some(
+          (source) =>
+            source.sourceType === "DATA_SOURCE" || source.sourceType === "REFERENCE_SOURCE",
+        ) &&
+        sourceTagCount === 0
+      : block.sources.some(
+          (source) =>
+            source.sourceType === "DATA_SOURCE" || source.sourceType === "REFERENCE_SOURCE",
+        ) &&
         !block.sources.some((source) => effectiveSourceRole(source) === "primary");
+
+  const mappedDrag =
+    onMappedDragStart && onMappedDragEnd
+      ? {
+          onDragStart: (sourceId: string, event: DragEvent) =>
+            onMappedDragStart(sourceId, event),
+          onDragEnd: onMappedDragEnd,
+        }
+      : undefined;
+
+  const dataSources = sourcesForEvidenceKind(block.sources, "data").filter(
+    sourceHasMappedEvidence,
+  );
+  const outlineRefs = sourcesForEvidenceKind(block.sources, "outline").filter(
+    sourceHasMappedEvidence,
+  );
+  const isEmptyEvidence = dataSources.length === 0 && outlineRefs.length === 0;
+
+  const sectionMapperProps = {
+    block,
+    blocks,
+    tracedSourceId,
+    onTrace,
+    onUpdateSource,
+    onRemoveSource,
+    rolePickerMode,
+    mappedDrag,
+    hideEmptyState: true as const,
+  };
 
   return (
     <div
       ref={cardRef}
-      className={`peer-card relative transition-colors ${
-        isDropTarget ? "border-[var(--peer-primary)] ring-2 ring-[#ff4e49]/15" : ""
-      }`}
+      className={`peer-card relative transition-colors ${isDropTarget ? "is-drop-target" : ""}`}
+      onDragOver={onEvidenceDragOver}
+      onDragLeave={onEvidenceDragLeave}
+      onDrop={onEvidenceDrop}
     >
-      {dropOverlay}
-
       <div className="peer-card-header">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-          <p className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-[var(--peer-text)]">
+          <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-[var(--peer-text-secondary)]">
             {block.title}
           </p>
-          {onOutputTypeChange && (
-            <GenerateAsSelect value={block.outputType} onChange={onOutputTypeChange} />
-          )}
         </div>
       </div>
 
       <div className="peer-card-body">
-        <p className="peer-section-label">Sources</p>
-        <SectionMapper
-          block={block}
-          blocks={blocks}
-          tracedSourceId={tracedSourceId}
-          onTrace={onTrace}
-          onUpdateSource={onUpdateSource}
-          onRemoveSource={onRemoveSource}
-          rolePickerMode={rolePickerMode}
-        />
+        <div
+          className={`peer-card-evidence relative ${isEmptyEvidence ? "peer-card-evidence--empty" : ""}`}
+        >
+          {dropOverlay}
+
+          {isEmptyEvidence && onAddDrop ? (
+            <AddEvidenceDropZone onDrop={onAddDrop} solo />
+          ) : (
+            <>
+              {dataSources.length > 0 ? (
+                <section className="peer-evidence-section">
+                  <p className="peer-section-label">Sources</p>
+                  <div className="peer-card-sources">
+                    <SectionMapper {...sectionMapperProps} kind="data" />
+                  </div>
+                </section>
+              ) : null}
+
+              {outlineRefs.length > 0 ? (
+                <section className="peer-evidence-section">
+                  <p className="peer-section-label">Content / subcontent</p>
+                  <div className="peer-card-outline-refs">
+                    <SectionMapper
+                      {...sectionMapperProps}
+                      kind="outline"
+                      onNavigateOutlineRef={onNavigateOutlineRef}
+                    />
+                  </div>
+                </section>
+              ) : null}
+
+              {showAddZone && onAddDrop ? <AddEvidenceDropZone onDrop={onAddDrop} /> : null}
+            </>
+          )}
+        </div>
       </div>
 
       {showGap && (
-        <div className="mx-3 mb-3 flex items-center gap-2 rounded-md bg-[#fff8e6] px-3 py-2 text-[12px] text-[#9a6700] sm:mx-4">
+        <div className="mx-3 mb-3 flex items-center gap-2 peer-warning-banner sm:mx-4">
           <AlertTriangle size={14} className="shrink-0" />
           {rolePickerMode === "format"
             ? "Consider marking a source as Source before filing."

@@ -1,20 +1,46 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  ChevronRight,
-  Plus,
-  Search,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ChevronRight, Plus, Search, Trash2, X } from "lucide-react";
 import { getSourceHeaderParts } from "../data/sourceHelpers";
-import { buildTocFlatList, type TocFlatItem } from "../utils/documentBlocks";
+import {
+  buildTocFlatList,
+  getHeadingSectionBlockIds,
+  type TocFlatItem,
+} from "../utils/documentBlocks";
 import type { DocumentBlock, HeadingBlock } from "../types";
-import type { RoadmapSource, SourceType } from "../data/roadmap";
-import { setV2DragData } from "../utils/v2DragPayload";
+import type { RoadmapSource } from "../data/roadmap";
+import {
+  outlineRefDragPayload,
+  setV2DragData,
+  type OutlineRefPayload,
+} from "../utils/v2DragPayload";
 import { RoadmapOutlineRow } from "./roadmap/RoadmapOutlineRow";
 
 function headingLabel(heading: HeadingBlock): string {
   return heading.number ? `${heading.number} ${heading.title}` : heading.title;
+}
+
+function outlineRefPayloadFromTocItem(item: TocFlatItem): OutlineRefPayload {
+  if (item.kind === "heading") {
+    return {
+      kind: "outline-ref",
+      sourceType: "CONTENT",
+      label: headingLabel(item.heading),
+      fromHeadingId: item.heading.id,
+    };
+  }
+  return {
+    kind: "outline-ref",
+    sourceType: "SUBCONTENT",
+    label: item.block.title,
+    fromBlockId: item.block.id,
+  };
+}
+
+function selectableIdsForTocItem(blocks: DocumentBlock[], item: TocFlatItem): string[] {
+  if (item.kind === "heading") {
+    return getHeadingSectionBlockIds(blocks, item.id);
+  }
+  return [item.id];
 }
 
 function normalizeSearch(value: string): string {
@@ -75,7 +101,7 @@ function TocRowActions({
   children: ReactNode;
 }) {
   return (
-    <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/toc-row:opacity-100 group-focus-within/toc-row:opacity-100">
+    <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/toc-row:opacity-100 group-focus-within/toc-row:opacity-100 group-hover/outline-row:opacity-100 group-focus-within/outline-row:opacity-100">
       {children}
     </div>
   );
@@ -115,30 +141,38 @@ function TocActionButton({
 function TocRow({
   depth,
   isActive,
+  isSelected = false,
+  isIndeterminate = false,
   isDragging = false,
   isCollapsed,
   hasChildren,
   onToggleCollapse,
   onNavigate,
+  onToggleSelected,
   onDragPointerDown,
   outlineMappingDrag = false,
   outlineDragLabel,
   onOutlineDragStart,
+  onOutlineDragEnd,
   rowKind = "content",
   label,
   actions,
 }: {
   depth: number;
   isActive: boolean;
+  isSelected?: boolean;
+  isIndeterminate?: boolean;
   isDragging?: boolean;
   isCollapsed?: boolean;
   hasChildren?: boolean;
   onToggleCollapse?: () => void;
   onNavigate: () => void;
-  onDragPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onToggleSelected?: () => void;
+  onDragPointerDown?: (event: React.PointerEvent<HTMLElement>) => void;
   outlineMappingDrag?: boolean;
   outlineDragLabel?: string;
   onOutlineDragStart?: (event: React.DragEvent) => void;
+  onOutlineDragEnd?: () => void;
   rowKind?: "heading" | "content";
   label: ReactNode;
   actions?: ReactNode;
@@ -153,18 +187,21 @@ function TocRow({
         depth={depth}
         isHeading={isHeading}
         isActive={isActive}
+        isSelected={isSelected}
+        isIndeterminate={isIndeterminate}
+        isDragging={isDragging}
         label={label}
         title=""
-        draggable={!!onOutlineDragStart}
         hasChevron={!!hasChildren}
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
         onDragStart={onOutlineDragStart}
-        dragTitle={
-          onOutlineDragStart ? `Drag to map ${outlineDragLabel ?? "outline"}` : undefined
-        }
+        onDragEnd={onOutlineDragEnd}
+        showSelectionCheckbox={!!onToggleSelected}
+        onToggleSelected={onToggleSelected}
+        dragTitle="Drag to reorder or map to section"
         onNavigate={onNavigate}
-        actions={actions}
+        actions={actions ? <TocRowActions>{actions}</TocRowActions> : undefined}
       />
     );
   }
@@ -271,6 +308,8 @@ export function TableOfContents({
     blockId: string;
     dropFlatIndex: number;
   } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [tocMapDragId, setTocMapDragId] = useState<string | null>(null);
   const rowRefs = useRef<Record<string, HTMLLIElement | null>>({});
 
   const flatItems = useMemo(() => buildTocFlatList(blocks), [blocks]);
@@ -318,6 +357,14 @@ export function TableOfContents({
     });
   }, [flatItems, collapsedIds, matchedIds, forceExpandedIds]);
 
+  useEffect(() => {
+    if (!activeId) return;
+    const frame = requestAnimationFrame(() => {
+      rowRefs.current[activeId]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeId, visibleItems]);
+
   const toggleCollapse = (headingId: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
@@ -338,11 +385,12 @@ export function TableOfContents({
   }, []);
 
   const handleRowPointerDown = useCallback(
-    (blockId: string, event: React.PointerEvent<HTMLDivElement>) => {
+    (blockId: string, event: React.PointerEvent<HTMLElement>) => {
       if (normalizedQuery) return;
       if ((event.target as Element).closest("[data-toc-no-drag]")) return;
 
-      const row = event.currentTarget;
+      const row = rowRefs.current[blockId];
+      if (!row) return;
       const startY = event.clientY;
       let dragging = false;
       let dropFlatIndex = 0;
@@ -379,6 +427,76 @@ export function TableOfContents({
     [computeDropFlatIndex, normalizedQuery, onMoveBlock],
   );
 
+  const toggleTocItemSelected = useCallback(
+    (item: TocFlatItem) => {
+      const ids = selectableIdsForTocItem(blocks, item);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        const allSelected = ids.length > 0 && ids.every((id) => next.has(id));
+        for (const id of ids) {
+          if (allSelected) next.delete(id);
+          else next.add(id);
+        }
+        return next;
+      });
+    },
+    [blocks],
+  );
+
+  const startOutlineDrag = useCallback(
+    (item: TocFlatItem, event: React.DragEvent) => {
+      event.stopPropagation();
+      setTocMapDragId(item.id);
+      const dragIds =
+        selectedIds.has(item.id) && selectedIds.size > 0 ? [...selectedIds] : [item.id];
+      const refs: OutlineRefPayload[] = [];
+      for (const id of dragIds) {
+        const tocItem = flatItems.find((entry) => entry.id === id);
+        if (!tocItem) continue;
+        refs.push(outlineRefPayloadFromTocItem(tocItem));
+      }
+      if (refs.length === 0) return;
+      setV2DragData(event.dataTransfer, outlineRefDragPayload(refs));
+    },
+    [flatItems, selectedIds],
+  );
+
+  const handleOutlineDragEnd = useCallback(() => {
+    setTocDrag(null);
+    setTocMapDragId(null);
+  }, []);
+
+  const handleTocListDragOver = useCallback(
+    (event: React.DragEvent) => {
+      if (!outlineMappingDrag || !tocMapDragId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "move";
+      const dropFlatIndex = computeDropFlatIndex(event.clientY, visibleItemsRef.current);
+      setTocDrag({ blockId: tocMapDragId, dropFlatIndex });
+    },
+    [computeDropFlatIndex, outlineMappingDrag, tocMapDragId],
+  );
+
+  const handleTocListDrop = useCallback(
+    (event: React.DragEvent) => {
+      if (!outlineMappingDrag || !tocMapDragId) return;
+      const nav = event.currentTarget as HTMLElement;
+      const rect = nav.getBoundingClientRect();
+      const { clientX, clientY } = event;
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const dropFlatIndex = computeDropFlatIndex(event.clientY, visibleItemsRef.current);
+      onMoveBlock(tocMapDragId, dropFlatIndex);
+      setTocDrag(null);
+      setTocMapDragId(null);
+    },
+    [computeDropFlatIndex, onMoveBlock, outlineMappingDrag, tocMapDragId],
+  );
+
   const visibleItemsRef = useRef(visibleItems);
   visibleItemsRef.current = visibleItems;
 
@@ -412,13 +530,7 @@ export function TableOfContents({
 
   const renderOutlineDragStart = (item: TocFlatItem) => {
     if (!outlineMappingDrag) return undefined;
-    return (event: React.DragEvent) => {
-      event.stopPropagation();
-      const sourceType: SourceType = item.kind === "heading" ? "CONTENT" : "SUBCONTENT";
-      const label =
-        item.kind === "heading" ? headingLabel(item.heading) : item.block.title;
-      setV2DragData(event.dataTransfer, { kind: "toc", sourceType, label });
-    };
+    return (event: React.DragEvent) => startOutlineDrag(item, event);
   };
 
   const outlineDragMeta = (item: TocFlatItem) => {
@@ -461,7 +573,11 @@ export function TableOfContents({
         </div>
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-3 pt-1">
+      <nav
+        className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-3 pt-1"
+        onDragOver={outlineMappingDrag ? handleTocListDragOver : undefined}
+        onDrop={outlineMappingDrag ? handleTocListDrop : undefined}
+      >
         {visibleItems.length === 0 ? (
           <p className="px-2 py-6 text-center text-[12px] text-[#9e9e9e]">
             {normalizedQuery ? "No matches" : "No sections yet"}
@@ -470,26 +586,40 @@ export function TableOfContents({
           <ul>
             {visibleItems.map((item, index) => {
               const isActive = activeId === item.id;
-              const isDragging = tocDrag?.blockId === item.id;
+              const isDragging =
+                tocDrag?.blockId === item.id || tocMapDragId === item.id;
               const showDropBefore =
                 tocDrag !== null && tocDrag.dropFlatIndex === index && tocDrag.blockId !== item.id;
               const isHeadingRow = item.kind === "heading";
 
               const dragMeta = outlineDragMeta(item);
+              const outlineDragStart = renderOutlineDragStart(item);
+              const selectableIds = outlineMappingDrag
+                ? selectableIdsForTocItem(blocks, item)
+                : [];
+              const allSelected =
+                selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+              const someSelected = selectableIds.some((id) => selectedIds.has(id));
               const rowProps = {
                 depth: item.depth,
                 isActive,
+                isSelected: outlineMappingDrag ? allSelected : false,
+                isIndeterminate: outlineMappingDrag ? someSelected && !allSelected : false,
                 isDragging,
                 rowKind: isHeadingRow ? ("heading" as const) : ("content" as const),
                 onNavigate: () => onNavigate(item.id),
+                onToggleSelected: outlineMappingDrag
+                  ? () => toggleTocItemSelected(item)
+                  : undefined,
                 onDragPointerDown:
-                  outlineMappingDrag || normalizedQuery
+                  normalizedQuery || outlineMappingDrag
                     ? undefined
-                    : (event: React.PointerEvent<HTMLDivElement>) =>
+                    : (event: React.PointerEvent<HTMLElement>) =>
                         handleRowPointerDown(item.id, event),
                 outlineMappingDrag,
                 outlineDragLabel: dragMeta.label,
-                onOutlineDragStart: renderOutlineDragStart(item),
+                onOutlineDragStart: outlineDragStart,
+                onOutlineDragEnd: outlineMappingDrag ? handleOutlineDragEnd : undefined,
                 label: (
                   <span className="flex min-w-0 items-start">
                     <span
@@ -510,9 +640,7 @@ export function TableOfContents({
                   ref={(el) => {
                     rowRefs.current[item.id] = el;
                   }}
-                  className={`relative ${
-                    outlineMappingDrag && isHeadingRow && index > 0 ? "mt-1.5" : ""
-                  }`}
+                  className="relative"
                 >
                   {showDropBefore && (
                     <div

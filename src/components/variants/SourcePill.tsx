@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
-import { Check, GripVertical, Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { GripVertical, Plus, X } from "lucide-react";
 import { PillOptionPicker } from "../CollapsiblePillField";
 import {
   CONTENT_OPTIONS,
@@ -20,12 +20,12 @@ import {
   type SourceType,
 } from "../../data/roadmap";
 import {
-  ARTIFACT_TYPE_CHIP,
   FORMAT_ROLE_BADGE,
   FORMAT_ROLE_BADGE_PICKER,
   ROLE_BADGE,
   ROLE_BADGE_PICKER,
   SOURCE_FORMAT_ROLES,
+  artifactTypeIconColor,
   effectiveFormatRole,
   effectiveSourceRole,
   formatRoleHint,
@@ -33,6 +33,8 @@ import {
   roleLabel,
   ROLE_HINT,
   artifactTypeLabel,
+  artifactTypeIcon,
+  artifactTypeIconKind,
 } from "./types";
 import {
   appendReferenceKeyToDataSource,
@@ -44,6 +46,15 @@ import {
 type ActiveField = "sourceType" | "document" | "pages" | "role" | null;
 type PagesTarget = string | "__add__";
 
+function selectableReferenceKeys(
+  dataSourceName: string,
+  selectedKeys: string[],
+  editingKey?: string | null,
+): string[] {
+  const taken = new Set(selectedKeys.filter((key) => key !== editingKey));
+  return getReferenceKeysForDataSource(dataSourceName).filter((key) => !taken.has(key));
+}
+
 const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   DATA_SOURCE: "Data source",
   SUBCONTENT: "Subcontent",
@@ -54,6 +65,64 @@ const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
 const ROLE_CHIP_BASE =
   "inline-flex h-[18px] shrink-0 items-center rounded-full border px-1.5 text-[10px] font-semibold leading-none transition-colors";
 
+function OutlineTypeBadge({ sourceType }: { sourceType: "CONTENT" | "SUBCONTENT" }) {
+  const label = sourceType === "CONTENT" ? "Content" : "Subcontent";
+  const badgeClass =
+    sourceType === "CONTENT"
+      ? "border-[#94a3b8] bg-[#f1f5f9] text-[#475569]"
+      : "border-[#cbd5e1] bg-[#f8fafc] text-[#64748b]";
+
+  return (
+    <span
+      className={`${ROLE_CHIP_BASE} ${badgeClass}`}
+      aria-label={`Type: ${label}`}
+      title={label}
+    >
+      {label}
+    </span>
+  );
+}
+
+function FormatRoleToggle({
+  formatRole,
+  onSelectRole,
+}: {
+  formatRole: SourceFormatRole | undefined;
+  onSelectRole: (role: SourceFormatRole) => void;
+}) {
+  const current = formatRole ?? "source";
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Source or reference"
+      className="peer-format-role-toggle"
+      onClick={(event) => event.stopPropagation()}
+    >
+      {SOURCE_FORMAT_ROLES.map((option) => {
+        const selected = current === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            title={formatRoleHint(option)}
+            onClick={() => {
+              if (!selected) onSelectRole(option);
+            }}
+            className={`peer-format-role-toggle-btn peer-format-role-toggle-btn--${option} ${
+              selected ? "is-selected" : ""
+            }`}
+          >
+            {formatRoleLabel(option)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function SourceTypeAndRole({
   source,
   role,
@@ -63,7 +132,9 @@ function SourceTypeAndRole({
   allowSourceTypeChange,
   onToggleType,
   onToggleRole,
+  onSelectFormatRole,
   artifactBlocks,
+  iconSize = "md",
 }: {
   source: RoadmapSource;
   role: SourceRole | undefined;
@@ -73,24 +144,45 @@ function SourceTypeAndRole({
   allowSourceTypeChange: boolean;
   onToggleType: () => void;
   onToggleRole: () => void;
+  onSelectFormatRole: (role: SourceFormatRole) => void;
   artifactBlocks?: import("../../types").DocumentBlock[];
+  iconSize?: "sm" | "md";
 }) {
+  if (source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT") {
+    return (
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+        <ArtifactTypeTag
+          source={source}
+          active={activeField === "sourceType"}
+          allowSourceTypeChange={allowSourceTypeChange}
+          onToggleType={onToggleType}
+          artifactBlocks={artifactBlocks}
+          size={iconSize}
+        />
+        <OutlineTypeBadge sourceType={source.sourceType} />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+    <div className="flex min-w-0 shrink-0 items-center gap-2">
       <ArtifactTypeTag
           source={source}
           active={activeField === "sourceType"}
           allowSourceTypeChange={allowSourceTypeChange}
           onToggleType={onToggleType}
           artifactBlocks={artifactBlocks}
+          size={iconSize}
       />
-      <RoleBadge
-        role={role}
-        formatRole={formatRole}
-        rolePickerMode={rolePickerMode}
-        active={activeField === "role"}
-        onClick={onToggleRole}
-      />
+      {rolePickerMode === "format" ? (
+        <FormatRoleToggle formatRole={formatRole} onSelectRole={onSelectFormatRole} />
+      ) : (
+        <RoleBadge
+          role={role}
+          active={activeField === "role"}
+          onClick={onToggleRole}
+        />
+      )}
     </div>
   );
 }
@@ -101,42 +193,52 @@ function ArtifactTypeTag({
   allowSourceTypeChange,
   onToggleType,
   artifactBlocks,
+  size = "md",
 }: {
   source: RoadmapSource;
   active: boolean;
   allowSourceTypeChange: boolean;
   onToggleType: () => void;
   artifactBlocks?: import("../../types").DocumentBlock[];
+  size?: "sm" | "md";
 }) {
-  const artifact = ARTIFACT_TYPE_CHIP[source.sourceType];
   const typeLabel = artifactTypeLabel(source, artifactBlocks);
-  const className = `${artifact.badge} inline-flex h-[18px] items-center ${
-    active && allowSourceTypeChange ? "ring-2 ring-[var(--peer-primary)] ring-offset-1" : ""
-  }`;
+  const TypeIcon = artifactTypeIcon(source, artifactBlocks);
+  const iconKind = artifactTypeIconKind(source, artifactBlocks);
+  const iconColor = artifactTypeIconColor(source, artifactBlocks);
+  const pixelSize = size === "md" ? 20 : 15;
+  const strokeWidth = size === "md" ? 2.25 : 2;
 
-  if (allowSourceTypeChange) {
-    return (
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleType();
-        }}
-        aria-expanded={active}
-        aria-haspopup="listbox"
-        className={className}
-        title={`Change source type (${typeLabel})`}
-        aria-label={`Source type: ${typeLabel}. Click to change.`}
-      >
-        {typeLabel}
-      </button>
-    );
+  const icon = (
+    <span
+      className={`peer-artifact-icon peer-artifact-icon--${size} peer-artifact-icon--${iconKind}`}
+      style={{ color: iconColor }}
+      title={typeLabel}
+      aria-label={typeLabel}
+    >
+      <TypeIcon size={pixelSize} strokeWidth={strokeWidth} aria-hidden />
+    </span>
+  );
+
+  if (!allowSourceTypeChange) {
+    return icon;
   }
 
   return (
-    <span className={className} title={typeLabel}>
-      {typeLabel}
-    </span>
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggleType();
+      }}
+      aria-expanded={active}
+      aria-haspopup="listbox"
+      title={`Change source type (${typeLabel})`}
+      aria-label={`Source type: ${typeLabel}. Click to change.`}
+      className={`peer-artifact-icon-btn ${active ? "is-active" : ""}`}
+    >
+      {icon}
+    </button>
   );
 }
 
@@ -158,6 +260,7 @@ export function SourcePill({
   dragHandleAlwaysVisible = false,
   onChange,
   onTrace,
+  onNavigateOutlineRef,
   onRemove,
   artifactBlocks,
 }: {
@@ -186,12 +289,18 @@ export function SourcePill({
   dragHandleAlwaysVisible?: boolean;
   onChange: (next: RoadmapSource) => void;
   onTrace?: () => void;
+  onNavigateOutlineRef?: () => void;
   onRemove: () => void;
   /** Used to infer table / figure tags from referenced outline blocks. */
   artifactBlocks?: import("../../types").DocumentBlock[];
 }) {
   const isV2 = variant === "v2";
   const isMatrixLayout = isV2 && layout === "matrix";
+  const isOutlineRef =
+    isV2 &&
+    (source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT");
+  const usesV2CardChrome = isV2 && !isOutlineRef;
+  const artifactIconSize: "sm" | "md" = isMatrixLayout || compact ? "sm" : "md";
   const rootRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<ActiveField>(null);
   const [pagesTarget, setPagesTarget] = useState<PagesTarget | null>(null);
@@ -219,15 +328,25 @@ export function SourcePill({
   const referenceKeys = dataSource ? getDataSourceReferenceKeys(dataSource) : [];
   const multiRange = rolePickerMode === "format" && !!dataSource;
 
-  const isProposed = source.status === "proposed";
+  const sectionPickerOptions = useMemo(() => {
+    if (!dataSource?.dataSource || !pagesTarget) return [];
+    const editingKey = pagesTarget === "__add__" ? null : pagesTarget;
+    return selectableReferenceKeys(dataSource.dataSource, referenceKeys, editingKey);
+  }, [dataSource, pagesTarget, referenceKeys]);
+
+  const canAddMoreSections = useMemo(() => {
+    if (!dataSource?.dataSource || !multiRange) return true;
+    return selectableReferenceKeys(dataSource.dataSource, referenceKeys).length > 0;
+  }, [dataSource, multiRange, referenceKeys]);
+
   const displayRole = effectiveSourceRole(source);
   const displayFormatRole = effectiveFormatRole(source);
 
   const handleRootClick = (event: React.MouseEvent) => {
-    if ((event.target as Element).closest("button, .peer-field-chip, .peer-source-actions")) {
+    if ((event.target as Element).closest("button, .peer-field-chip, .peer-outline-ref-title, .peer-source-actions")) {
       return;
     }
-    if (!isV2 || !onTrace || active || pagesTarget) return;
+    if (!isV2 || !onTrace || isMatrixLayout || active || pagesTarget) return;
     onTrace();
   };
 
@@ -264,6 +383,16 @@ export function SourcePill({
     setActive(null);
   };
 
+  const handleToggleRole = () => {
+    if (rolePickerMode === "format") {
+      const current = displayFormatRole ?? "source";
+      const next: SourceFormatRole = current === "reference" ? "source" : "reference";
+      setRole(next);
+      return;
+    }
+    toggle("role");
+  };
+
   const selectSourceType = (nextType: SourceType) => {
     onChange(withSourceType(source, nextType));
     setActive("document");
@@ -281,30 +410,31 @@ export function SourcePill({
       ? source.dataSource || "Select document…"
       : nonDataSourceLabel(source) || "Select…";
 
-  const sectionLine =
-    source.sourceType === "DATA_SOURCE" &&
-    (source.referenceKey || !fieldOpensTrace)
-      ? source.referenceKey || "Pages…"
-      : undefined;
+  const dragHandleClass = (outlineRef = false) => {
+    const classes = [
+      "peer-source-drag-handle",
+      "touch-none",
+      "active:cursor-grabbing",
+    ];
+    if (outlineRef) classes.push("peer-outline-ref-drag");
+    if (dragHandleAlwaysVisible) {
+      classes.push("is-visible");
+    } else if (isMatrixLayout) {
+      classes.push(
+        outlineRef
+          ? "opacity-40 group-hover/cell:opacity-70 group-hover/pill:opacity-100"
+          : "opacity-40 group-hover/cell:opacity-70 group-hover/pill:opacity-70",
+      );
+    } else {
+      classes.push("peer-source-drag-handle--storyline-hover");
+    }
+    return classes.join(" ");
+  };
 
   return (
     <div
       data-source-card=""
       ref={rootRef}
-      draggable={Boolean(matrixDrag && isMatrixLayout)}
-      onDragStart={(event) => {
-        if (!matrixDrag || !isMatrixLayout) return;
-        if ((event.target as Element).closest(".peer-source-actions button")) {
-          event.preventDefault();
-          return;
-        }
-        event.stopPropagation();
-        matrixDrag.onDragStart(event);
-      }}
-      onDragEnd={() => {
-        if (!matrixDrag || !isMatrixLayout) return;
-        matrixDrag.onDragEnd();
-      }}
       onDragOver={
         matrixCellDrop && isMatrixLayout
           ? (event) => {
@@ -324,158 +454,155 @@ export function SourcePill({
           : undefined
       }
       onClick={handleRootClick}
-      className={`peer-source-shell group/pill ${compact ? "is-compact" : ""} ${isMatrixLayout ? "is-matrix" : ""} ${menuOpen ? "is-menu-open" : ""} ${isV2 && onTrace && !isMatrixLayout ? "cursor-pointer" : ""} ${
-        matrixDrag && isMatrixLayout ? "cursor-grab touch-none active:cursor-grabbing" : ""
-      } ${isTraced ? "is-traced" : isProposed ? "is-proposed" : ""}`}
+      className={`peer-source-shell group/pill ${compact ? "is-compact" : ""} ${isMatrixLayout ? "is-matrix" : ""} ${isOutlineRef ? "peer-source-shell--outline-ref" : ""} ${menuOpen ? "is-menu-open" : ""} ${isV2 && onTrace && !isMatrixLayout && !isOutlineRef ? "cursor-pointer" : ""} ${
+        isTraced ? "is-traced" : ""
+      }`}
     >
-      {isMatrixLayout ? (
-        <>
-          <div className="peer-source-matrix-top">
-            {matrixDrag && (
-              <div
-                aria-hidden
-                className={`peer-source-drag-handle pointer-events-none ${
-                  dragHandleAlwaysVisible
-                    ? "is-visible"
-                    : "opacity-40 group-hover/cell:opacity-70 group-hover/pill:opacity-70"
-                }`}
-              >
-                <GripVertical size={11} strokeWidth={1.75} />
-              </div>
-            )}
-            <div className="peer-source-matrix-text min-w-0 flex-1">
-              <MatrixTextLine
-                variant="title"
-                traceHint={fieldOpensTrace}
-                allowCardDrag={Boolean(matrixDrag)}
-                onClick={() => handleFieldClick("document")}
+      {isV2 ? (
+        isOutlineRef ? (
+          <>
+            <div className="peer-outline-ref-row">
+              {matrixDrag && (
+                <div
+                  draggable
+                  onDragStart={(event) => {
+                    event.stopPropagation();
+                    matrixDrag.onDragStart(event);
+                  }}
+                  onDragEnd={(event) => {
+                    event.stopPropagation();
+                    matrixDrag.onDragEnd();
+                  }}
+                  aria-label="Drag to move or reorder"
+                  title="Drag to move or reorder"
+                  className={dragHandleClass(true)}
+                >
+                  <GripVertical size={12} strokeWidth={1.75} aria-hidden />
+                </div>
+              )}
+              <button
+                type="button"
+                title={onNavigateOutlineRef ? "Go to outline section" : undefined}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (onNavigateOutlineRef) {
+                    onNavigateOutlineRef();
+                    return;
+                  }
+                  handleFieldClick("document");
+                }}
+                className={`peer-outline-ref-title min-w-0 flex-1 truncate text-left ${
+                  active === "document" ? "is-active" : ""
+                } ${onNavigateOutlineRef || fieldOpensTrace ? "cursor-pointer" : ""}`}
               >
                 {primaryTitle}
-              </MatrixTextLine>
-              {sectionLine !== undefined && (
-                <MatrixTextLine
-                  variant="section"
-                  traceHint={fieldOpensTrace}
-                  allowCardDrag={Boolean(matrixDrag)}
-                  onClick={() => handleFieldClick("pages")}
-                  muted={
-                    source.sourceType === "DATA_SOURCE" && !source.referenceKey
-                  }
-                >
-                  {sectionLine}
-                </MatrixTextLine>
-              )}
-            </div>
-            <div className="peer-source-actions peer-source-actions--matrix">
-              {isProposed && (
+              </button>
+              <span
+                className={`peer-outline-ref-tag peer-outline-ref-tag--${
+                  source.sourceType === "CONTENT" ? "content" : "subcontent"
+                }`}
+                aria-hidden
+              >
+                {source.sourceType === "CONTENT" ? "Content" : "Subcontent"}
+              </span>
+              <div className="peer-source-actions peer-source-actions--outline">
                 <button
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onChange({ ...source, status: "confirmed" });
+                    onRemove();
                   }}
-                  aria-label="Confirm source"
-                  title="Confirm suggested source"
-                  className="shrink-0 rounded p-0.5 text-[#1a8a4a] hover:bg-[#e6f6ec]"
+                  aria-label="Remove linked content"
+                  title="Remove linked content"
+                  className="shrink-0 rounded p-1 text-[#bdbdbd] opacity-0 transition-opacity hover:bg-[#fff0f0] hover:text-[var(--peer-primary)] group-hover/pill:opacity-100"
                 >
-                  <Check size={12} strokeWidth={2.25} />
+                  <X size={13} strokeWidth={1.75} />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRemove();
-                }}
-                aria-label="Remove source"
-                title="Remove source"
-                className="shrink-0 rounded p-0.5 text-[#bdbdbd] hover:bg-[#fff0f0] hover:text-[var(--peer-primary)]"
-              >
-                <X size={12} strokeWidth={1.75} />
-              </button>
+              </div>
             </div>
-          </div>
-          <div
-            className={`peer-source-matrix-meta ${matrixDrag ? "has-drag-gutter" : ""}`}
-          >
-            <ArtifactTypeTag
-              source={source}
-              active={false}
-              allowSourceTypeChange={false}
-              onToggleType={() => {}}
-              artifactBlocks={artifactBlocks}
-            />
-          </div>
-        </>
-      ) : isV2 ? (
+          </>
+        ) : (
         <>
           <div
-            className={`peer-source-meta ${active === "role" || active === "sourceType" ? "is-expanded" : ""}`}
+            className={`peer-source-meta ${isMatrixLayout ? "peer-source-meta--matrix" : usesV2CardChrome ? "peer-source-meta--storyline" : ""} ${!isMatrixLayout && (active === "role" || active === "sourceType") ? "is-expanded" : ""}`}
           >
-            <div className="peer-source-head">
-              {matrixDrag && (
-              <div
-                draggable
-                onDragStart={(event) => {
-                  event.stopPropagation();
-                  matrixDrag.onDragStart(event);
-                }}
-                onDragEnd={(event) => {
-                  event.stopPropagation();
-                  matrixDrag.onDragEnd();
-                }}
-                aria-label="Drag to another column"
-                title="Drag to another column"
-                className={`peer-source-drag-handle touch-none active:cursor-grabbing ${
-                  dragHandleAlwaysVisible
-                    ? "is-visible"
-                    : "opacity-0 group-hover/cell:opacity-100 group-hover/pill:opacity-100"
-                }`}
-              >
-                <GripVertical size={12} strokeWidth={1.75} aria-hidden />
+            <div
+              className={`peer-source-head ${isMatrixLayout ? "peer-source-head--matrix" : ""}`}
+            >
+              <div className="peer-source-head-start">
+                {matrixDrag && (
+                  <div
+                    draggable
+                    onDragStart={(event) => {
+                      event.stopPropagation();
+                      matrixDrag.onDragStart(event);
+                    }}
+                    onDragEnd={(event) => {
+                      event.stopPropagation();
+                      matrixDrag.onDragEnd();
+                    }}
+                    aria-label="Drag to move or reorder"
+                    title="Drag to move or reorder"
+                    className={dragHandleClass()}
+                  >
+                    <GripVertical size={12} strokeWidth={1.75} aria-hidden />
+                  </div>
+                )}
+                {isMatrixLayout ? (
+                  <>
+                    <ArtifactTypeTag
+                      source={source}
+                      active={active === "sourceType"}
+                      allowSourceTypeChange={allowSourceTypeChange}
+                      onToggleType={() => toggle("sourceType")}
+                      artifactBlocks={artifactBlocks}
+                      size={artifactIconSize}
+                    />
+                    <FieldButton
+                      active={!fieldOpensTrace && active === "document"}
+                      onClick={() => handleFieldClick("document")}
+                      className="peer-matrix-inline-title min-w-0 flex-1"
+                      compact={compact}
+                      traceHint={fieldOpensTrace}
+                      tier="title"
+                    >
+                      <span className="truncate font-semibold text-[var(--peer-text)]">
+                        {primaryTitle}
+                      </span>
+                    </FieldButton>
+                  </>
+                ) : (
+                  <SourceTypeAndRole
+                    source={source}
+                    role={displayRole}
+                    formatRole={displayFormatRole}
+                    rolePickerMode={rolePickerMode}
+                    activeField={active}
+                    allowSourceTypeChange={allowSourceTypeChange}
+                    onToggleType={() => toggle("sourceType")}
+                    onToggleRole={handleToggleRole}
+                    onSelectFormatRole={setRole}
+                    artifactBlocks={artifactBlocks}
+                    iconSize={artifactIconSize}
+                  />
+                )}
               </div>
-            )}
-            <SourceTypeAndRole
-              source={source}
-              role={displayRole}
-              formatRole={displayFormatRole}
-              rolePickerMode={rolePickerMode}
-              activeField={active}
-              allowSourceTypeChange={allowSourceTypeChange}
-              onToggleType={() => toggle("sourceType")}
-              onToggleRole={() => toggle("role")}
-              artifactBlocks={artifactBlocks}
-            />
-            <div className="peer-source-actions">
-              {isProposed && (
+              <div className="peer-source-actions">
                 <button
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onChange({ ...source, status: "confirmed" });
+                    onRemove();
                   }}
-                  aria-label="Confirm source"
-                  title="Confirm suggested source"
-                  className="shrink-0 rounded p-0.5 text-[#1a8a4a] hover:bg-[#e6f6ec]"
+                  aria-label="Remove source"
+                  title="Remove source"
+                  className="shrink-0 rounded p-1 text-[#9e9e9e] hover:bg-[#fff0f0] hover:text-[var(--peer-primary)]"
                 >
-                  <Check size={13} strokeWidth={2.25} />
+                  <X size={13} strokeWidth={1.75} />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRemove();
-                }}
-                aria-label="Remove source"
-                title="Remove source"
-                className="shrink-0 rounded p-1 text-[#9e9e9e] hover:bg-[#fff0f0] hover:text-[var(--peer-primary)]"
-              >
-                <X size={13} strokeWidth={1.75} />
-              </button>
+              </div>
             </div>
-            </div>
-            {active === "role" && (
+            {!isMatrixLayout && active === "role" && rolePickerMode !== "format" && (
               <RolePickerInline
                 rolePickerMode={rolePickerMode}
                 role={displayRole}
@@ -483,15 +610,45 @@ export function SourcePill({
                 onSelectRole={setRole}
               />
             )}
-            {allowSourceTypeChange && active === "sourceType" && (
+            {!isMatrixLayout && allowSourceTypeChange && active === "sourceType" && (
               <SourceTypePickerInline
                 source={source}
                 onSelectSourceType={selectSourceType}
               />
             )}
           </div>
-          <div className={`peer-source-body ${compact ? "" : ""} ${multiRange ? "flex-col !items-stretch gap-1.5" : ""}`}>
-            {dataSource ? (
+          <div
+            className={`peer-source-body ${isMatrixLayout ? "peer-source-body--matrix" : usesV2CardChrome ? "peer-source-body--storyline" : ""} ${!isMatrixLayout && multiRange ? "flex-col !items-stretch" : ""}`}
+          >
+            {isMatrixLayout ? (
+              dataSource && multiRange ? (
+                <DataSourceReferenceKeys
+                  keys={referenceKeys}
+                  activeKey={pagesTarget}
+                  disabled={!dataSource.dataSource}
+                  addDisabled={!canAddMoreSections}
+                  traceHint={fieldOpensTrace && !multiRange}
+                  sectionStyle
+                  onSelectKey={(key) => {
+                    if (fieldOpensTrace && !multiRange && onTrace) {
+                      onTrace();
+                      return;
+                    }
+                    setActive(null);
+                    setPagesTarget((current) => (current === key ? null : key));
+                  }}
+                  onAddKey={() => {
+                    if (!dataSource.dataSource) return;
+                    setActive(null);
+                    setPagesTarget("__add__");
+                  }}
+                  onRemoveKey={(key) => {
+                    onChange(removeReferenceKeyFromDataSource(dataSource, key));
+                    setPagesTarget((current) => (current === key ? null : current));
+                  }}
+                />
+              ) : null
+            ) : dataSource ? (
               multiRange ? (
                 <>
                   <FieldButton
@@ -500,6 +657,7 @@ export function SourcePill({
                     className="min-w-0 w-full"
                     compact={compact}
                     traceHint={fieldOpensTrace}
+                    tier="title"
                   >
                     <span className="truncate font-medium text-[#1f1f1f]">
                       {dataSource.dataSource || "Select document…"}
@@ -509,7 +667,9 @@ export function SourcePill({
                     keys={referenceKeys}
                     activeKey={pagesTarget}
                     disabled={!dataSource.dataSource}
+                    addDisabled={!canAddMoreSections}
                     traceHint={fieldOpensTrace && !multiRange}
+                    sectionStyle
                     onSelectKey={(key) => {
                       if (fieldOpensTrace && !multiRange && onTrace) {
                         onTrace();
@@ -563,6 +723,7 @@ export function SourcePill({
                 className="min-w-0 flex-1"
                 compact={compact}
                 traceHint={fieldOpensTrace}
+                tier="title"
               >
                 <span className="truncate font-medium text-[#1f1f1f]">
                   {nonDataSourceLabel(source) || "Select…"}
@@ -571,6 +732,7 @@ export function SourcePill({
             )}
           </div>
         </>
+        )
       ) : (
         <>
           <div className="peer-source-bar">
@@ -582,8 +744,10 @@ export function SourcePill({
               activeField={active}
               allowSourceTypeChange={allowSourceTypeChange}
               onToggleType={() => toggle("sourceType")}
-              onToggleRole={() => toggle("role")}
+              onToggleRole={handleToggleRole}
+              onSelectFormatRole={setRole}
               artifactBlocks={artifactBlocks}
+              iconSize={artifactIconSize}
             />
 
             {source.sourceType === "DATA_SOURCE" ? (
@@ -620,20 +784,6 @@ export function SourcePill({
               </FieldButton>
             )}
 
-            {isProposed && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onChange({ ...source, status: "confirmed" });
-                }}
-                aria-label="Confirm source"
-                title="Confirm suggested source"
-                className="shrink-0 rounded p-1 text-[#1a8a4a] hover:bg-[#e6f6ec]"
-              >
-                <Check size={14} strokeWidth={2.25} />
-              </button>
-            )}
             <button
               type="button"
               onClick={(event) => {
@@ -647,7 +797,7 @@ export function SourcePill({
               <X size={14} strokeWidth={1.75} />
             </button>
           </div>
-          {active === "role" && (
+          {active === "role" && rolePickerMode !== "format" && (
             <RolePickerInline
               rolePickerMode={rolePickerMode}
               role={displayRole}
@@ -668,7 +818,17 @@ export function SourcePill({
         (!fieldOpensTrace || (multiRange && pagesTarget)) &&
         active !== "role" &&
         active !== "sourceType" && (
-        <div className="border-t border-[#ececec] px-3 py-2.5 sm:px-3">
+        <div
+          className={
+            isOutlineRef
+              ? `peer-outline-ref-picker border-t border-[var(--peer-border-subtle)] py-2 ${
+                  isMatrixLayout ? "px-1.5" : ""
+                }`
+              : isMatrixLayout
+                ? "border-t border-[var(--peer-border-subtle)] px-1.5 py-1.5"
+                : "border-t border-[#ececec] px-3 py-2.5 sm:px-3"
+          }
+        >
           {active === "document" && source.sourceType === "DATA_SOURCE" && !fieldOpensTrace && (
             <PillOptionPicker
               value={source.dataSource}
@@ -711,9 +871,10 @@ export function SourcePill({
           )}
           {pagesTarget &&
             dataSource?.dataSource && (
+            sectionPickerOptions.length > 0 ? (
             <PillOptionPicker
               value={pagesTarget === "__add__" ? "" : pagesTarget}
-              options={getReferenceKeysForDataSource(dataSource.dataSource)}
+              options={sectionPickerOptions}
               onSelect={(referenceKey) => {
                 if (pagesTarget === "__add__") {
                   onChange(appendReferenceKeyToDataSource(dataSource, referenceKey));
@@ -725,6 +886,9 @@ export function SourcePill({
                 setPagesTarget(null);
               }}
             />
+            ) : (
+              <p className="text-[12px] text-[#9e9e9e]">All sections for this document are already mapped.</p>
+            )
           )}
           {active === "document" &&
             (source.sourceType === "SUBCONTENT" || source.sourceType === "CONTENT") && (
@@ -759,7 +923,9 @@ function DataSourceReferenceKeys({
   keys,
   activeKey,
   disabled,
+  addDisabled = false,
   traceHint,
+  sectionStyle = false,
   onSelectKey,
   onAddKey,
   onRemoveKey,
@@ -767,19 +933,21 @@ function DataSourceReferenceKeys({
   keys: string[];
   activeKey: PagesTarget | null;
   disabled?: boolean;
+  addDisabled?: boolean;
   traceHint?: boolean;
+  sectionStyle?: boolean;
   onSelectKey: (key: string) => void;
   onAddKey: () => void;
   onRemoveKey: (key: string) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <div className={sectionStyle ? "peer-source-sections" : "flex flex-wrap items-center gap-1"}>
       {keys.map((key) => {
         const isActive = activeKey === key;
         return (
           <span
             key={key}
-            className={`peer-field-chip group/ref-key inline-flex max-w-full items-center gap-0.5 ${
+            className={`peer-field-chip ${sectionStyle ? "peer-field-chip--section" : ""} group/ref-key inline-flex max-w-full items-center gap-0.5 ${
               isActive ? "ring-2 ring-[var(--peer-primary)] ring-offset-1" : ""
             }`}
           >
@@ -812,13 +980,21 @@ function DataSourceReferenceKeys({
       })}
       <button
         type="button"
-        disabled={disabled}
+        disabled={disabled || addDisabled}
         onClick={(event) => {
           event.stopPropagation();
           onAddKey();
         }}
-        title="Add section or page range"
-        className="inline-flex items-center gap-0.5 rounded-md border border-dashed border-[#d4ced3] px-1.5 py-0.5 text-[11px] font-medium text-[#757575] transition-colors hover:border-[#bdbdbd] hover:bg-[#fafafa] hover:text-[#302f2f] disabled:opacity-50"
+        title={
+          addDisabled
+            ? "All sections for this document are already mapped"
+            : "Add section or page range"
+        }
+        className={`inline-flex items-center gap-0.5 ${
+          sectionStyle
+            ? "peer-section-add-btn"
+            : "rounded-md border border-dashed border-[#d4ced3] px-1.5 py-0.5 text-[11px] font-medium text-[#757575] transition-colors hover:border-[#bdbdbd] hover:bg-[#fafafa] hover:text-[#302f2f]"
+        } disabled:opacity-50`}
       >
         <Plus size={11} strokeWidth={2} aria-hidden />
         Section
@@ -829,39 +1005,20 @@ function DataSourceReferenceKeys({
 
 function RoleBadge({
   role,
-  formatRole,
-  rolePickerMode,
   active,
   onClick,
 }: {
   role: SourceRole | undefined;
-  formatRole: SourceFormatRole | undefined;
-  rolePickerMode: "usage" | "format";
   active: boolean;
   onClick: () => void;
 }) {
-  const isFormat = rolePickerMode === "format";
-  const label = isFormat
-    ? formatRole
-      ? formatRoleLabel(formatRole)
-      : "Tag"
-    : role
-      ? roleLabel(role)
-      : "Role";
-  const badgeClass = isFormat
-    ? formatRole
-      ? FORMAT_ROLE_BADGE[formatRole]
-      : "border-dashed border-[#c0b8be] bg-white text-[var(--peer-muted)]"
-    : role
-      ? ROLE_BADGE[role]
-      : "border-dashed border-[#c0b8be] bg-white text-[var(--peer-muted)]";
-  const hint = isFormat
-    ? formatRole
-      ? formatRoleHint(formatRole)
-      : "Choose how this evidence is used in the section."
-    : role
-      ? ROLE_HINT[role]
-      : "Choose how this source is used in the section.";
+  const label = role ? roleLabel(role) : "Role";
+  const badgeClass = role
+    ? ROLE_BADGE[role]
+    : "border-dashed border-[#c0b8be] bg-white text-[var(--peer-muted)]";
+  const hint = role
+    ? ROLE_HINT[role]
+    : "Choose how this source is used in the section.";
 
   return (
     <button
@@ -872,7 +1029,7 @@ function RoleBadge({
       }}
       aria-expanded={active}
       aria-haspopup="listbox"
-      aria-label={isFormat ? `Source tag: ${label}` : `Section role: ${label}`}
+      aria-label={`Section role: ${label}`}
       title={hint}
       className={`${ROLE_CHIP_BASE} ${
         active
@@ -992,6 +1149,7 @@ function FieldButton({
   className = "",
   compact = false,
   traceHint = false,
+  tier = "default",
   children,
 }: {
   active: boolean;
@@ -1000,6 +1158,7 @@ function FieldButton({
   className?: string;
   compact?: boolean;
   traceHint?: boolean;
+  tier?: "title" | "section" | "default";
   children: React.ReactNode;
 }) {
   return (
@@ -1011,62 +1170,11 @@ function FieldButton({
         event.stopPropagation();
         onClick();
       }}
-      className={`peer-field-chip ${active ? "is-active" : ""} ${
+      className={`peer-field-chip ${
+        tier === "title" ? "peer-field-chip--title" : ""
+      } ${tier === "section" ? "peer-field-chip--section" : ""} ${active ? "is-active" : ""} ${
         compact ? "text-[11px]" : "text-[13px]"
       } ${traceHint ? "cursor-pointer" : ""} ${disabled ? "cursor-not-allowed opacity-50" : ""} ${className}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function MatrixTextLine({
-  variant,
-  traceHint = false,
-  muted = false,
-  allowCardDrag = false,
-  onClick,
-  children,
-}: {
-  variant: "title" | "section";
-  traceHint?: boolean;
-  muted?: boolean;
-  /** When the parent card is draggable, use a div so drag isn't blocked by <button>. */
-  allowCardDrag?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  const isTitle = variant === "title";
-  const className = `peer-source-matrix-line block w-full truncate text-left ${
-    isTitle
-      ? "text-[12px] font-semibold leading-snug text-[#302f2f]"
-      : "mt-0.5 text-[11px] leading-snug text-[#757575]"
-  } ${muted ? "text-[#bdbdbd]" : ""} ${traceHint ? "cursor-pointer hover:text-[#1f1f1f]" : ""}`;
-
-  if (allowCardDrag) {
-    return (
-      <div
-        title={traceHint ? "Trace to data" : undefined}
-        onClick={(event) => {
-          event.stopPropagation();
-          onClick();
-        }}
-        className={className}
-      >
-        {children}
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      title={traceHint ? "Trace to data" : undefined}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className={className}
     >
       {children}
     </button>

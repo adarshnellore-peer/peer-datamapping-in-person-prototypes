@@ -1,5 +1,8 @@
 import type { DocumentBlock, TocItem } from "../types";
 import type { DataSourceRoadmapSource, RoadmapSource, SourceRole } from "./roadmap";
+import {
+  consolidateDocumentBlocks,
+} from "../utils/dataSourceReferences";
 
 function src(
   id: string,
@@ -352,7 +355,15 @@ function c(
   outputType: string,
   sources: RoadmapSource[],
 ): DocumentBlock {
-  return { id, type: "content", title, previewText: "", prompt: "", outputType, sources };
+  return {
+    id,
+    type: "content",
+    title,
+    previewText: "",
+    prompt: "",
+    outputType,
+    sources,
+  };
 }
 
 /**
@@ -482,7 +493,7 @@ const CSR_BODY: DocumentBlock[] = [
   ]),
 ];
 
-export const DOCUMENT_BLOCKS: DocumentBlock[] = [
+const RAW_DOCUMENT_BLOCKS: DocumentBlock[] = [
   {
     id: "h-1-3",
     type: "heading",
@@ -654,6 +665,8 @@ export const DOCUMENT_BLOCKS: DocumentBlock[] = [
   },
   ...CSR_BODY,
 ];
+
+export const DOCUMENT_BLOCKS: DocumentBlock[] = consolidateDocumentBlocks(RAW_DOCUMENT_BLOCKS);
 
 export const TOC_ITEMS: TocItem[] = DOCUMENT_BLOCKS.filter(
   (block): block is Extract<DocumentBlock, { type: "heading" }> =>

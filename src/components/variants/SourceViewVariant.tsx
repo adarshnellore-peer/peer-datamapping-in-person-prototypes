@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check,
   ChevronRight,
   FileSearch,
   Plus,
@@ -23,8 +22,6 @@ import { CATEGORY_DOT, ROLE_BADGE, effectiveSourceRole, roleLabel, type VariantP
 const HAS_UPDATE: Record<string, string> = {
   "247HV101 Protocol Version 3": "v4",
 };
-
-type StatusFilter = "all" | "review" | "confirmed";
 
 function buildSectionOptions(blocks: DocumentBlock[]): { ids: string[]; label: Map<string, string> } {
   const ids: string[] = [];
@@ -51,23 +48,14 @@ export function SourceViewVariant({
   onUpdateSource,
   onRemoveSource,
   onMapDataSource,
-  onConfirmAllForDataSource,
 }: VariantProps & {
   onMapDataSource: (blockId: string, dataSource: string, role?: SourceRole) => void;
-  onConfirmAllForDataSource: (dataSource: string) => void;
 }) {
   const tree = useMemo(() => buildSourceTree(blocks), [blocks]);
   const sectionOptions = useMemo(() => buildSectionOptions(blocks), [blocks]);
 
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-
-  const matchPlacement = (p: Placement) => {
-    if (statusFilter === "review") return p.source.status === "proposed";
-    if (statusFilter === "confirmed") return p.source.status !== "proposed";
-    return true;
-  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -76,11 +64,11 @@ export function SourceViewVariant({
         ...group,
         docs: group.docs
           .filter((doc) => (q ? doc.dataSource.toLowerCase().includes(q) : true))
-          .map((doc) => ({ doc, visible: doc.placements.filter(matchPlacement) }))
+          .map((doc) => ({ doc, visible: doc.placements }))
           .filter((entry) => entry.visible.length > 0),
       }))
       .filter((group) => group.docs.length > 0);
-  }, [tree, query, statusFilter]);
+  }, [tree, query]);
 
   const visibleDocIds = useMemo(
     () => filtered.flatMap((group) => group.docs.map((d) => d.doc.dataSource)),
@@ -128,27 +116,6 @@ export function SourceViewVariant({
             />
           </div>
           <div className="flex items-center gap-1">
-            {(
-              [
-                { id: "all", label: "All" },
-                { id: "review", label: "Review" },
-                { id: "confirmed", label: "Done" },
-              ] as { id: StatusFilter; label: string }[]
-            ).map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                aria-pressed={statusFilter === option.id}
-                onClick={() => setStatusFilter(option.id)}
-                className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors ${
-                  statusFilter === option.id
-                    ? "bg-[#302f2f] text-white"
-                    : "text-[#636161] hover:bg-[#f0f0f0]"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
             {visibleDocIds.length > 0 && (
               <button
                 type="button"
@@ -199,7 +166,6 @@ export function SourceViewVariant({
                       onUpdateSource={onUpdateSource}
                       onRemoveSource={onRemoveSource}
                       onMapDataSource={onMapDataSource}
-                      onConfirmAll={() => onConfirmAllForDataSource(doc.dataSource)}
                     />
                   ))}
                 </section>
@@ -223,7 +189,6 @@ function TreeDocument({
   onUpdateSource,
   onRemoveSource,
   onMapDataSource,
-  onConfirmAll,
 }: {
   doc: DocNode;
   visiblePlacements: Placement[];
@@ -235,7 +200,6 @@ function TreeDocument({
   onUpdateSource: (blockId: string, source: DataSourceRoadmapSource) => void;
   onRemoveSource: (blockId: string, sourceId: string) => void;
   onMapDataSource: (blockId: string, dataSource: string, role?: SourceRole) => void;
-  onConfirmAll: () => void;
 }) {
   const [adding, setAdding] = useState(false);
   const update = HAS_UPDATE[doc.dataSource];
@@ -267,12 +231,6 @@ function TreeDocument({
         >
           {doc.dataSource}
         </button>
-        {doc.proposedCount > 0 && (
-          <span
-            title={`${doc.proposedCount} need review`}
-            className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f0a020]"
-          />
-        )}
         <span className="shrink-0 text-[11px] tabular-nums text-[#bdbdbd]">
           {doc.placements.length}
         </span>
@@ -349,16 +307,6 @@ function TreeDocument({
             </button>
           )}
 
-          {doc.proposedCount > 0 && (
-            <button
-              type="button"
-              onClick={onConfirmAll}
-              className="mt-0.5 flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-[12px] text-[#1a8a4a] hover:bg-[#f0faf4]"
-            >
-              <Check size={13} />
-              Confirm all in this document
-            </button>
-          )}
         </div>
       )}
     </div>
@@ -386,7 +334,6 @@ function PlacementLeaf({
   const [active, setActive] = useState<ActiveField>(null);
   const source = placement.source;
   const usageRole = effectiveSourceRole(source);
-  const isProposed = source.status === "proposed";
 
   useEffect(() => {
     if (!active) return;
@@ -413,11 +360,6 @@ function PlacementLeaf({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-[13px] text-[#454545]">{placement.blockTitle}</span>
-            {isProposed && (
-              <span className="shrink-0 rounded bg-[#fff3cd] px-1 py-px text-[9px] font-semibold uppercase text-[#9a6700]">
-                New
-              </span>
-            )}
           </div>
           {placement.headingLabel && (
             <span className="block truncate text-[11px] text-[#bdbdbd]">{placement.headingLabel}</span>
@@ -455,16 +397,6 @@ function PlacementLeaf({
             {usageRole ? roleLabel(usageRole) : "role"}
             {placement.isOverride && <span className="text-[#6b4ed6]">*</span>}
           </button>
-          {isProposed && (
-            <button
-              type="button"
-              onClick={() => onChange({ ...source, status: "confirmed" })}
-              aria-label="Confirm"
-              className="rounded p-0.5 text-[#1a8a4a] hover:bg-[#e6f6ec]"
-            >
-              <Check size={13} />
-            </button>
-          )}
           {onTrace && (
             <button
               type="button"

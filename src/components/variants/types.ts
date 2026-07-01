@@ -1,4 +1,12 @@
 import {
+  BookMarked,
+  FileText,
+  Image,
+  List,
+  Table2,
+  type LucideIcon,
+} from "lucide-react";
+import {
   normalizeSourceFormatRole,
   SOURCE_FORMAT_ROLE_LABELS,
   SOURCE_FORMAT_ROLES,
@@ -8,7 +16,7 @@ import {
   type SourceFormatRole,
   type SourceRole,
 } from "../../data/roadmap";
-import { getSourceTypeTag, getArtifactTypeLabel } from "../../data/sourceHelpers";
+import { getArtifactTypeLabel, getSourceDocumentCategory, getSourceTypeTag } from "../../data/sourceHelpers";
 import type { DocumentBlock } from "../../types";
 
 export type SourceRef = { blockId: string; sourceId: string };
@@ -196,9 +204,9 @@ export const FORMAT_MATRIX_COLUMNS: {
     label: "Source",
     hint: FORMAT_ROLE_HINT.source,
     dotHex: "#fe9591",
-    text: "text-[#9a1c12]",
-    cellTint: "bg-[#fff6f5]",
-    cellAccent: "shadow-[inset_0_3px_0_0_rgba(254,149,145,0.35)]",
+    text: "matrix-col-source-text",
+    cellTint: "matrix-col-source",
+    cellAccent: "matrix-col-source-accent",
   },
   {
     id: "reference",
@@ -206,9 +214,9 @@ export const FORMAT_MATRIX_COLUMNS: {
     label: "Reference",
     hint: FORMAT_ROLE_HINT.reference,
     dotHex: "#c084fc",
-    text: "text-[#5b21b6]",
-    cellTint: "bg-[#faf5ff]",
-    cellAccent: "shadow-[inset_0_3px_0_0_rgba(192,132,252,0.28)]",
+    text: "matrix-col-reference-text",
+    cellTint: "matrix-col-reference",
+    cellAccent: "matrix-col-reference-accent",
   },
 ];
 
@@ -307,8 +315,76 @@ export function isOutlineReferenceSource(source: RoadmapSource): boolean {
   return false;
 }
 
+/** TOC block id for an outline-linked content or subcontent pill. */
+export function outlineRefTocTargetId(
+  source: RoadmapSource,
+  blocks: DocumentBlock[],
+): string | null {
+  if (source.sourceType === "SUBCONTENT") {
+    if (source.referencedBlockId) return source.referencedBlockId;
+    const match = blocks.find(
+      (block) => block.type === "content" && block.title === source.content,
+    );
+    return match?.id ?? null;
+  }
+  if (source.sourceType === "CONTENT") {
+    if (source.referencedHeadingId) return source.referencedHeadingId;
+    const match = blocks.find(
+      (block) => block.type === "heading" && block.title === source.content,
+    );
+    return match?.id ?? null;
+  }
+  return null;
+}
+
 export function artifactTypeLabel(source: RoadmapSource, blocks?: import("../../types").DocumentBlock[]): string {
   return getArtifactTypeLabel(source, blocks);
+}
+
+const ARTIFACT_LABEL_ICON: Record<string, LucideIcon> = {
+  Text: FileText,
+  Table: Table2,
+  Figure: Image,
+  Listing: List,
+  Reference: BookMarked,
+};
+
+export function artifactTypeIcon(
+  source: RoadmapSource,
+  blocks?: DocumentBlock[],
+): LucideIcon {
+  const label = getArtifactTypeLabel(source, blocks);
+  return ARTIFACT_LABEL_ICON[label] ?? FileText;
+}
+
+export function artifactTypeIconKind(
+  source: RoadmapSource,
+  blocks?: DocumentBlock[],
+): string {
+  return getArtifactTypeLabel(source, blocks).toLowerCase();
+}
+
+/** Semantic accent per artifact — category tint for documents, kind tint for TLF types. */
+export function artifactTypeIconColor(
+  source: RoadmapSource,
+  blocks?: DocumentBlock[],
+): string {
+  const label = getArtifactTypeLabel(source, blocks);
+  const byKind: Record<string, string> = {
+    Table: CATEGORY_CHIP.TLF?.accent ?? "#2563eb",
+    Figure: "#db2777",
+    Listing: CATEGORY_CHIP.Data?.accent ?? "#059669",
+    Reference: "#7c3aed",
+    Text: "#636161",
+  };
+  if (source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT") {
+    return "#64748b";
+  }
+  if (label === "Text" && source.sourceType === "DATA_SOURCE") {
+    const category = getSourceDocumentCategory(source);
+    return CATEGORY_CHIP[category]?.accent ?? byKind.Text;
+  }
+  return byKind[label] ?? byKind.Text;
 }
 
 export function matrixStatusLabel(state: MappingState): string {
@@ -339,12 +415,12 @@ export const ARTIFACT_TYPE_CHIP: Record<
     field: "peer-field-chip",
   },
   SUBCONTENT: {
-    label: "Subcontent",
+    label: "Text",
     badge: "peer-type-tag",
     field: "peer-field-chip",
   },
   CONTENT: {
-    label: "Content",
+    label: "Text",
     badge: "peer-type-tag",
     field: "peer-field-chip",
   },

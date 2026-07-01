@@ -10,13 +10,13 @@ import { findStudySourceForRoadmapSource } from "./studyDataSources";
 import { getDataSourceReferenceKeys } from "../utils/dataSourceReferences";
 import type { DocumentBlock } from "../types";
 
-type ArtifactKind = "table" | "figure" | "listing" | "section";
+type ArtifactKind = "table" | "figure" | "listing" | "text";
 
 function kindToLabel(kind: ArtifactKind): string {
   if (kind === "table") return "Table";
   if (kind === "figure") return "Figure";
   if (kind === "listing") return "Listing";
-  return "Content";
+  return "Text";
 }
 
 function defaultPackageKind(dataSource: string): ArtifactKind | null {
@@ -41,7 +41,7 @@ function inferKindFromText(haystack: string, dataSource?: string): ArtifactKind 
   if (lower.includes("table") && !lower.includes("table of contents")) return "table";
 
   const packageKind = dataSource ? defaultPackageKind(dataSource) : null;
-  return packageKind ?? "section";
+  return packageKind ?? "text";
 }
 
 function kindFromReferencedBlock(
@@ -55,6 +55,7 @@ function kindFromReferencedBlock(
     if (block?.type === "content") {
       if (block.outputType === "OUTPUT_TYPE_TABLE") return "table";
       if (block.outputType === "OUTPUT_TYPE_FIGURE") return "figure";
+      return "text";
     }
   }
 
@@ -62,7 +63,8 @@ function kindFromReferencedBlock(
     const heading = blocks.find((item) => item.id === source.referencedHeadingId);
     if (heading?.type === "heading") {
       const haystack = `${heading.number} ${heading.title}`.toLowerCase();
-      return inferKindFromText(haystack);
+      const kind = inferKindFromText(haystack);
+      return kind === "text" ? null : kind;
     }
   }
 
@@ -243,20 +245,16 @@ export function isDataSourceSource(source: RoadmapSource): source is DataSourceR
   return source.sourceType === "DATA_SOURCE";
 }
 
-/** Matrix / pill artifact tag — table, listing, figure, content, subcontent. */
+/** Matrix / pill artifact tag — text, table, figure, listing (material form, not outline role). */
 export function getArtifactTypeLabel(source: RoadmapSource, blocks?: DocumentBlock[]): string {
   const referencedKind = kindFromReferencedBlock(source, blocks);
-  if (referencedKind && referencedKind !== "section") {
+  if (referencedKind) {
     return kindToLabel(referencedKind);
   }
 
-  if (source.sourceType === "SUBCONTENT") {
+  if (source.sourceType === "SUBCONTENT" || source.sourceType === "CONTENT") {
     const kind = inferKindFromText(source.content || "");
-    return kind === "section" ? "Subcontent" : kindToLabel(kind);
-  }
-  if (source.sourceType === "CONTENT") {
-    const kind = inferKindFromText(source.content || "");
-    return kind === "section" ? "Content" : kindToLabel(kind);
+    return kindToLabel(kind);
   }
   if (source.sourceType === "REFERENCE_SOURCE") return "Reference";
 
@@ -267,20 +265,17 @@ export function getArtifactTypeLabel(source: RoadmapSource, blocks?: DocumentBlo
     return kindToLabel(inferDataSourceArtifactKind(source));
   }
 
-  return "Content";
+  return "Text";
 }
 
 function inferDataSourceArtifactKind(source: DataSourceRoadmapSource): ArtifactKind {
   const keys = getDataSourceReferenceKeys(source);
-  let strongest: ArtifactKind = "section";
+  let strongest: ArtifactKind = "text";
 
   for (const key of keys) {
     const docKind = getDocumentSectionKind(source.dataSource, key);
     if (docKind === "listing" || docKind === "figure" || docKind === "table") {
       return docKind;
-    }
-    if (docKind === "section" && strongest === "section") {
-      strongest = "section";
     }
   }
 
@@ -291,7 +286,7 @@ function inferDataSourceArtifactKind(source: DataSourceRoadmapSource): ArtifactK
     getDocumentCategory(source.dataSource),
   ];
   const fromText = inferKindFromText(names.join(" "), source.dataSource);
-  if (fromText !== "section") return fromText;
+  if (fromText !== "text") return fromText;
 
   const packageKind = defaultPackageKind(source.dataSource);
   if (packageKind) return packageKind;
