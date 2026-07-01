@@ -414,37 +414,7 @@ export function outlineEdgeKey(edge: Pick<OutlineEdge, "toBlockId" | "refKind" |
   return `${edge.toBlockId}|${edge.refKind}|${edge.refId}`;
 }
 
-export function findStudySourcePlacement(
-  blocks: DocumentBlock[],
-  studySourceId: string,
-  preferredBlockId?: string,
-): { blockId: string; sourceId: string } | null {
-  const entry = STUDY_DATA_SOURCES.find((item) => item.id === studySourceId);
-  if (!entry) return null;
-
-  const matchInBlock = (block: DocumentBlock) => {
-    if (block.type !== "content") return null;
-    const source = block.sources.find(
-      (s) =>
-        s.sourceType === "DATA_SOURCE" &&
-        s.dataSource === entry.dataSource &&
-        s.referenceKey === entry.referenceKey,
-    );
-    return source ? { blockId: block.id, sourceId: source.id } : null;
-  };
-
-  if (preferredBlockId) {
-    const preferred = blocks.find((b) => b.id === preferredBlockId);
-    const hit = preferred ? matchInBlock(preferred) : null;
-    if (hit) return hit;
-  }
-
-  for (const block of blocks) {
-    const hit = matchInBlock(block);
-    if (hit) return hit;
-  }
-  return null;
-}
+export { findStudySourcePlacement } from "../../utils/studySourcePlacements";
 
 /** @deprecated Use findStudySourcePlacement */
 export function findDataSourcePlacement(

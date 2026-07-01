@@ -38,7 +38,11 @@ import {
 import { TwoColumnVariant } from "./variants/TwoColumnVariant";
 import { SourceViewVariant } from "./variants/SourceViewVariant";
 import { ConnectorVariant } from "./variants/ConnectorVariant";
-import { findStudySourcePlacement } from "./variants/connectorGraph";
+import {
+  collectStudySourcePlacements,
+  findStudySourcePlacement,
+  type StudySourcePlacement,
+} from "../utils/studySourcePlacements";
 import { MatrixVariant } from "./variants/MatrixVariant";
 import { MATRIX_COLUMNS, effectiveFormatRole, type MatrixTagRole } from "./variants/types";
 import { SourcePickerOverlay } from "./SourcePickerOverlay";
@@ -136,14 +140,6 @@ function findBlockTitle(blocks: DocumentBlock[], blockId: string): string | null
 
 // type LibraryMode = { type: "browse" } | { type: "add"; blockId: string };
 
-function cloneBlock(block: ContentBlockData): ContentBlockData {
-  return {
-    ...block,
-    id: crypto.randomUUID(),
-    sources: block.sources.map((s) => ({ ...s, id: crypto.randomUUID() })),
-  };
-}
-
 function createHeadingBlock(
   level: HeadingBlock["level"] = 2,
   number = "",
@@ -203,13 +199,7 @@ export function RoadmapPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [sourcePicker, setSourcePicker] = useState<SourcePickerState>(null);
   // const [libraryMode, setLibraryMode] = useState<LibraryMode | null>(null);
-  const [dragState, setDragState] = useState<{
-    blockId: string;
-    dropIndex: number;
-  } | null>(null);
   const blockRefs = useRef<Record<string, HTMLElement | null>>({});
-  const dragStateRef = useRef(dragState);
-  dragStateRef.current = dragState;
 
   useEffect(() => {
     try {
@@ -218,63 +208,6 @@ export function RoadmapPage() {
       // Ignore quota / private-mode errors.
     }
   }, [blocks]);
-
-  const startBlockDrag = useCallback((blockId: string) => {
-    const index = blocks.findIndex((b) => b.id === blockId);
-    setDragState({ blockId, dropIndex: index === -1 ? 0 : index });
-  }, [blocks]);
-
-  const updateBlockDrag = useCallback(
-    (clientY: number) => {
-      setDragState((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          dropIndex: computeDropIndex(blocks, blockRefs.current, clientY),
-        };
-      });
-    },
-    [blocks],
-  );
-
-  const endBlockDrag = useCallback(() => {
-    const prev = dragStateRef.current;
-    if (prev) {
-      setBlocks((current) => reorderBlock(current, prev.blockId, prev.dropIndex));
-    }
-    setDragState(null);
-  }, []);
-
-  const handleDragHandlePointerDown = useCallback(
-    (blockId: string, event: React.PointerEvent<HTMLButtonElement>) => {
-      event.stopPropagation();
-      const handle = event.currentTarget;
-      const startY = event.clientY;
-      let dragging = false;
-
-      const onMove = (ev: PointerEvent) => {
-        if (!dragging && Math.abs(ev.clientY - startY) > 4) {
-          dragging = true;
-          handle.setPointerCapture(ev.pointerId);
-          startBlockDrag(blockId);
-        }
-        if (dragging) updateBlockDrag(ev.clientY);
-      };
-
-      const onUp = (ev: PointerEvent) => {
-        if (dragging) endBlockDrag();
-        if (handle.hasPointerCapture(ev.pointerId)) {
-          handle.releasePointerCapture(ev.pointerId);
-        }
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-      };
-
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-    },
-    [startBlockDrag, updateBlockDrag, endBlockDrag],
-  );
 
   const scrollToBlock = useCallback((id: string) => {
     blockRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1071,19 +1004,6 @@ export function RoadmapPage() {
     setToast("Heading deleted");
   };
 
-  const duplicateBlock = (blockId: string) => {
-    setBlocks((prev) => {
-      const index = prev.findIndex((b) => b.id === blockId);
-      if (index === -1) return prev;
-      const block = prev[index];
-      if (block.type !== "content") return prev;
-      const next = [...prev];
-      next.splice(index + 1, 0, cloneBlock(block));
-      return next;
-    });
-    setToast("Content duplicated");
-  };
-
   const insertBlockAfter = (afterBlockId: string, block: DocumentBlock) => {
     setBlocks((prev) => {
       const index = prev.findIndex((b) => b.id === afterBlockId);
@@ -1150,6 +1070,24 @@ export function RoadmapPage() {
     setV2DataPanelOpen(false);
     if (window.innerWidth < 768) setTocOpen(false);
   }, []);
+
+  const navigateToPlacement = useCallback(
+    (placement: StudySourcePlacement) => {
+      setLibraryTraceSource(null);
+      setActivePanel((panel) => (panel?.type === "version" ? null : panel));
+      setTraceState({
+        blockId: placement.blockId,
+        sourceId: placement.sourceId,
+        view: "detail",
+      });
+      setExpandedSource({ blockId: placement.blockId, sourceId: placement.sourceId });
+      setActiveTocId(placement.blockId);
+      if (!storylineLayout) {
+        scrollToBlock(placement.blockId);
+      }
+    },
+    [storylineLayout, scrollToBlock],
+  );
 
   const openConnectorSourceTrace = useCallback(
     (studySourceId: string, preferredBlockId?: string) => {
@@ -1326,6 +1264,23 @@ export function RoadmapPage() {
     }
     return counts;
   }, [blocks]);
+
+  const placementsByStudySourceId = useMemo(
+    () => collectStudySourcePlacements(blocks),
+    [blocks],
+  );
+
+  const handleStudySourceSelect = useCallback(
+    (entry: StudyDataSource) => {
+      const placements = placementsByStudySourceId[entry.id];
+      if (placements?.length) {
+        navigateToPlacement(placements[0]);
+        return;
+      }
+      openStudySourceTrace(entry);
+    },
+    [placementsByStudySourceId, navigateToPlacement, openStudySourceTrace],
+  );
 
   const pickerExistingStudySourceIds = useMemo(() => {
     if (!sourcePicker) return [];
@@ -1706,49 +1661,27 @@ export function RoadmapPage() {
           {variant === "baseline" && (
             <div className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
               <div className="roadmap-blocks relative mx-auto w-full min-w-0 max-w-[680px] overflow-visible pb-12">
-                {blocks.map((block, index) => (
+                {blocks.map((block) => (
                   <Fragment key={block.id}>
-                    {dragState?.dropIndex === index && dragState.blockId && (
-                      <div
-                        className="pointer-events-none relative z-20 -my-1 h-0.5 rounded-full bg-[#ff4e49]"
-                        aria-hidden
-                      />
-                    )}
                     <BlockRenderer
                       block={block}
+                      blocks={blocks}
                       blockRefs={blockRefs}
-                      isDragging={dragState?.blockId === block.id}
                       tracedSourceId={
                         traceState?.blockId === block.id ? traceState.sourceId : null
                       }
                       onSourceCardClick={(sourceId) => handleSourceCardClick(block.id, sourceId)}
-                      onDragHandlePointerDown={
-                        block.type === "content"
-                          ? (event) => handleDragHandlePointerDown(block.id, event)
-                          : undefined
-                      }
                       onUpdateSource={(source) => updateSourceInBlock(block.id, source)}
                       onRemoveSource={(sourceId) => removeSourceFromBlock(block.id, sourceId)}
                       onPromptChange={(prompt) => updatePrompt(block.id, prompt)}
                       onAdditionalContextChange={(additionalContext) =>
                         updateAdditionalContext(block.id, additionalContext)
                       }
-                      onOutputTypeChange={(outputType) =>
-                        updateOutputType(block.id, outputType)
-                      }
-                      onDuplicate={duplicateBlock}
-                      onDelete={deleteContentBlock}
                       onAddHeadingAfter={addHeadingAfter}
                       onAddContentAfter={addContentAfter}
                     />
                   </Fragment>
                 ))}
-                {dragState && dragState.dropIndex === blocks.length && (
-                  <div
-                    className="pointer-events-none relative z-20 h-0.5 rounded-full bg-[#ff4e49]"
-                    aria-hidden
-                  />
-                )}
               </div>
             </div>
           )}
@@ -1791,7 +1724,9 @@ export function RoadmapPage() {
                 onHeadingSlotDrop: matrixDropOnHeadingSlot,
                 onMoveSourceToMatrixCell: moveSourceToMatrixCell,
                 usageCountByStudySourceId,
-                onStudySourceSelect: openStudySourceTrace,
+                placementsByStudySourceId,
+                onNavigateToPlacement: navigateToPlacement,
+                onStudySourceSelect: handleStudySourceSelect,
                 traceSource: tracedSource,
                 traceSectionTitle: tracedSectionTitle,
                 traceBlockSources: tracedBlockSources,
@@ -1842,7 +1777,9 @@ export function RoadmapPage() {
               onHeadingSlotDrop={matrixDropOnHeadingSlot}
               onMoveSourceToMatrixCell={moveSourceToMatrixCell}
               usageCountByStudySourceId={usageCountByStudySourceId}
-              onStudySourceSelect={openStudySourceTrace}
+              placementsByStudySourceId={placementsByStudySourceId}
+              onNavigateToPlacement={navigateToPlacement}
+              onStudySourceSelect={handleStudySourceSelect}
               traceSource={tracedSource}
               traceSectionTitle={tracedSectionTitle}
               traceBlockSources={tracedBlockSources}
@@ -1934,7 +1871,7 @@ export function RoadmapPage() {
           </>
         )}
 
-        {tracedSource && traceState && !matrixLayout && variant !== "connectors" ? (
+        {tracedSource && traceState && !matrixLayout && variant !== "connectors" && !v2DataPanelOpen ? (
           <>
             <button
               type="button"
@@ -1963,12 +1900,22 @@ export function RoadmapPage() {
               <StudyDataSourcesList
                 enableMappingDrag
                 usageCountByStudySourceId={usageCountByStudySourceId}
-                onSelect={openStudySourceTrace}
+                placementsByStudySourceId={placementsByStudySourceId}
+                onNavigateToPlacement={navigateToPlacement}
+                onSelect={handleStudySourceSelect}
                 onClose={() => setV2DataPanelOpen(false)}
                 activeSourceId={
                   traceState?.blockId === LIBRARY_TRACE_BLOCK
                     ? traceState.sourceId
-                    : undefined
+                    : traceState
+                      ? Object.entries(placementsByStudySourceId).find(([, placements]) =>
+                          placements.some(
+                            (placement) =>
+                              placement.blockId === traceState.blockId &&
+                              placement.sourceId === traceState.sourceId,
+                          ),
+                        )?.[0]
+                      : undefined
                 }
               />
             </aside>
@@ -2072,37 +2019,6 @@ export function RoadmapPage() {
   );
 }
 
-function reorderBlock(
-  blocks: DocumentBlock[],
-  blockId: string,
-  toIndex: number,
-): DocumentBlock[] {
-  const fromIndex = blocks.findIndex((b) => b.id === blockId);
-  if (fromIndex === -1) return blocks;
-
-  const next = [...blocks];
-  const [item] = next.splice(fromIndex, 1);
-  const insertAt = toIndex > fromIndex ? toIndex - 1 : toIndex;
-  const clamped = Math.max(0, Math.min(insertAt, next.length));
-  if (clamped === fromIndex) return blocks;
-  next.splice(clamped, 0, item);
-  return next;
-}
-
-function computeDropIndex(
-  blocks: DocumentBlock[],
-  blockRefs: Record<string, HTMLElement | null>,
-  clientY: number,
-): number {
-  for (let i = 0; i < blocks.length; i++) {
-    const el = blockRefs[blocks[i].id];
-    if (!el) continue;
-    const rect = el.getBoundingClientRect();
-    if (clientY < rect.top + rect.height / 2) return i;
-  }
-  return blocks.length;
-}
-
 function headingAddLabel(level: HeadingBlock["level"]): string {
   if (level === 1) return "Add heading";
   if (level === 2) return "Add heading";
@@ -2111,34 +2027,26 @@ function headingAddLabel(level: HeadingBlock["level"]): string {
 
 function BlockRenderer({
   block,
+  blocks,
   blockRefs,
-  isDragging = false,
   tracedSourceId,
   onSourceCardClick,
-  onDragHandlePointerDown,
   onUpdateSource,
   onRemoveSource,
   onPromptChange,
   onAdditionalContextChange,
-  onOutputTypeChange,
-  onDuplicate,
-  onDelete,
   onAddHeadingAfter,
   onAddContentAfter,
 }: {
   block: DocumentBlock;
+  blocks: DocumentBlock[];
   blockRefs: MutableRefObject<Record<string, HTMLElement | null>>;
-  isDragging?: boolean;
   tracedSourceId: string | null;
   onSourceCardClick: (sourceId: string) => void;
-  onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
   onPromptChange: (prompt: string) => void;
   onAdditionalContextChange: (additionalContext: string) => void;
-  onOutputTypeChange: (outputType: string) => void;
-  onDuplicate: (id: string) => void;
-  onDelete: (id: string) => void;
   onAddHeadingAfter: (blockId: string, level?: HeadingBlock["level"]) => void;
   onAddContentAfter: (blockId: string) => void;
 }) {
@@ -2197,7 +2105,7 @@ function BlockRenderer({
       ref={(el) => {
         blockRefs.current[block.id] = el;
       }}
-      className={`group mb-4 mt-2 min-w-0 rounded-lg ${isDragging ? "opacity-50" : ""}`}
+      className="group mb-4 mt-2 min-w-0 rounded-lg"
     >
       <div className="mb-1 flex justify-end">
         <BlockAddButton
@@ -2207,16 +2115,13 @@ function BlockRenderer({
       </div>
       <SectionContentBlock
         block={block}
+        blocks={blocks}
         tracedSourceId={tracedSourceId}
         onSourceCardClick={onSourceCardClick}
-        onDragHandlePointerDown={onDragHandlePointerDown}
         onUpdateSource={onUpdateSource}
         onRemoveSource={onRemoveSource}
         onPromptChange={onPromptChange}
         onAdditionalContextChange={onAdditionalContextChange}
-        onOutputTypeChange={onOutputTypeChange}
-        onDuplicate={() => onDuplicate(block.id)}
-        onDelete={() => onDelete(block.id)}
       />
     </div>
   );

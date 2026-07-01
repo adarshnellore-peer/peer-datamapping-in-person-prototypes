@@ -120,6 +120,8 @@ type MatrixProps = VariantProps & {
     role: MatrixTagRole,
   ) => void;
   usageCountByStudySourceId?: Record<string, number>;
+  placementsByStudySourceId?: Record<string, import("../../utils/studySourcePlacements").StudySourcePlacement[]>;
+  onNavigateToPlacement?: (placement: import("../../utils/studySourcePlacements").StudySourcePlacement) => void;
   onStudySourceSelect?: (entry: StudyDataSource) => void;
   traceSource?: RoadmapSource | null;
   traceSectionTitle?: string | null;

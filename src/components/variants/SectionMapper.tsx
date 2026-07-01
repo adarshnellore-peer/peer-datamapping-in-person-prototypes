@@ -9,6 +9,7 @@ import { SourcePill } from "./SourcePill";
  */
 export function SectionMapper({
   block,
+  blocks,
   tracedSourceId,
   onTrace,
   onUpdateSource,
@@ -17,6 +18,7 @@ export function SectionMapper({
   rolePickerMode = "usage",
 }: {
   block: ContentBlockData;
+  blocks?: import("../../types").DocumentBlock[];
   tracedSourceId: string | null;
   onTrace?: (sourceId: string) => void;
   onUpdateSource: (source: RoadmapSource) => void;
@@ -40,6 +42,7 @@ export function SectionMapper({
             allowSourceTypeChange={allowSourceTypeChange}
             rolePickerMode={rolePickerMode}
             traceOnFieldClick={traceOnFieldClick}
+            artifactBlocks={blocks}
             isTraced={tracedSourceId === source.id}
             onChange={onUpdateSource}
             onTrace={onTrace ? () => onTrace(source.id) : undefined}

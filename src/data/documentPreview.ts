@@ -88,6 +88,16 @@ function isTemplateDataSource(dataSource: string): boolean {
   return dataSource.includes("Template");
 }
 
+export function getDocumentSectionKind(
+  dataSource: string,
+  referenceKey: string,
+): DocumentSection["kind"] {
+  const sections = DOCUMENT_SECTIONS[dataSource];
+  const hit = sections?.find((section) => section.referenceKey === referenceKey);
+  if (hit) return hit.kind;
+  return sectionKind(referenceKey);
+}
+
 function sectionKind(referenceKey: string): DocumentSection["kind"] {
   const name = getReferenceSectionName(referenceKey).toLowerCase();
   if (name.includes("table")) return "table";

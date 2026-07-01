@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 
+function promptPreview(value: string): string {
+  const collapsed = value.replace(/\s+/g, " ").trim();
+  return collapsed || "Add system instructions for this section…";
+}
+
 export function KeyMessageFooter({
   value,
   onChange,
@@ -9,6 +14,8 @@ export function KeyMessageFooter({
   onChange: (value: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const hasPrompt = value.replace(/\s+/g, " ").trim().length > 0;
+  const preview = promptPreview(value);
 
   return (
     <div className="peer-card-footer">
@@ -16,13 +23,20 @@ export function KeyMessageFooter({
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-1 text-[12px] font-medium text-[var(--peer-muted)] transition-colors hover:text-[var(--peer-text)]"
+        className="flex w-full min-w-0 items-center gap-1.5 text-left transition-colors hover:text-[var(--peer-text)]"
       >
         <ChevronRight
           size={14}
-          className={`transition-transform ${expanded ? "rotate-90" : ""}`}
+          className={`shrink-0 text-[var(--peer-muted)] transition-transform ${expanded ? "rotate-90" : ""}`}
         />
-        Key message
+        <span
+          className={`min-w-0 flex-1 truncate text-[12px] leading-snug ${
+            hasPrompt ? "text-[var(--peer-text)]" : "italic text-[var(--peer-muted)]"
+          }`}
+          title={hasPrompt ? preview : undefined}
+        >
+          {preview}
+        </span>
       </button>
       {expanded && (
         <textarea

@@ -22,6 +22,7 @@ export function headingLabelFor(blocks: DocumentBlock[], blockId: string): strin
 export function BeatCard({
   cardRef,
   block,
+  blocks,
   tracedSourceId,
   onTrace,
   onUpdateSource,
@@ -34,6 +35,7 @@ export function BeatCard({
 }: {
   cardRef?: (el: HTMLDivElement | null) => void;
   block: ContentBlockData;
+  blocks?: import("../../types").DocumentBlock[];
   /** @deprecated Timeline index — unused in V1-style layout */
   index?: number;
   /** @deprecated Parent heading — unused in V1-style layout */
@@ -81,6 +83,7 @@ export function BeatCard({
         <p className="peer-section-label">Sources</p>
         <SectionMapper
           block={block}
+          blocks={blocks}
           tracedSourceId={tracedSourceId}
           onTrace={onTrace}
           onUpdateSource={onUpdateSource}

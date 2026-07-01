@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
-import { ChevronRight, GripVertical, Search, X } from "lucide-react";
+import { ChevronRight, GripVertical, Link2, Search, X } from "lucide-react";
 import { parsePageRange, getReferenceDisplayName } from "../data/documentPreview";
 import { getDocumentCategory } from "../data/roadmap";
 import type { StudyDataSource } from "../data/studyDataSources";
 import { STUDY_DATA_SOURCES } from "../data/studyDataSources";
 import { setV2DragData, studySourceDragPayload } from "../utils/v2DragPayload";
+import type { StudySourcePlacement } from "../utils/studySourcePlacements";
 
 const CATEGORY_ORDER = ["Protocol", "SAP", "CSR", "Template", "Figures", "Listings", "Document"];
 
@@ -162,8 +163,29 @@ function rowMetric(
   return null;
 }
 
-function RowMetric({ metric }: { metric: { value: number; title: string } | null }) {
+function RowMetric({
+  metric,
+  onClick,
+}: {
+  metric: { value: number; title: string } | null;
+  onClick?: () => void;
+}) {
   if (!metric) return <span className="w-5 shrink-0" aria-hidden />;
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClick();
+        }}
+        className="w-5 shrink-0 text-right text-[11px] font-medium tabular-nums text-[#9e9e9e] hover:text-[#ff4e49]"
+        title={metric.title}
+      >
+        {metric.value}
+      </button>
+    );
+  }
   return (
     <span
       className="w-5 shrink-0 text-right text-[11px] font-medium tabular-nums text-[#9e9e9e]"
@@ -171,6 +193,83 @@ function RowMetric({ metric }: { metric: { value: number; title: string } | null
     >
       {metric.value}
     </span>
+  );
+}
+
+function PlacementMenu({
+  placements,
+  onNavigateToPlacement,
+}: {
+  placements: StudySourcePlacement[];
+  onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: Event) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
+
+  if (placements.length === 0) return null;
+
+  const label = `Used in ${placements.length} section${placements.length === 1 ? "" : "s"}`;
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={label}
+        title={label}
+        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
+          open
+            ? "bg-[#fff0f0] text-[#ff4e49]"
+            : "text-[#c8c8c8] hover:bg-[#f5f5f5] hover:text-[#757575]"
+        }`}
+      >
+        <Link2 size={11} strokeWidth={2} aria-hidden />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+4px)] z-50 w-52 overflow-hidden rounded-md border border-[#e4dfe3] bg-white shadow-[0_8px_24px_rgba(48,47,47,0.12)]"
+        >
+          <p className="border-b border-[#f0f0f0] px-2.5 py-1.5 text-[10px] font-medium text-[#9e9e9e]">
+            {label}
+          </p>
+          <div className="max-h-44 overflow-y-auto py-0.5">
+            {placements.map((placement) => (
+              <button
+                key={`${placement.blockId}:${placement.sourceId}`}
+                type="button"
+                role="menuitem"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onNavigateToPlacement?.(placement);
+                  setOpen(false);
+                }}
+                className="block w-full truncate px-2.5 py-1.5 text-left text-[11px] text-[#454545] transition-colors hover:bg-[#fafafa] hover:text-[#ff4e49]"
+                title={placement.blockTitle}
+              >
+                {placement.blockTitle}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -209,6 +308,8 @@ function LibrarySectionRow({
   onStudySourceDragStart,
   enableMappingDrag,
   usageCount,
+  placements,
+  onNavigateToPlacement,
   label,
   pageRef,
 }: {
@@ -220,6 +321,8 @@ function LibrarySectionRow({
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   enableMappingDrag: boolean;
   usageCount?: number;
+  placements?: StudySourcePlacement[];
+  onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
   label: string;
   pageRef?: string | null;
 }) {
@@ -271,6 +374,12 @@ function LibrarySectionRow({
         <span className="text-[11px] text-[#454545]">{label}</span>
         {pageRef && <span className="ml-1.5 text-[10px] text-[#b0b0b0]">{pageRef}</span>}
       </button>
+      {placements && placements.length > 0 && (
+        <PlacementMenu
+          placements={placements}
+          onNavigateToPlacement={onNavigateToPlacement}
+        />
+      )}
       <RowMetric metric={metric} />
     </div>
   );
@@ -290,6 +399,8 @@ function LibraryDocumentRow({
   onToggleSelected,
   onStudySourceDragStart,
   usageCount,
+  placements,
+  onNavigateToPlacement,
 }: {
   group: DocumentGroup;
   category: string;
@@ -300,6 +411,8 @@ function LibraryDocumentRow({
   onToggleSelected: () => void;
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   usageCount?: number;
+  placements?: StudySourcePlacement[];
+  onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
 }) {
   const didDragRef = useRef(false);
   const dragEntry = defaultDragEntryForGroup(group);
@@ -361,6 +474,12 @@ function LibraryDocumentRow({
         <span className="text-[12px] font-semibold text-[#302f2f]">{group.documentLabel}</span>
         {pageRef && <span className="ml-1.5 text-[10px] font-normal text-[#b0b0b0]">{pageRef}</span>}
       </button>
+      {placements && placements.length > 0 && (
+        <PlacementMenu
+          placements={placements}
+          onNavigateToPlacement={onNavigateToPlacement}
+        />
+      )}
       <RowMetric metric={metric} />
     </div>
   );
@@ -380,6 +499,8 @@ function DocumentGroupSection({
   onHoverEnd,
   enableMappingDrag = false,
   usageCountByStudySourceId,
+  placementsByStudySourceId,
+  onNavigateToPlacement,
 }: {
   group: DocumentGroup;
   category: string;
@@ -394,11 +515,35 @@ function DocumentGroupSection({
   onHoverEnd?: () => void;
   enableMappingDrag?: boolean;
   usageCountByStudySourceId?: Record<string, number>;
+  placementsByStudySourceId?: Record<string, StudySourcePlacement[]>;
+  onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
 }) {
   const entries = documentEntriesForGroup(group);
   const collapseKey = `${category}:${group.key}`;
   const dragEntry = defaultDragEntryForGroup(group);
   const hasSections = group.sections.length > 0;
+  const groupPlacements = useMemo(() => {
+    if (!placementsByStudySourceId) return [];
+    const seen = new Set<string>();
+    const merged: StudySourcePlacement[] = [];
+    for (const entry of entries) {
+      for (const placement of placementsByStudySourceId[entry.id] ?? []) {
+        const key = `${placement.blockId}:${placement.sourceId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(placement);
+      }
+    }
+    return merged;
+  }, [entries, placementsByStudySourceId]);
+  const groupUsageCount = useMemo(() => {
+    if (!usageCountByStudySourceId) return undefined;
+    let total = 0;
+    for (const entry of entries) {
+      total += usageCountByStudySourceId[entry.id] ?? 0;
+    }
+    return total > 0 ? total : undefined;
+  }, [entries, usageCountByStudySourceId]);
 
   if (enableMappingDrag) {
     return (
@@ -416,7 +561,9 @@ function DocumentGroupSection({
           onSelect={(event) => onSelectEntry(dragEntry, event)}
           onToggleSelected={() => onToggleSelected(dragEntry)}
           onStudySourceDragStart={onStudySourceDragStart}
-          usageCount={usageCountByStudySourceId?.[dragEntry.id]}
+          usageCount={groupUsageCount}
+          placements={groupPlacements}
+          onNavigateToPlacement={onNavigateToPlacement}
         />
 
         {expanded && hasSections && (
@@ -435,6 +582,8 @@ function DocumentGroupSection({
                 onStudySourceDragStart={onStudySourceDragStart}
                 enableMappingDrag={enableMappingDrag}
                 usageCount={usageCountByStudySourceId?.[entry.id]}
+                placements={placementsByStudySourceId?.[entry.id]}
+                onNavigateToPlacement={onNavigateToPlacement}
                 label={sectionLabelFor(entry)}
                 pageRef={pageRefFor(entry)}
               />
@@ -482,6 +631,8 @@ function DocumentGroupSection({
               onStudySourceDragStart={onStudySourceDragStart}
               enableMappingDrag={enableMappingDrag}
               usageCount={usageCountByStudySourceId?.[entry.id]}
+              placements={placementsByStudySourceId?.[entry.id]}
+              onNavigateToPlacement={onNavigateToPlacement}
               label={sectionLabelFor(entry)}
               pageRef={pageRefFor(entry)}
             />
@@ -506,6 +657,8 @@ function CategorySection({
   onStudySourceDragStart,
   enableMappingDrag = false,
   usageCountByStudySourceId,
+  placementsByStudySourceId,
+  onNavigateToPlacement,
 }: {
   category: string;
   items: StudyDataSource[];
@@ -520,6 +673,8 @@ function CategorySection({
   onStudySourceDragStart: (entry: StudyDataSource, event: DragEvent) => void;
   enableMappingDrag?: boolean;
   usageCountByStudySourceId?: Record<string, number>;
+  placementsByStudySourceId?: Record<string, StudySourcePlacement[]>;
+  onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
 }) {
   const { documents, standalone } = useMemo(() => groupDocuments(items), [items]);
   const swatch = CATEGORY_SWATCH[category] ?? CATEGORY_SWATCH.Document;
@@ -580,6 +735,8 @@ function CategorySection({
               onHoverEnd={enableMappingDrag ? scheduleHoverEnd : undefined}
               enableMappingDrag={enableMappingDrag}
               usageCountByStudySourceId={usageCountByStudySourceId}
+              placementsByStudySourceId={placementsByStudySourceId}
+              onNavigateToPlacement={onNavigateToPlacement}
             />
           );
         })}
@@ -598,6 +755,8 @@ function CategorySection({
             onStudySourceDragStart={onStudySourceDragStart}
             enableMappingDrag={enableMappingDrag}
             usageCount={usageCountByStudySourceId?.[entry.id]}
+            placements={placementsByStudySourceId?.[entry.id]}
+            onNavigateToPlacement={onNavigateToPlacement}
           />
         ))}
       </div>
@@ -614,6 +773,8 @@ export function StudyDataSourcesList({
   onQueryChange,
   enableMappingDrag = false,
   usageCountByStudySourceId,
+  placementsByStudySourceId,
+  onNavigateToPlacement,
   onClose,
 }: {
   sources?: StudyDataSource[];
@@ -625,6 +786,8 @@ export function StudyDataSourcesList({
   /** V2: rows are draggable onto section drop zones. */
   enableMappingDrag?: boolean;
   usageCountByStudySourceId?: Record<string, number>;
+  placementsByStudySourceId?: Record<string, StudySourcePlacement[]>;
+  onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
   onClose?: () => void;
 }) {
   const [internalQuery, setInternalQuery] = useState("");
@@ -810,6 +973,8 @@ export function StudyDataSourcesList({
               onStudySourceDragStart={handleStudySourceDragStart}
               enableMappingDrag={enableMappingDrag}
               usageCountByStudySourceId={usageCountByStudySourceId}
+              placementsByStudySourceId={placementsByStudySourceId}
+              onNavigateToPlacement={onNavigateToPlacement}
             />
           ))
         )}

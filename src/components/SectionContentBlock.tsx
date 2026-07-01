@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { GripVertical, Pencil } from "lucide-react";
-import { GenerateAsSelect } from "./OutputTypeToggle";
-import { DuplicateDeleteActions } from "./SourceCard";
+import { Pencil } from "lucide-react";
 import { KeyMessageFooter } from "./KeyMessageFooter";
 import { SectionMapper } from "./variants/SectionMapper";
-import type { ContentBlockData } from "../types";
+import type { ContentBlockData, DocumentBlock } from "../types";
 import type { RoadmapSource } from "../data/roadmap";
 
 function EditableTextSection({
@@ -108,70 +106,36 @@ function EditableTextSection({
 
 export function SectionContentBlock({
   block,
+  blocks,
   tracedSourceId,
   onSourceCardClick,
-  onDragHandlePointerDown,
   onUpdateSource,
   onRemoveSource,
   onPromptChange,
   onAdditionalContextChange,
-  onOutputTypeChange,
-  onDuplicate,
-  onDelete,
 }: {
   block: ContentBlockData;
+  blocks?: DocumentBlock[];
   tracedSourceId: string | null;
   onSourceCardClick: (sourceId: string) => void;
-  onDragHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
   onPromptChange: (prompt: string) => void;
   onAdditionalContextChange: (additionalContext: string) => void;
-  onOutputTypeChange: (outputType: string) => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-[#d4ced3] bg-white">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-[#ececec] px-2 py-2.5 sm:pr-4">
-        <button
-          type="button"
-          data-drag-handle
-          aria-label="Drag to reorder section"
-          title="Drag to reorder"
-          onPointerDown={(event) => {
-            event.stopPropagation();
-            onDragHandlePointerDown?.(event);
-          }}
-          className="flex shrink-0 cursor-grab touch-manipulation items-center justify-center rounded p-1.5 text-[#9e9e9e] transition-colors hover:bg-[#f5f5f5] hover:text-[#636161] active:cursor-grabbing sm:p-1"
-        >
-          <GripVertical size={16} strokeWidth={1.75} />
-        </button>
-        <p className="min-w-0 flex-1 basis-[calc(100%-2.5rem)] text-[14px] font-medium leading-snug text-[#302f2f] sm:basis-auto sm:truncate">
-          {block.title}
-        </p>
-        <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap sm:shrink-0">
-          <GenerateAsSelect value={block.outputType} onChange={onOutputTypeChange} />
-          <div className="flex shrink-0 items-center border-l border-[#e4e4e4] pl-2 sm:pl-3">
-            <DuplicateDeleteActions
-              onDuplicate={onDuplicate}
-              onRemove={onDelete}
-              duplicateLabel="Duplicate section"
-              removeLabel="Delete section"
-            />
-          </div>
-        </div>
-      </div>
-
       <div className="px-3 py-3 sm:px-4">
         <p className="mb-2 text-[12px] font-medium text-[#636161]">Sources</p>
         <SectionMapper
           block={block}
+          blocks={blocks}
           tracedSourceId={tracedSourceId}
           onTrace={onSourceCardClick}
           onUpdateSource={onUpdateSource}
           onRemoveSource={onRemoveSource}
           allowSourceTypeChange
+          rolePickerMode="format"
         />
       </div>
 

@@ -63,6 +63,7 @@ function SourceTypeAndRole({
   allowSourceTypeChange,
   onToggleType,
   onToggleRole,
+  artifactBlocks,
 }: {
   source: RoadmapSource;
   role: SourceRole | undefined;
@@ -72,6 +73,7 @@ function SourceTypeAndRole({
   allowSourceTypeChange: boolean;
   onToggleType: () => void;
   onToggleRole: () => void;
+  artifactBlocks?: import("../../types").DocumentBlock[];
 }) {
   return (
     <div className="flex min-w-0 shrink-0 items-center gap-1.5">
@@ -80,6 +82,7 @@ function SourceTypeAndRole({
           active={activeField === "sourceType"}
           allowSourceTypeChange={allowSourceTypeChange}
           onToggleType={onToggleType}
+          artifactBlocks={artifactBlocks}
       />
       <RoleBadge
         role={role}
@@ -97,14 +100,16 @@ function ArtifactTypeTag({
   active,
   allowSourceTypeChange,
   onToggleType,
+  artifactBlocks,
 }: {
   source: RoadmapSource;
   active: boolean;
   allowSourceTypeChange: boolean;
   onToggleType: () => void;
+  artifactBlocks?: import("../../types").DocumentBlock[];
 }) {
   const artifact = ARTIFACT_TYPE_CHIP[source.sourceType];
-  const typeLabel = artifactTypeLabel(source);
+  const typeLabel = artifactTypeLabel(source, artifactBlocks);
   const className = `${artifact.badge} inline-flex h-[18px] items-center ${
     active && allowSourceTypeChange ? "ring-2 ring-[var(--peer-primary)] ring-offset-1" : ""
   }`;
@@ -154,6 +159,7 @@ export function SourcePill({
   onChange,
   onTrace,
   onRemove,
+  artifactBlocks,
 }: {
   source: RoadmapSource;
   isTraced: boolean;
@@ -181,6 +187,8 @@ export function SourcePill({
   onChange: (next: RoadmapSource) => void;
   onTrace?: () => void;
   onRemove: () => void;
+  /** Used to infer table / figure tags from referenced outline blocks. */
+  artifactBlocks?: import("../../types").DocumentBlock[];
 }) {
   const isV2 = variant === "v2";
   const isMatrixLayout = isV2 && layout === "matrix";
@@ -395,6 +403,7 @@ export function SourcePill({
               active={false}
               allowSourceTypeChange={false}
               onToggleType={() => {}}
+              artifactBlocks={artifactBlocks}
             />
           </div>
         </>
@@ -435,6 +444,7 @@ export function SourcePill({
               allowSourceTypeChange={allowSourceTypeChange}
               onToggleType={() => toggle("sourceType")}
               onToggleRole={() => toggle("role")}
+              artifactBlocks={artifactBlocks}
             />
             <div className="peer-source-actions">
               {isProposed && (
@@ -573,6 +583,7 @@ export function SourcePill({
               allowSourceTypeChange={allowSourceTypeChange}
               onToggleType={() => toggle("sourceType")}
               onToggleRole={() => toggle("role")}
+              artifactBlocks={artifactBlocks}
             />
 
             {source.sourceType === "DATA_SOURCE" ? (

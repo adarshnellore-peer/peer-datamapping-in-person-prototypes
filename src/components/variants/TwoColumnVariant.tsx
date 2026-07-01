@@ -196,6 +196,7 @@ export function TwoColumnVariant({
                     cardRefs.current[block.id] = el;
                   }}
                   block={block}
+                  blocks={blocks}
                   tracedSourceId={tracedSourceId}
                   isDropTarget={isHover}
                   dropOverlay={

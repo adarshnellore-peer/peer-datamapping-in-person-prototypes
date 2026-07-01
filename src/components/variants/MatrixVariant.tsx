@@ -105,6 +105,8 @@ export function MatrixVariant({
   onHeadingSlotDrop,
   onMoveSourceToMatrixCell,
   usageCountByStudySourceId,
+  placementsByStudySourceId,
+  onNavigateToPlacement,
   onStudySourceSelect,
   traceSource,
   traceSectionTitle,
@@ -145,6 +147,8 @@ export function MatrixVariant({
     role: MatrixTagRole,
   ) => void;
   usageCountByStudySourceId?: Record<string, number>;
+  placementsByStudySourceId?: Record<string, import("../../utils/studySourcePlacements").StudySourcePlacement[]>;
+  onNavigateToPlacement?: (placement: import("../../utils/studySourcePlacements").StudySourcePlacement) => void;
   onStudySourceSelect?: (entry: StudyDataSource) => void;
   traceSource?: RoadmapSource | null;
   traceSectionTitle?: string | null;
@@ -335,6 +339,7 @@ export function MatrixVariant({
                 )}
                 dragHandleAlwaysVisible={Boolean(col.primaryColumn)}
                 rolePickerMode={rolePickerMode}
+                artifactBlocks={blocks}
                 matrixCellDrop={cellDropHandlers}
                 matrixDrag={{
                   onDragStart: (event) => {
@@ -487,6 +492,8 @@ export function MatrixVariant({
             <StudyDataSourcesList
               enableMappingDrag
               usageCountByStudySourceId={usageCountByStudySourceId}
+              placementsByStudySourceId={placementsByStudySourceId}
+              onNavigateToPlacement={onNavigateToPlacement}
               onSelect={onStudySourceSelect ?? (() => {})}
               activeSourceId={
                 tracedSource?.blockId === LIBRARY_TRACE_BLOCK

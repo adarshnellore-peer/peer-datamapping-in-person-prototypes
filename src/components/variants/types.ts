@@ -307,8 +307,8 @@ export function isOutlineReferenceSource(source: RoadmapSource): boolean {
   return false;
 }
 
-export function artifactTypeLabel(source: RoadmapSource): string {
-  return getArtifactTypeLabel(source);
+export function artifactTypeLabel(source: RoadmapSource, blocks?: import("../../types").DocumentBlock[]): string {
+  return getArtifactTypeLabel(source, blocks);
 }
 
 export function matrixStatusLabel(state: MappingState): string {
