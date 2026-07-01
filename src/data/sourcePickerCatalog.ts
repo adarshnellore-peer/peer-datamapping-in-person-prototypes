@@ -15,7 +15,7 @@ export type SourcePickerCategory = {
   artifacts: SourcePickerArtifact[];
 };
 
-const CATEGORY_ORDER = ["tfl", "csrTmpl", "sap", "protocol", "csr", "doc"] as const;
+const CATEGORY_ORDER = ["tfl", "csrTmpl", "csr", "ib", "data", "report", "reference", "doc"] as const;
 
 const CATEGORY_META: Record<
   string,
@@ -24,9 +24,12 @@ const CATEGORY_META: Record<
   Figures: { id: "tfl", label: "TFL", color: "#ec4899" },
   Listings: { id: "tfl", label: "TFL", color: "#ec4899" },
   Template: { id: "csrTmpl", label: "CSR Template", color: "#8b8b8b" },
-  SAP: { id: "sap", label: "SAP", color: "#e0a800" },
-  Protocol: { id: "protocol", label: "Protocol", color: "#1a8a4a" },
   CSR: { id: "csr", label: "CSR", color: "#0a9e9a" },
+  IB: { id: "ib", label: "IB", color: "#6366f1" },
+  TLF: { id: "tfl", label: "TFL", color: "#ec4899" },
+  Data: { id: "data", label: "Data", color: "#7c3aed" },
+  Report: { id: "report", label: "Report", color: "#d97706" },
+  Reference: { id: "reference", label: "Reference", color: "#64748b" },
   Document: { id: "doc", label: "Document", color: "#bdbdbd" },
 };
 

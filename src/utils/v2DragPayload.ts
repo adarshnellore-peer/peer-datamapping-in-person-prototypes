@@ -1,3 +1,5 @@
+import type { RoadmapSource } from "../data/roadmap";
+
 export const V2_DRAG_MIME = "application/x-peer-v2-drag";
 
 let activeDragPayload: V2DragPayload | null = null;
@@ -42,7 +44,14 @@ export type V2DragPayload =
   | { kind: "toc"; sourceType: "SUBCONTENT" | "CONTENT"; label: string }
   | OutlineRefPayload
   | { kind: "outline-refs"; refs: OutlineRefPayload[] }
-  | { kind: "mapped"; fromBlockId: string; sourceId: string; toIndex?: number };
+  | {
+      kind: "mapped";
+      fromBlockId: string;
+      sourceId: string;
+      toIndex?: number;
+      targetFormatRole?: "source" | "reference";
+      sourceType?: RoadmapSource["sourceType"];
+    };
 
 export function outlineRefDragPayload(refs: OutlineRefPayload[]): V2DragPayload {
   return refs.length === 1 ? refs[0]! : { kind: "outline-refs", refs };

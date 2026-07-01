@@ -64,11 +64,13 @@ export function TwoColumnVariant({
   onMapStudySources,
   onMapOutlineRefToSection,
   onMoveSource,
+  onMapStudySourceWithRole,
   onPromptChange,
   rolePickerMode = "usage",
   focusId,
   scrollTick = 0,
   onNavigateOutlineRef,
+  tlfOnly = false,
 }: Omit<VariantProps, "onAddSource"> & {
   onMapStudySource: (blockId: string, studySourceId: string) => void;
   onMapStudySources?: (blockId: string, studySourceIds: string[]) => void;
@@ -78,6 +80,12 @@ export function TwoColumnVariant({
     sourceId: string,
     toBlockId: string,
     toIndex?: number,
+    formatRole?: import("../../data/roadmap").SourceFormatRole,
+  ) => void;
+  onMapStudySourceWithRole?: (
+    blockId: string,
+    studySourceId: string,
+    role: import("../../data/roadmap").SourceFormatRole,
   ) => void;
   onPromptChange?: (blockId: string, prompt: string) => void;
   rolePickerMode?: "usage" | "format";
@@ -85,6 +93,7 @@ export function TwoColumnVariant({
   /** Bumped on outline clicks so re-selecting the active row still scrolls. */
   scrollTick?: number;
   onNavigateOutlineRef?: (source: import("../../data/roadmap").RoadmapSource) => void;
+  tlfOnly?: boolean;
 }) {
   const [externalDrag, setExternalDrag] = useState(false);
   const [hoverTarget, setHoverTarget] = useState<{ blockId: string } | null>(null);
@@ -261,10 +270,12 @@ export function TwoColumnVariant({
                   onMappedDragStart={
                     onMoveSource
                       ? (sourceId, event) => {
+                          const source = block.sources.find((s) => s.id === sourceId);
                           setV2DragData(event.dataTransfer, {
                             kind: "mapped",
                             fromBlockId: block.id,
                             sourceId,
+                            sourceType: source?.sourceType,
                           });
                         }
                       : undefined
@@ -274,7 +285,17 @@ export function TwoColumnVariant({
                     setExternalDrag(false);
                     skipScrollRef.current = false;
                   }}
+                  onMoveMapped={
+                    onMoveSource
+                      ? (fromBlockId, sourceId, toBlockId, targetFormatRole) => {
+                          onMoveSource(fromBlockId, sourceId, toBlockId, undefined, targetFormatRole);
+                        }
+                      : undefined
+                  }
+                  onMapStudySourceWithRole={onMapStudySourceWithRole}
+                  onMapOutlineRef={onMapOutlineRefToSection}
                   onNavigateOutlineRef={onNavigateOutlineRef}
+                  tlfOnly={tlfOnly}
                 />
               </div>
             );

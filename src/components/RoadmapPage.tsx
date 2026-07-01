@@ -212,6 +212,7 @@ export function RoadmapPage() {
   const [libraryTraceSource, setLibraryTraceSource] = useState<RoadmapSource | null>(null);
   const [v2DataPanelOpen, setV2DataPanelOpen] = useState(true);
   const [mappingSubview, setMappingSubview] = useState<MappingSubview>("storyline");
+  const [tlfOnly, setTlfOnly] = useState(false);
   const [expandedSource, setExpandedSource] = useState<ExpandedSourceState>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [sourcePicker, setSourcePicker] = useState<SourcePickerState>(null);
@@ -951,17 +952,40 @@ export function RoadmapPage() {
     sourceId: string,
     toBlockId: string,
     toIndex?: number,
+    formatRole?: SourceFormatRole,
   ) => {
     setBlocks((prev) => {
       let moved: RoadmapSource | null = null;
+      for (const block of prev) {
+        if (block.type !== "content" || block.id !== fromBlockId) continue;
+        moved = block.sources.find((s) => s.id === sourceId) ?? null;
+        break;
+      }
+      if (!moved) return prev;
+      if (
+        formatRole === "source" &&
+        (moved.sourceType === "CONTENT" || moved.sourceType === "SUBCONTENT")
+      ) {
+        return prev;
+      }
+
+      if (
+        formatRole &&
+        (moved.sourceType === "DATA_SOURCE" || moved.sourceType === "REFERENCE_SOURCE")
+      ) {
+        moved = {
+          ...moved,
+          role: formatRole,
+          isReference: formatRole === "reference" ? true : undefined,
+        };
+      }
+
       const stripped = prev.map((block) => {
         if (block.type !== "content") return block;
         const found = block.sources.find((s) => s.id === sourceId);
         if (!found) return block;
-        moved = found;
         return { ...block, sources: block.sources.filter((s) => s.id !== sourceId) };
       });
-      if (!moved) return prev;
 
       return stripped.map((block) => {
         if (block.type !== "content" || block.id !== toBlockId) return block;
@@ -974,6 +998,10 @@ export function RoadmapPage() {
     setTraceState((prev) =>
       prev?.sourceId === sourceId ? { ...prev, blockId: toBlockId } : prev,
     );
+    if (formatRole && fromBlockId === toBlockId) {
+      setToast("Role updated");
+      return;
+    }
     setToast(fromBlockId === toBlockId ? "Source reordered" : "Source moved");
   };
 
@@ -1619,6 +1647,15 @@ export function RoadmapPage() {
                 view={mappingSubview}
                 onChange={handleMappingSubviewChange}
               />
+              <label className="peer-tlf-filter ml-1 flex cursor-pointer items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-[12px] text-[#636161] transition-colors hover:bg-[#fafafa]">
+                <input
+                  type="checkbox"
+                  checked={tlfOnly}
+                  onChange={(event) => setTlfOnly(event.target.checked)}
+                  className="peer-tlf-filter-input h-3.5 w-3.5 rounded border-[#d4ced3] text-[#ff4e49] focus:ring-[#ff4e49]/30"
+                />
+                <span>TLFs only</span>
+              </label>
             </>
           )}
         </div>
@@ -1801,9 +1838,11 @@ export function RoadmapPage() {
                 onMapStudySources: mapStudySourcesToStorylineSection,
                 onMapOutlineRefToSection: mapOutlineRefToSection,
                 onMoveSource: moveSourceToSection,
+                onMapStudySourceWithRole: mapStudySourceToSectionWithFormatRole,
                 onPromptChange: updatePrompt,
                 rolePickerMode: "format",
                 onNavigateOutlineRef: navigateOutlineRef,
+                tlfOnly,
               }}
               matrix={{
                 blocks,
@@ -1834,6 +1873,7 @@ export function RoadmapPage() {
                 onTraceSourceChange: handleTracedSourceChange,
                 onCloseTrace: closeTrace,
                 onUpdateMappedSource: handleTracedMappedSourceUpdate,
+                tlfOnly,
               }}
             />
           )}
@@ -2000,6 +2040,7 @@ export function RoadmapPage() {
             >
               <StudyDataSourcesList
                 enableMappingDrag
+                tlfOnly={tlfOnly}
                 usageCountByStudySourceId={usageCountByStudySourceId}
                 placementsByStudySourceId={placementsByStudySourceId}
                 onNavigateToPlacement={navigateToPlacement}

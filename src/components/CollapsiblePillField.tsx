@@ -65,8 +65,6 @@ export function PillFieldSummary({
 
 const PICKER_CATEGORY_SWATCH: Record<string, string> = {
   Template: "#8b8b8b",
-  Protocol: "#1a8a4a",
-  SAP: "#e0a800",
   CSR: "#0a9e9a",
   IB: "#6366f1",
   TLF: "#ec4899",

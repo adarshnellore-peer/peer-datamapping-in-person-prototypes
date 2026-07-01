@@ -9,20 +9,9 @@ export type SourceType = (typeof SOURCE_TYPES)[number];
 
 export const DATA_SOURCES = [
   "Biogen Clinical Study Report Template",
-  "247HV101 Protocol Version 3",
-  "109MS306 (CONNECT) LTE Statistical Analysis Plan",
   "Clinical Study Report",
-  "C4591001 Protocol Amendment 9",
-  "C4591001 Final Statistical Analysis Plan",
-  // Additional study documents — a real CSR commonly references 30-40+ sources.
-  "247HV101 Protocol Version 1",
-  "247HV101 Protocol Version 2",
-  "247HV101 Protocol Amendment 1",
-  "247HV101 Protocol Amendment 2",
   "Investigator's Brochure Edition 7",
   "Investigator's Brochure Edition 8",
-  "247HV101 SAP Version 2",
-  "247HV101 SAP Amendment 1",
   "TLF Package — Efficacy (Tables)",
   "TLF Package — Efficacy (Figures)",
   "TLF Package — Efficacy (Listings)",
@@ -50,19 +39,9 @@ export const DATA_SOURCES = [
 
 export const DATA_SOURCE_CATEGORIES: Record<string, string> = {
   "Biogen Clinical Study Report Template": "Template",
-  "247HV101 Protocol Version 3": "Protocol",
-  "109MS306 (CONNECT) LTE Statistical Analysis Plan": "SAP",
   "Clinical Study Report": "CSR",
-  "C4591001 Protocol Amendment 9": "Protocol",
-  "C4591001 Final Statistical Analysis Plan": "SAP",
-  "247HV101 Protocol Version 1": "Protocol",
-  "247HV101 Protocol Version 2": "Protocol",
-  "247HV101 Protocol Amendment 1": "Protocol",
-  "247HV101 Protocol Amendment 2": "Protocol",
   "Investigator's Brochure Edition 7": "IB",
   "Investigator's Brochure Edition 8": "IB",
-  "247HV101 SAP Version 2": "SAP",
-  "247HV101 SAP Amendment 1": "SAP",
   "TLF Package — Efficacy (Tables)": "TLF",
   "TLF Package — Efficacy (Figures)": "TLF",
   "TLF Package — Efficacy (Listings)": "TLF",
@@ -120,21 +99,6 @@ export const REFERENCE_KEYS: Record<string, readonly string[]> = {
     "Synopsis: 2-8",
     "Table of Contents: 9-12",
   ],
-  "247HV101 Protocol Version 3": [
-    "Protocol Title Page: 1-1",
-    "Section 1: 17-34",
-    "Section 8: 84-102",
-    "Section 9.2: 118-126",
-    "Table of Contents: 10-15",
-  ],
-  "109MS306 (CONNECT) LTE Statistical Analysis Plan": [
-    "Demographics and Baseline Characteristics: 42-51",
-    "Analysis Populations: 6-14",
-    "Introduction: 2-5",
-    "Primary Efficacy Endpoints: 52-68",
-    "Secondary Efficacy Endpoints: 69-88",
-    "Safety Analyses — Treatment-Emergent Adverse Events: 112-128",
-  ],
   "Clinical Study Report": [
     "Synopsis: 3-13",
     "CSR Intro Sections: 29-83",
@@ -143,20 +107,22 @@ export const REFERENCE_KEYS: Record<string, readonly string[]> = {
     "Safety Summary — Adverse Events: 312-348",
     "Table of Contents: 9-12",
   ],
-  "C4591001 Protocol Amendment 9": [
-    "Protocol Title Page: 1-1",
-    "Protocol Amendment Summary of Changes / Document History: 2-9",
-    "Table of Contents: 10-15",
-    "List of Tables: 15-17",
-    "Section 1: 17-34",
-    "Section 1.1: 17-25",
-    "Section 1.2: 25-26",
-    "Section 1.3: 26-34",
+  "Investigator's Brochure Edition 8": [
+    "Nonclinical Summary: 22-61",
+    "Pharmaceutical Information: 88-104",
+    "Table of Contents: 5-8",
   ],
-  "C4591001 Final Statistical Analysis Plan": [
-    "Cover Page: 1-1",
-    "Introduction: 2-5",
-    "Analysis Populations: 6-14",
+  "Investigator's Brochure Edition 7": [
+    "Nonclinical Summary: 20-55",
+    "Table of Contents: 5-8",
+  ],
+  "Data Management Plan": [
+    "Deviation Handling: 18-24",
+    "Data Review Plan: 30-42",
+  ],
+  "Clinical Data Review Listing": [
+    "Subject Disposition Listing: 12-40",
+    "Subject Disposition Listing: 41-58",
   ],
   "TLF Package — Disposition & Demographics": ["Table 14.1.1 Disposition: 1-4"],
   "TLF Package — Efficacy (Tables)": [
@@ -178,22 +144,15 @@ export const REFERENCE_KEYS: Record<string, readonly string[]> = {
 };
 
 export const DEFAULT_REFERENCE_KEYS = [
-  "Protocol Title Page: 1-1",
-  "Table of Contents: 10-15",
+  "Synopsis: 3-13",
+  "Table of Contents: 9-12",
 ] as const;
 
 /** Human-readable labels for reference keys that use generic section numbers. */
 export const REFERENCE_DISPLAY_NAMES: Record<string, Record<string, string>> = {
-  "247HV101 Protocol Version 3": {
-    "Section 1: 17-34": "Introduction & Study Objectives",
-    "Section 8: 84-102": "Study Design",
-    "Section 9.2: 118-126": "Inclusion & Exclusion Criteria",
-  },
-  "C4591001 Protocol Amendment 9": {
-    "Section 1: 17-34": "Introduction",
-    "Section 1.1: 17-25": "Background & Rationale",
-    "Section 1.2: 25-26": "Study Objectives",
-    "Section 1.3: 26-34": "Study Endpoints",
+  "Clinical Study Report": {
+    "CSR Intro Sections: 29-83": "Introduction & Study Objectives",
+    "Study Design and Objectives: 84-112": "Study Design",
   },
   "Biogen Clinical Study Report Template": {
     "Template Section 9.2: 142-148": "Efficacy Results",
@@ -215,7 +174,7 @@ export const OUTPUT_TYPE_LABELS: Record<(typeof OUTPUT_TYPES)[number], string> =
 };
 
 export const DEFAULT_PROMPT =
-  "Generate the CSR Title-Page table. Use the exact two-column structure provided below; the left column labels must remain verbatim. Populate the right-hand cells with values extracted from the Protocol Title Page / Synopsis and the Sponsor corporate roster. If a value is missing, insert the text 'TBD.'";
+  "Generate the CSR Title-Page table. Use the exact two-column structure provided below; the left column labels must remain verbatim. Populate the right-hand cells with values extracted from the synopsis and the sponsor corporate roster. If a value is missing, insert the text 'TBD.'";
 
 export const SOURCE_ROLES = ["primary", "supporting", "context", "reference"] as const;
 
@@ -268,7 +227,7 @@ export type DataSourceRoadmapSource = RoadmapSourceBase & {
   referenceKeys?: string[];
   /** Human-readable section name shown on the card, e.g. "Template Section 9.2". */
   sectionName?: string;
-  /** Short document-type tag, e.g. "Template", "Protocol", "SAP". */
+  /** Short document-type tag, e.g. "Template", "CSR", "TLF". */
   documentCategory?: string;
 };
 
@@ -303,12 +262,12 @@ export const INITIAL_SOURCES: RoadmapSource[] = [
   normalizeDataSourceReferenceKeys({
     id: "1",
     sourceType: "DATA_SOURCE",
-    dataSource: "C4591001 Protocol Amendment 9",
-    referenceKey: "Protocol Title Page: 1-1",
+    dataSource: "Biogen Clinical Study Report Template",
+    referenceKey: "Synopsis: 2-8",
     referenceKeys: [
-      "Protocol Title Page: 1-1",
-      "Protocol Amendment Summary of Changes / Document History: 2-9",
-      "Table of Contents: 10-15",
+      "Synopsis: 2-8",
+      "Template Section 9.2: 142-148",
+      "Table of Contents: 9-12",
     ],
   }),
   {
@@ -320,8 +279,6 @@ export const INITIAL_SOURCES: RoadmapSource[] = [
 
 export const DATA_SOURCE_CATEGORY_ORDER = [
   "Template",
-  "Protocol",
-  "SAP",
   "CSR",
   "IB",
   "TLF",

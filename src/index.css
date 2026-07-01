@@ -190,9 +190,190 @@ html {
 }
 
 .peer-evidence-section + .peer-evidence-section {
-  margin-top: 14px;
-  padding-top: 14px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid var(--peer-border-subtle);
+}
+
+/* Compressed storyline evidence chips */
+.peer-card--compressed .peer-card-header--compressed {
+  padding: 8px 12px;
+  border-bottom: none;
+}
+
+@media (min-width: 640px) {
+  .peer-card--compressed .peer-card-header--compressed {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+.peer-card-body--compressed {
+  padding: 0 12px 10px;
+}
+
+@media (min-width: 640px) {
+  .peer-card-body--compressed {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+.peer-card-evidence--compressed {
+  padding-top: 0;
+}
+
+.peer-evidence-section--compressed,
+.peer-card-evidence--compressed .peer-evidence-section {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.peer-card-evidence--compressed .peer-evidence-section + .peer-evidence-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--peer-border-subtle);
+}
+
+.peer-evidence-section-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.peer-section-label--compact {
+  margin-bottom: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--peer-text-secondary);
+}
+
+.peer-evidence-section.is-drop-target {
+  border-radius: 6px;
+  outline: 1px dashed color-mix(in srgb, var(--peer-primary) 55%, transparent);
+  outline-offset: 2px;
+  background: color-mix(in srgb, var(--peer-primary-tint) 12%, transparent);
+}
+
+.peer-evidence-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.peer-evidence-chip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  border: 1px solid var(--peer-border-subtle);
+  border-radius: 6px;
+  background: var(--peer-surface);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.peer-evidence-chip:hover {
+  border-color: var(--peer-border);
+  box-shadow: 0 1px 2px rgba(48, 47, 47, 0.06);
+}
+
+.peer-evidence-chip.is-traced {
+  border-color: var(--peer-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--peer-primary) 30%, transparent);
+}
+
+.peer-evidence-chip-main {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 220px;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px 4px 7px;
+  border: 0;
+  background: transparent;
+  color: var(--peer-text-secondary);
+  font-size: 11px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.peer-evidence-chip-main:hover {
+  color: var(--peer-text);
+}
+
+.peer-evidence-chip-icon {
+  flex-shrink: 0;
+  color: var(--peer-text-caption);
+}
+
+.peer-evidence-chip--internal .peer-evidence-chip-icon {
+  color: #64748b;
+}
+
+.peer-evidence-chip--external .peer-evidence-chip-icon {
+  color: #0d9488;
+}
+
+.peer-evidence-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-evidence-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px;
+  padding: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #bdbdbd;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.peer-evidence-chip:hover .peer-evidence-chip-remove,
+.peer-evidence-chip:focus-within .peer-evidence-chip-remove {
+  opacity: 1;
+}
+
+.peer-evidence-chip-remove:hover {
+  color: var(--peer-primary);
+  background: #fff0f0;
+}
+
+.peer-evidence-chip-overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--peer-border-subtle);
+  border-radius: 999px;
+  background: var(--peer-surface-nested);
+  color: var(--peer-text-caption);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.peer-evidence-chip-overflow:hover {
+  border-color: var(--peer-border);
+  color: var(--peer-text-secondary);
+}
+
+.peer-evidence-chip-overflow--less {
+  font-weight: 500;
 }
 
 .peer-source-list {
@@ -1733,6 +1914,11 @@ html {
   border-color: var(--peer-primary-border);
   background: var(--peer-primary-tint);
   color: var(--peer-text);
+}
+
+.peer-tlf-filter:has(.peer-tlf-filter-input:checked) {
+  border-color: #f5c4c2;
+  background: #fff5f5;
 }
 
 .peer-library-row {

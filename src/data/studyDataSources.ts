@@ -1,5 +1,5 @@
-import { DATA_SOURCES, enrichDataSourceSource, getReferenceKeysForDataSource, inferSectionName, type SourceFormatRole } from "./roadmap";
-import type { DataSourceRoadmapSource } from "./roadmap";
+import { DATA_SOURCES, enrichDataSourceSource, getDocumentCategory, getReferenceKeysForDataSource, inferSectionName, type SourceFormatRole } from "./roadmap";
+import type { DataSourceRoadmapSource, RoadmapSource } from "./roadmap";
 
 export type StudySourceStatus = "processed" | "uploaded";
 export type StudySourceKind = "document" | "figure" | "listing";
@@ -16,11 +16,7 @@ export type StudyDataSource = {
 
 const DOCUMENT_FILE_NAMES: Record<string, string> = {
   "Biogen Clinical Study Report Template": "biogen_csr_template.pdf",
-  "247HV101 Protocol Version 3": "247hv101_protocol_v3.pdf",
-  "109MS306 (CONNECT) LTE Statistical Analysis Plan": "109ms306_connect_sap.pdf",
   "Clinical Study Report": "clinical-study-report.pdf",
-  "C4591001 Protocol Amendment 9": "c4591001_final_analysis_protocol.pdf",
-  "C4591001 Final Statistical Analysis Plan": "c4591001_final_sap.pdf",
 };
 
 const FIGURE_NAMES = [
@@ -35,7 +31,7 @@ const LISTING_NAMES = [
   "Listing 16.2.8.1 - Listing of Subjects with Serious Adverse Events",
   "Listing 16.2.8.2 - Listing of Subjects who Discontinued Study Treatment",
   "Listing 16.2.9.1 - Listing of Deaths",
-  "Listing 16.2.10.1 - Listing of Protocol Deviations",
+  "Listing 16.2.10.1 - Listing of Deviations",
   "Listing 16.2.11.1 - Listing of Concomitant Medications",
 ];
 
@@ -102,7 +98,7 @@ function buildStudySources(): StudyDataSource[] {
 
     items.push({
       id: `study-doc-${index++}`,
-      name: dataSource.replace(/ Protocol Amendment \d+$/, " Protocol"),
+      name: dataSource,
       uploadedFile: fileName,
       status: "processed",
       kind: "document",
@@ -115,7 +111,7 @@ function buildStudySources(): StudyDataSource[] {
       const sectionLabel = inferSectionName(dataSource, referenceKey);
       items.push({
         id: `study-doc-${index++}`,
-        name: `${dataSource.replace(/ Protocol Amendment \d+$/, " Protocol")} — ${sectionLabel}`,
+        name: `${dataSource} — ${sectionLabel}`,
         uploadedFile: fileName,
         status: "processed",
         kind: "document",
@@ -155,6 +151,19 @@ function buildStudySources(): StudyDataSource[] {
 }
 
 export const STUDY_DATA_SOURCES: StudyDataSource[] = buildStudySources();
+
+/** Tables, listings, figures, and TLF-package documents. */
+export function isTlfStudySource(entry: StudyDataSource): boolean {
+  if (entry.kind === "figure" || entry.kind === "listing") return true;
+  return getDocumentCategory(entry.dataSource) === "TLF";
+}
+
+export function isTlfRoadmapSource(source: RoadmapSource): boolean {
+  if (source.sourceType !== "DATA_SOURCE") return false;
+  if (getDocumentCategory(source.dataSource) === "TLF") return true;
+  const study = findStudySourceForRoadmapSource(source);
+  return study ? isTlfStudySource(study) : false;
+}
 
 export function defaultFormatRoleForStudySource(_entry: StudyDataSource): SourceFormatRole {
   return "source";

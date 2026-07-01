@@ -79,10 +79,17 @@ type StorylineProps = Omit<VariantProps, "onAddSource"> & {
     sourceId: string,
     toBlockId: string,
     toIndex?: number,
+    formatRole?: import("../../data/roadmap").SourceFormatRole,
+  ) => void;
+  onMapStudySourceWithRole?: (
+    blockId: string,
+    studySourceId: string,
+    role: import("../../data/roadmap").SourceFormatRole,
   ) => void;
   onPromptChange?: (blockId: string, prompt: string) => void;
   rolePickerMode?: "usage" | "format";
   onNavigateOutlineRef?: (source: RoadmapSource) => void;
+  tlfOnly?: boolean;
 };
 
 type MatrixProps = VariantProps & {
@@ -128,6 +135,7 @@ type MatrixProps = VariantProps & {
   onTraceSourceChange?: (sourceId: string) => void;
   onCloseTrace?: () => void;
   onUpdateMappedSource?: (source: RoadmapSource) => void;
+  tlfOnly?: boolean;
 };
 
 /**

@@ -4,11 +4,11 @@ import { ChevronRight, GripVertical, Search, X } from "lucide-react";
 import { parsePageRange, getReferenceDisplayName } from "../data/documentPreview";
 import { getDocumentCategory } from "../data/roadmap";
 import type { StudyDataSource } from "../data/studyDataSources";
-import { STUDY_DATA_SOURCES } from "../data/studyDataSources";
+import { STUDY_DATA_SOURCES, isTlfStudySource } from "../data/studyDataSources";
 import { setV2DragData, studySourceDragPayload } from "../utils/v2DragPayload";
 import type { StudySourcePlacement } from "../utils/studySourcePlacements";
 
-const CATEGORY_ORDER = ["Protocol", "SAP", "CSR", "Template", "Figures", "Listings", "Document"];
+const CATEGORY_ORDER = ["Template", "CSR", "Figures", "Listings", "Document"];
 
 import { libraryCategoryAccent } from "../data/categoryColors";
 const HOVER_EXPAND_ENTER_MS = 140;
@@ -852,6 +852,7 @@ export function StudyDataSourcesList({
   placementsByStudySourceId,
   onNavigateToPlacement,
   onClose,
+  tlfOnly = false,
 }: {
   sources?: StudyDataSource[];
   activeSourceId?: string;
@@ -865,6 +866,8 @@ export function StudyDataSourcesList({
   placementsByStudySourceId?: Record<string, StudySourcePlacement[]>;
   onNavigateToPlacement?: (placement: StudySourcePlacement) => void;
   onClose?: () => void;
+  /** When true, only tables, listings, and figures are shown. */
+  tlfOnly?: boolean;
 }) {
   const [internalQuery, setInternalQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -996,6 +999,7 @@ export function StudyDataSourcesList({
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return sources.filter((entry) => {
+      if (tlfOnly && !isTlfStudySource(entry)) return false;
       if (categoryFilter && categoryForSource(entry) !== categoryFilter) return false;
       if (!normalized) return true;
       return (
@@ -1006,7 +1010,7 @@ export function StudyDataSourcesList({
         categoryForSource(entry).toLowerCase().includes(normalized)
       );
     });
-  }, [query, sources, categoryFilter]);
+  }, [query, sources, categoryFilter, tlfOnly]);
 
   const categories = useMemo(() => groupByCategory(filtered), [filtered]);
 
@@ -1053,7 +1057,8 @@ export function StudyDataSourcesList({
           <h3 className="text-[13px] font-semibold text-[var(--peer-text)]">
             Data Source
             <span className="ml-1.5 font-normal tabular-nums text-[var(--peer-icon-muted)]">
-              ({sources.length})
+              ({filtered.length}
+              {tlfOnly && filtered.length !== sources.length ? ` of ${sources.length}` : ""})
             </span>
           </h3>
           {onClose && (

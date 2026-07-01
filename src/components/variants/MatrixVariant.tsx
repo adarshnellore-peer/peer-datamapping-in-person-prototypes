@@ -9,6 +9,7 @@ import {
   ROADMAP_OUTLINE_HEAD_CLASS,
 } from "../roadmap/RoadmapOutlineRow";
 import type { StudyDataSource } from "../../data/studyDataSources";
+import { isTlfRoadmapSource } from "../../data/studyDataSources";
 import type { RoadmapSource } from "../../data/roadmap";
 import type { HeadingBlock } from "../../types";
 import { buildTocFlatList, isHeadingInsertionSlot } from "../../utils/documentBlocks";
@@ -128,6 +129,7 @@ export function MatrixVariant({
   onTraceSourceChange,
   onCloseTrace,
   onUpdateMappedSource,
+  tlfOnly = false,
 }: VariantProps & {
   activeBlockId?: string | null;
   /** Bumped when library placement navigation should scroll the active row into view. */
@@ -172,6 +174,8 @@ export function MatrixVariant({
   onTraceSourceChange?: (sourceId: string) => void;
   onCloseTrace?: () => void;
   onUpdateMappedSource?: (source: RoadmapSource) => void;
+  /** When true, only TLF-mapped sources are shown in matrix cells. */
+  tlfOnly?: boolean;
 }) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const draggingRef = useRef<V2DragPayload | null>(null);
@@ -318,10 +322,13 @@ export function MatrixVariant({
       headingSlotId?: string;
       dropDisabled?: boolean;
     },
-  ) =>
-    columns.map((col) => {
+  ) => {
+    const visibleRowSources = tlfOnly
+      ? rowSources.filter(isTlfRoadmapSource)
+      : rowSources;
+    return columns.map((col) => {
       const cellId = `${rowId}|${col.id}`;
-      const cellSources = sourcesForMatrixCell(sourcesInColumn(rowSources, col.id));
+      const cellSources = sourcesForMatrixCell(sourcesInColumn(visibleRowSources, col.id));
       const isOver = !options?.dropDisabled && dropTarget === cellId;
       const cellDropHandlers = options?.dropDisabled
         ? undefined
@@ -396,6 +403,7 @@ export function MatrixVariant({
         </td>
       );
     });
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--peer-surface)]">
@@ -527,6 +535,7 @@ export function MatrixVariant({
           ) : (
             <StudyDataSourcesList
               enableMappingDrag
+              tlfOnly={tlfOnly}
               usageCountByStudySourceId={usageCountByStudySourceId}
               placementsByStudySourceId={placementsByStudySourceId}
               onNavigateToPlacement={onNavigateToPlacement}

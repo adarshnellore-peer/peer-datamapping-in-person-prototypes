@@ -20,7 +20,7 @@ import { buildSourceTree, type DocNode, type Placement } from "./sourceTree";
 import { CATEGORY_DOT, ROLE_BADGE, effectiveSourceRole, roleLabel, type VariantProps } from "./types";
 
 const HAS_UPDATE: Record<string, string> = {
-  "247HV101 Protocol Version 3": "v4",
+  "Clinical Study Report": "v4",
 };
 
 function buildSectionOptions(blocks: DocumentBlock[]): { ids: string[]; label: Map<string, string> } {

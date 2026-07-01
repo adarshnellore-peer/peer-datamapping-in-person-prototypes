@@ -1,12 +1,19 @@
 import { type DragEvent, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
+import type { RoadmapSource, SourceFormatRole } from "../../data/roadmap";
+import { isTlfRoadmapSource } from "../../data/studyDataSources";
 import type { ContentBlockData, DocumentBlock } from "../../types";
+import type { OutlineRefPayload } from "../../utils/v2DragPayload";
 import { KeyMessageFooter } from "../KeyMessageFooter";
 import { AddEvidenceDropZone } from "./AddEvidenceDropZone";
-import { SectionMapper } from "./SectionMapper";
-import { effectiveFormatRole, effectiveSourceRole } from "./types";
+import { EvidenceSection } from "./EvidenceSection";
+import {
+  effectiveFormatRole,
+  effectiveSourceRole,
+  evidenceSectionForSource,
+} from "./types";
 
-function sourceHasMappedEvidence(source: import("../../data/roadmap").RoadmapSource): boolean {
+function sourceHasMappedEvidence(source: RoadmapSource): boolean {
   switch (source.sourceType) {
     case "DATA_SOURCE":
       return Boolean(source.dataSource?.trim() || source.referenceKey?.trim());
@@ -18,21 +25,6 @@ function sourceHasMappedEvidence(source: import("../../data/roadmap").RoadmapSou
     default:
       return true;
   }
-}
-
-function sourcesForEvidenceKind(
-  sources: import("../../data/roadmap").RoadmapSource[],
-  kind: "data" | "outline",
-): import("../../data/roadmap").RoadmapSource[] {
-  if (kind === "data") {
-    return sources.filter(
-      (source) =>
-        source.sourceType === "DATA_SOURCE" || source.sourceType === "REFERENCE_SOURCE",
-    );
-  }
-  return sources.filter(
-    (source) => source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT",
-  );
 }
 
 /** Nearest preceding heading label for a content block. */
@@ -52,9 +44,13 @@ export function BeatCard({
   cardRef,
   block,
   blocks,
+  /** @deprecated */
+  index: _index,
+  /** @deprecated */
+  contextLabel: _contextLabel,
   tracedSourceId,
   onTrace,
-  onUpdateSource,
+  onUpdateSource: _onUpdateSource,
   onRemoveSource,
   onPromptChange,
   rolePickerMode = "usage",
@@ -67,18 +63,22 @@ export function BeatCard({
   onEvidenceDrop,
   onMappedDragStart,
   onMappedDragEnd,
+  onMoveMapped,
+  onMapStudySourceWithRole,
+  onMapOutlineRef,
   onNavigateOutlineRef,
+  tlfOnly = false,
 }: {
   cardRef?: (el: HTMLDivElement | null) => void;
   block: ContentBlockData;
-  blocks?: import("../../types").DocumentBlock[];
-  /** @deprecated Timeline index — unused in V1-style layout */
+  blocks?: DocumentBlock[];
+  /** @deprecated Timeline index — unused in compressed layout */
   index?: number;
-  /** @deprecated Parent heading — unused in V1-style layout */
+  /** @deprecated Parent heading — unused in compressed layout */
   contextLabel?: string | null;
   tracedSourceId: string | null;
   onTrace?: (sourceId: string) => void;
-  onUpdateSource: (source: import("../../data/roadmap").RoadmapSource) => void;
+  onUpdateSource: (source: RoadmapSource) => void;
   onRemoveSource: (sourceId: string) => void;
   onPromptChange?: (prompt: string) => void;
   rolePickerMode?: "usage" | "format";
@@ -91,7 +91,22 @@ export function BeatCard({
   onEvidenceDrop?: (event: DragEvent) => void;
   onMappedDragStart?: (sourceId: string, event: DragEvent) => void;
   onMappedDragEnd?: () => void;
-  onNavigateOutlineRef?: (source: import("../../data/roadmap").RoadmapSource) => void;
+  onMoveMapped?: (
+    fromBlockId: string,
+    sourceId: string,
+    toBlockId: string,
+    targetFormatRole: SourceFormatRole,
+    toIndex?: number,
+  ) => void;
+  onMapStudySourceWithRole?: (
+    blockId: string,
+    studySourceId: string,
+    role: SourceFormatRole,
+  ) => void;
+  onMapOutlineRef?: (blockId: string, payload: OutlineRefPayload) => void;
+  onNavigateOutlineRef?: (source: RoadmapSource) => void;
+  /** When true, only TLF-mapped sources are shown in the card. */
+  tlfOnly?: boolean;
 }) {
   const sourceTagCount = block.sources.filter(
     (source) => effectiveFormatRole(source) === "source",
@@ -118,45 +133,37 @@ export function BeatCard({
         }
       : undefined;
 
-  const dataSources = sourcesForEvidenceKind(block.sources, "data").filter(
-    sourceHasMappedEvidence,
+  const mappedSources = block.sources.filter(sourceHasMappedEvidence);
+  const visibleSources = tlfOnly
+    ? mappedSources.filter(isTlfRoadmapSource)
+    : mappedSources;
+  const dataSources = visibleSources.filter(
+    (source) => evidenceSectionForSource(source, rolePickerMode) === "source",
   );
-  const outlineRefs = sourcesForEvidenceKind(block.sources, "outline").filter(
-    sourceHasMappedEvidence,
+  const referenceSources = visibleSources.filter(
+    (source) => evidenceSectionForSource(source, rolePickerMode) === "reference",
   );
-  const isEmptyEvidence = dataSources.length === 0 && outlineRefs.length === 0;
-
-  const sectionMapperProps = {
-    block,
-    blocks,
-    tracedSourceId,
-    onTrace,
-    onUpdateSource,
-    onRemoveSource,
-    rolePickerMode,
-    mappedDrag,
-    hideEmptyState: true as const,
-  };
+  const isEmptyEvidence = visibleSources.length === 0;
 
   return (
     <div
       ref={cardRef}
-      className={`peer-card relative transition-colors ${isDropTarget ? "is-drop-target" : ""}`}
+      className={`peer-card peer-card--compressed relative transition-colors ${isDropTarget ? "is-drop-target" : ""}`}
       onDragOver={onEvidenceDragOver}
       onDragLeave={onEvidenceDragLeave}
       onDrop={onEvidenceDrop}
     >
-      <div className="peer-card-header">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-          <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-[var(--peer-text-secondary)]">
-            {block.title}
-          </p>
-        </div>
+      <div className="peer-card-header peer-card-header--compressed">
+        <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-[var(--peer-text-secondary)] line-clamp-2">
+          {block.title}
+        </p>
       </div>
 
-      <div className="peer-card-body">
+      <div className="peer-card-body peer-card-body--compressed">
         <div
-          className={`peer-card-evidence relative ${isEmptyEvidence ? "peer-card-evidence--empty" : ""}`}
+          className={`peer-card-evidence peer-card-evidence--compressed relative ${
+            isEmptyEvidence ? "peer-card-evidence--empty" : ""
+          }`}
         >
           {dropOverlay}
 
@@ -164,27 +171,36 @@ export function BeatCard({
             <AddEvidenceDropZone onDrop={onAddDrop} solo />
           ) : (
             <>
-              {dataSources.length > 0 ? (
-                <section className="peer-evidence-section">
-                  <p className="peer-section-label">Sources</p>
-                  <div className="peer-card-sources">
-                    <SectionMapper {...sectionMapperProps} kind="data" />
-                  </div>
-                </section>
-              ) : null}
+              <EvidenceSection
+                kind="source"
+                label="Sources"
+                showInfo
+                blockId={block.id}
+                sources={dataSources}
+                blocks={blocks}
+                tracedSourceId={tracedSourceId}
+                onTrace={onTrace}
+                onRemoveSource={onRemoveSource}
+                onMoveMapped={onMoveMapped}
+                onMapStudySource={onMapStudySourceWithRole}
+                mappedDrag={mappedDrag}
+              />
 
-              {outlineRefs.length > 0 ? (
-                <section className="peer-evidence-section">
-                  <p className="peer-section-label">Content / subcontent</p>
-                  <div className="peer-card-outline-refs">
-                    <SectionMapper
-                      {...sectionMapperProps}
-                      kind="outline"
-                      onNavigateOutlineRef={onNavigateOutlineRef}
-                    />
-                  </div>
-                </section>
-              ) : null}
+              <EvidenceSection
+                kind="reference"
+                label="References"
+                blockId={block.id}
+                sources={referenceSources}
+                blocks={blocks}
+                tracedSourceId={tracedSourceId}
+                onTrace={onTrace}
+                onNavigateOutlineRef={onNavigateOutlineRef}
+                onRemoveSource={onRemoveSource}
+                onMoveMapped={onMoveMapped}
+                onMapStudySource={onMapStudySourceWithRole}
+                onMapOutlineRef={onMapOutlineRef}
+                mappedDrag={mappedDrag}
+              />
 
               {showAddZone && onAddDrop ? <AddEvidenceDropZone onDrop={onAddDrop} /> : null}
             </>
@@ -193,7 +209,7 @@ export function BeatCard({
       </div>
 
       {showGap && (
-        <div className="mx-3 mb-3 flex items-center gap-2 peer-warning-banner sm:mx-4">
+        <div className="mx-3 mb-2 flex items-center gap-2 peer-warning-banner sm:mx-4">
           <AlertTriangle size={14} className="shrink-0" />
           {rolePickerMode === "format"
             ? "Consider marking a source as Source before filing."

@@ -151,7 +151,7 @@ export function getSourceTitle(source: RoadmapSource): string {
   return getSourceLabel(source);
 }
 
-/** Short tag: Template, Protocol, SAP, etc. */
+/** Short tag: Template, CSR, TLF, etc. */
 export function getSourceTypeTag(source: RoadmapSource): string {
   return getSourceDocumentCategory(source);
 }

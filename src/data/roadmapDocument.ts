@@ -36,10 +36,10 @@ const SOURCES_1_3: RoadmapSource[] = [
   ),
   src(
     "s-1-3-2",
-    "247HV101 Protocol Version 3",
-    "Section 9.2: 118-126",
-    "Section 9.2",
-    "Protocol",
+    "Clinical Study Report",
+    "Study Design and Objectives: 84-112",
+    "Study Design",
+    "CSR",
     "proposed",
   ),
 ];
@@ -49,16 +49,16 @@ const SOURCES_1_5: RoadmapSource[] = [
   src(
     "s-1-5-1",
     "Biogen Clinical Study Report Template",
-    "Template Section 9.2: 142-148",
-    "Template Section 9.2",
+    "Template Study Design: 142-148",
+    "Template Study Design",
     "Template",
   ),
   src(
     "s-1-5-2",
-    "247HV101 Protocol Version 3",
-    "Section 1: 17-34",
-    "Section 1",
-    "Protocol",
+    "Clinical Study Report",
+    "CSR Intro Sections: 29-83",
+    "CSR Intro Sections",
+    "CSR",
     "confirmed",
     "supporting",
   ),
@@ -77,16 +77,16 @@ const SOURCES_1_5: RoadmapSource[] = [
 const SOURCES_1_6_ELIGIBILITY: RoadmapSource[] = [
   src(
     "s-1-6e-1",
-    "247HV101 Protocol Version 3",
-    "Section 8: 84-102",
-    "Section 8",
-    "Protocol",
+    "Clinical Study Report",
+    "Study Design and Objectives: 84-112",
+    "Study Design",
+    "CSR",
   ),
   src(
     "s-1-6e-2",
     "Biogen Clinical Study Report Template",
-    "Template Section 10.8: 168-174",
-    "Template Section 10.8",
+    "Template CSR Intro Sections0.8: 168-174",
+    "Template CSR Intro Sections0.8",
     "Template",
   ),
 ];
@@ -95,17 +95,17 @@ const SOURCES_1_6_ELIGIBILITY: RoadmapSource[] = [
 const SOURCES_1_6_DEMOGRAPHICS: RoadmapSource[] = [
   src(
     "s-1-6d-1",
-    "109MS306 (CONNECT) LTE Statistical Analysis Plan",
-    "Demographics and Baseline Characteristics: 42-51",
-    "Demographics and Baseline Characteristics",
-    "SAP",
+    "TLF Package — Efficacy (Tables)",
+    "Endpoint Definitions: 2-9",
+    "Endpoint Definitions",
+    "TLF",
   ),
   src(
     "s-1-6d-2",
-    "109MS306 (CONNECT) LTE Statistical Analysis Plan",
-    "Analysis Populations: 6-14",
-    "Analysis Populations",
-    "SAP",
+    "TLF Package — Efficacy (Tables)",
+    "Table 14.2.1 Primary Endpoint: 5-12",
+    "Table 14.2.1 Primary Endpoint",
+    "TLF",
     "confirmed",
     "supporting",
   ),
@@ -124,10 +124,10 @@ const SOURCES_1_6_DEMOGRAPHICS: RoadmapSource[] = [
 const SOURCES_1_7: RoadmapSource[] = [
   src(
     "s-1-7-1",
-    "247HV101 Protocol Version 3",
-    "Section 8: 84-102",
-    "Section 8",
-    "Protocol",
+    "Clinical Study Report",
+    "Study Design and Objectives: 84-112",
+    "Study Design",
+    "CSR",
   ),
   src(
     "s-1-7-2",
@@ -143,16 +143,16 @@ const SOURCES_1_8_NARRATIVE: RoadmapSource[] = [
   src(
     "s-1-8n-1",
     "Biogen Clinical Study Report Template",
-    "Template Section 9.2: 142-148",
-    "Template Section 9.2",
+    "Template Study Design: 142-148",
+    "Template Study Design",
     "Template",
   ),
   src(
     "s-1-8n-2",
-    "247HV101 Protocol Version 3",
-    "Section 8: 84-102",
-    "Section 8",
-    "Protocol",
+    "Clinical Study Report",
+    "Study Design and Objectives: 84-112",
+    "Study Design",
+    "CSR",
   ),
 ];
 
@@ -161,23 +161,23 @@ const SOURCES_1_8_SCHEDULE: RoadmapSource[] = [
   src(
     "s-1-8t-1",
     "Biogen Clinical Study Report Template",
-    "Template Section 9.2: 142-148",
-    "Template Section 9.2",
+    "Template Study Design: 142-148",
+    "Template Study Design",
     "Template",
   ),
   src(
     "s-1-8t-2",
-    "247HV101 Protocol Version 3",
-    "Section 8: 84-102",
-    "Section 8",
-    "Protocol",
+    "Clinical Study Report",
+    "Study Design and Objectives: 84-112",
+    "Study Design",
+    "CSR",
   ),
   src(
     "s-1-8t-3",
-    "109MS306 (CONNECT) LTE Statistical Analysis Plan",
-    "Introduction: 2-5",
+    "TLF Package — Efficacy (Tables)",
+    "Endpoint Definitions: 2-9",
     "Introduction",
-    "SAP",
+    "TLF",
     "proposed",
   ),
 ];
@@ -186,17 +186,17 @@ const SOURCES_1_8_SCHEDULE: RoadmapSource[] = [
 const SOURCES_1_9: RoadmapSource[] = [
   src(
     "s-1-9-1",
-    "109MS306 (CONNECT) LTE Statistical Analysis Plan",
-    "Primary Efficacy Endpoints: 52-68",
-    "Primary Efficacy Endpoints",
-    "SAP",
+    "TLF Package — Efficacy (Tables)",
+    "Table 14.2.1 Primary Endpoint: 5-12",
+    "Table 14.2.1 Primary Endpoint",
+    "TLF",
   ),
   src(
     "s-1-9-2",
-    "109MS306 (CONNECT) LTE Statistical Analysis Plan",
-    "Secondary Efficacy Endpoints: 69-88",
-    "Secondary Efficacy Endpoints",
-    "SAP",
+    "TLF Package — Efficacy (Tables)",
+    "Endpoint Definitions: 2-9",
+    "Endpoint Definitions",
+    "TLF",
     "confirmed",
     "supporting",
   ),
@@ -211,10 +211,10 @@ const SOURCES_1_9: RoadmapSource[] = [
   ),
   src(
     "s-1-9-4",
-    "C4591001 Final Statistical Analysis Plan",
-    "Analysis Populations: 6-14",
-    "Analysis Populations",
-    "SAP",
+    "Data Management Plan",
+    "Table 14.2.1 Primary Endpoint: 5-12",
+    "Table 14.2.1 Primary Endpoint",
+    "TLF",
     "proposed",
     "context",
   ),
@@ -249,18 +249,18 @@ const SOURCES_1_10: RoadmapSource[] = [
   ),
   src(
     "s-1-10-4",
-    "109MS306 (CONNECT) LTE Statistical Analysis Plan",
-    "Safety Analyses — Treatment-Emergent Adverse Events: 112-128",
-    "Safety Analyses — TEAE",
-    "SAP",
+    "TLF Package — Efficacy (Tables)",
+    "Table 14.3.1 Exposure: 1-5",
+    "Table 14.3.1 Exposure",
+    "TLF",
     "confirmed",
     "reference",
   ),
   src(
     "s-1-10-5",
     "Biogen Clinical Study Report Template",
-    "Template Section 11.9.2: 198-204",
-    "Template Section 11.9.2",
+    "Template CSR Intro Sections1.9.2: 198-204",
+    "Template CSR Intro Sections1.9.2",
     "Template",
     "proposed",
     "reference",
@@ -279,8 +279,8 @@ const SOURCES_1_11: RoadmapSource[] = [
   src(
     "s-1-11-2",
     "Biogen Clinical Study Report Template",
-    "Template Section 9.2: 142-148",
-    "Template Section 9.2",
+    "Template Study Design: 142-148",
+    "Template Study Design",
     "Template",
   ),
 ];
@@ -289,10 +289,10 @@ const SOURCES_1_11: RoadmapSource[] = [
 const SOURCES_1_12: RoadmapSource[] = [
   src(
     "s-1-12-1",
-    "247HV101 Protocol Version 3",
-    "Protocol Title Page: 1-1",
-    "Protocol Title Page",
-    "Protocol",
+    "Clinical Study Report",
+    "Synopsis: 3-13",
+    "Synopsis",
+    "CSR",
   ),
   src(
     "s-1-12-2",
@@ -303,10 +303,10 @@ const SOURCES_1_12: RoadmapSource[] = [
   ),
   src(
     "s-1-12-3",
-    "C4591001 Protocol Amendment 9",
-    "Protocol Title Page: 1-1",
-    "Protocol Title Page",
-    "Protocol",
+    "Biogen Clinical Study Report Template",
+    "Synopsis: 3-13",
+    "Synopsis",
+    "CSR",
     "proposed",
   ),
 ];
@@ -374,42 +374,42 @@ const CSR_BODY: DocumentBlock[] = [
   h("h-2", 1, "2", "Synopsis"),
   c("c-2-1", "Study synopsis", "OUTPUT_TYPE_SUMMARY", [
     src("s-2-1-1", "Clinical Study Report", "Synopsis: 3-13", "Synopsis", "CSR"),
-    src("s-2-1-2", "247HV101 Protocol Version 3", "Protocol Title Page: 1-1", "Protocol Title Page", "Protocol"),
+    src("s-2-1-2", "Clinical Study Report", "Synopsis: 3-13", "Synopsis", "CSR"),
   ]),
 
   h("h-3", 1, "3", "Introduction"),
   c("c-3-1", "Background and rationale", "OUTPUT_TYPE_SUMMARY", [
-    src("s-3-1-1", "247HV101 Protocol Version 3", "Section 1: 17-34", "Section 1", "Protocol"),
+    src("s-3-1-1", "Clinical Study Report", "CSR Intro Sections: 29-83", "CSR Intro Sections", "CSR"),
     src("s-3-1-2", "Investigator's Brochure Edition 8", "Nonclinical Summary: 22-61", "Nonclinical Summary", "IB"),
-    src("s-3-1-3", "247HV101 Protocol Version 1", "Section 1: 15-30", "Section 1", "Protocol", "proposed"),
+    src("s-3-1-3", "Investigator's Brochure Edition 8", "Nonclinical Summary: 22-61", "CSR Intro Sections", "CSR", "proposed"),
   ]),
 
   h("h-4", 1, "4", "Study Objectives"),
   c("c-4-1", "Primary and secondary objectives", "OUTPUT_TYPE_SUMMARY", [
-    src("s-4-1-1", "247HV101 Protocol Version 3", "Section 3: 41-46", "Section 3", "Protocol"),
-    src("s-4-1-2", "247HV101 SAP Version 2", "Objectives and Endpoints: 8-19", "Objectives and Endpoints", "SAP"),
+    src("s-4-1-1", "Clinical Study Report", "Study Design and Objectives: 84-112", "Study Objectives", "CSR"),
+    src("s-4-1-2", "TLF Package — Efficacy (Tables)", "Endpoint Definitions: 2-9", "Endpoint Definitions", "TLF"),
   ]),
 
   h("h-5", 1, "5", "Investigational Plan"),
   c("c-5-1", "Overall study design", "OUTPUT_TYPE_SUMMARY", [
-    src("s-5-1-1", "247HV101 Protocol Version 3", "Section 8: 84-102", "Section 8", "Protocol"),
+    src("s-5-1-1", "Clinical Study Report", "Study Design and Objectives: 84-112", "Study Design", "CSR"),
     src("s-5-1-2", "Clinical Study Report", "Study Design and Objectives: 84-112", "Study Design and Objectives", "CSR"),
   ]),
   c("c-5-2", "Selection of study population", "OUTPUT_TYPE_SUMMARY", [
-    src("s-5-2-1", "247HV101 Protocol Version 3", "Section 7: 70-83", "Section 7", "Protocol"),
-    src("s-5-2-2", "247HV101 SAP Version 2", "Analysis Populations: 20-28", "Analysis Populations", "SAP"),
+    src("s-5-2-1", "Clinical Study Report", "CSR Intro Sections: 29-83", "Study Population", "CSR"),
+    src("s-5-2-2", "TLF Package — Efficacy (Tables)", "Table 14.2.1 Primary Endpoint: 5-12", "Table 14.2.1 Primary Endpoint", "TLF"),
   ]),
   c("c-5-3", "Treatments administered", "OUTPUT_TYPE_SUMMARY", [
-    src("s-5-3-1", "247HV101 Protocol Version 3", "Section 6: 55-69", "Section 6", "Protocol"),
+    src("s-5-3-1", "Clinical Study Report", "CSR Intro Sections: 29-83", "Treatments", "CSR"),
     src("s-5-3-2", "Investigator's Brochure Edition 8", "Pharmaceutical Information: 88-104", "Pharmaceutical Information", "IB", "proposed"),
   ]),
   c("c-5-4", "Efficacy and safety variables", "OUTPUT_TYPE_SUMMARY", [
-    src("s-5-4-1", "247HV101 SAP Version 2", "Efficacy Variables: 29-44", "Efficacy Variables", "SAP"),
+    src("s-5-4-1", "TLF Package — Efficacy (Tables)", "Endpoint Definitions: 2-9", "Endpoint Definitions", "TLF"),
     src("s-5-4-2", "TLF Package — Efficacy (Tables)", "Endpoint Definitions: 2-9", "Endpoint Definitions", "TLF"),
   ]),
   c("c-5-5", "Statistical methods", "OUTPUT_TYPE_SUMMARY", [
-    src("s-5-5-1", "247HV101 SAP Version 2", "Statistical Methods: 45-72", "Statistical Methods", "SAP"),
-    src("s-5-5-2", "247HV101 SAP Amendment 1", "Changes to Planned Analyses: 3-11", "Changes to Planned Analyses", "SAP", "proposed"),
+    src("s-5-5-1", "TLF Package — Efficacy (Tables)", "Table 14.2.1 Primary Endpoint: 5-12", "Primary Endpoint Table", "TLF"),
+    src("s-5-5-2", "TLF Package — Efficacy (Listings)", "Listing 16.2.6 Subgroups: 30-72", "Subgroup Listing", "TLF", "proposed"),
   ]),
 
   h("h-6", 1, "6", "Study Patients"),
@@ -418,7 +418,7 @@ const CSR_BODY: DocumentBlock[] = [
     src("s-6-1-2", "Clinical Data Review Listing", "Subject Disposition Listing: 12-40", "Subject Disposition Listing", "Data"),
   ]),
   c("c-6-2", "Protocol deviations", "OUTPUT_TYPE_TABLE", [
-    src("s-6-2-1", "Clinical Data Review Listing", "Protocol Deviation Listing: 41-58", "Protocol Deviation Listing", "Data"),
+    src("s-6-2-1", "Clinical Data Review Listing", "Subject Disposition Listing: 12-40", "Subject Disposition Listing", "Data"),
     src("s-6-2-2", "Data Management Plan", "Deviation Handling: 18-24", "Deviation Handling", "Data", "proposed"),
   ]),
 
@@ -426,15 +426,15 @@ const CSR_BODY: DocumentBlock[] = [
   c("c-7-1", "Primary endpoint results", "OUTPUT_TYPE_TABLE", [
     src("s-7-1-1", "TLF Package — Efficacy (Tables)", "Table 14.2.1 Primary Endpoint: 5-12", "Table 14.2.1 Primary Endpoint", "TLF"),
     src("s-7-1-2", "Clinical Study Report", "Efficacy Results — Primary Endpoint: 198-224", "Efficacy Results — Primary Endpoint", "CSR", "confirmed", "supporting"),
-    src("s-7-1-3", "247HV101 SAP Version 2", "Primary Analysis: 50-58", "Primary Analysis", "SAP", "confirmed", "context"),
+    src("s-7-1-3", "TLF Package — Efficacy (Tables)", "Table 14.2.1 Primary Endpoint: 5-12", "Primary Endpoint Table", "TLF", "confirmed", "context"),
   ]),
   c("c-7-2", "Secondary endpoint results", "OUTPUT_TYPE_TABLE", [
     src("s-7-2-1", "TLF Package — Efficacy (Figures)", "Figure 14.2.4 Secondary Endpoints: 1-8", "Figure 14.2.4 Secondary Endpoints", "TLF"),
-    src("s-7-2-2", "247HV101 SAP Version 2", "Secondary Analyses: 59-67", "Secondary Analyses", "SAP"),
+    src("s-7-2-2", "TLF Package — Efficacy (Tables)", "Endpoint Definitions: 2-9", "Endpoint Definitions", "TLF"),
   ]),
   c("c-7-3", "Subgroup analyses", "OUTPUT_TYPE_TABLE", [
     src("s-7-3-1", "TLF Package — Efficacy (Listings)", "Listing 16.2.6 Subgroups: 30-72", "Listing 16.2.6 Subgroups", "TLF", "proposed"),
-    src("s-7-3-2", "247HV101 SAP Version 2", "Subgroup Analyses: 68-71", "Subgroup Analyses", "SAP"),
+    src("s-7-3-2", "TLF Package — Efficacy (Tables)", "Listing 16.2.6 Subgroups: 30-72", "Subgroup Listing", "TLF"),
   ]),
   c("c-7-4", "Pharmacokinetic results", "OUTPUT_TYPE_TABLE", [
     src("s-7-4-1", "TLF Package — Pharmacokinetics", "Table 14.3.1 PK Parameters: 1-6", "Table 14.3.1 PK Parameters", "TLF"),
@@ -446,15 +446,15 @@ const CSR_BODY: DocumentBlock[] = [
   c("c-8-1", "Extent of exposure", "OUTPUT_TYPE_TABLE", [
     src("s-8-1-1", "TLF Package — Safety (Tables)", "Table 14.3.1 Exposure: 1-5", "Table 14.3.1 Exposure", "TLF"),
     src("s-8-1-2", "Safety Tables — Treatment-Emergent AEs", "Exposure Summary: 1-3", "Exposure Summary", "TLF", "confirmed", "primary"),
-    src("s-8-1-3", "Biogen Clinical Study Report Template", "Section 12.1 Extent of Exposure: 41-42", "Section 12.1", "Template", "confirmed", "reference"),
-    src("s-8-1-4", "109MS306 (CONNECT) LTE Statistical Analysis Plan", "Safety Analysis Population: 16-17", "Safety Analysis Population", "SAP", "confirmed", "reference"),
+    src("s-8-1-3", "Biogen Clinical Study Report Template", "CSR Intro Sections2.1 Extent of Exposure: 41-42", "CSR Intro Sections2.1", "Template", "confirmed", "reference"),
+    src("s-8-1-4", "TLF Package — Efficacy (Tables)", "Table 14.3.1 Exposure: 1-5", "Table 14.3.1 Exposure", "TLF", "confirmed", "reference"),
   ]),
   c("c-8-2", "Adverse events", "OUTPUT_TYPE_TABLE", [
     src("s-8-2-1", "Safety Tables — Treatment-Emergent AEs", "TEAE by System Organ Class: 4-28", "TEAE by System Organ Class", "TLF"),
     src("s-8-2-1b", "Safety Tables — Treatment-Emergent AEs", "TEAE Treatment-Related: 29-35", "Treatment-Related TEAEs", "TLF", "confirmed", "primary"),
     src("s-8-2-2", "Clinical Study Report", "Safety Summary — Adverse Events: 312-348", "Safety Summary — Adverse Events", "CSR", "confirmed", "supporting"),
-    src("s-8-2-3", "109MS306 (CONNECT) LTE Statistical Analysis Plan", "Safety Analyses — Treatment-Emergent Adverse Events: 112-128", "Safety Analyses — TEAE", "SAP", "confirmed", "reference"),
-    src("s-8-2-4", "Biogen Clinical Study Report Template", "Section 12.2.2 Display of AEs: 44-45", "Section 12.2.2", "Template", "proposed"),
+    src("s-8-2-3", "TLF Package — Efficacy (Tables)", "Table 14.3.1 Exposure: 1-5", "Table 14.3.1 Exposure", "TLF", "confirmed", "reference"),
+    src("s-8-2-4", "Biogen Clinical Study Report Template", "CSR Intro Sections2.2.2 Display of AEs: 44-45", "CSR Intro Sections2.2.2", "Template", "proposed"),
   ]),
   c("c-8-3", "Serious adverse events and deaths", "OUTPUT_TYPE_TABLE", [
     src("s-8-3-1", "Safety Tables — Serious AEs", "SAE Summary: 1-14", "SAE Summary", "TLF"),
@@ -466,7 +466,7 @@ const CSR_BODY: DocumentBlock[] = [
     src("s-8-4-1", "Safety Tables — Laboratory Abnormalities", "Lab Shift Tables: 1-19", "Lab Shift Tables", "TLF"),
     src("s-8-4-2", "TLF Package — Safety (Listings)", "Listing 16.2.8 Lab Abnormalities: 80-140", "Listing 16.2.8 Lab Abnormalities", "TLF", "confirmed", "primary"),
     src("s-8-4-3", "TLF Package — Safety (Figures)", "Figure 14.3.1 Lab Trends: 1-8", "Lab Trends Figure", "TLF", "confirmed", "supporting"),
-    src("s-8-4-4", "109MS306 (CONNECT) LTE Statistical Analysis Plan", "Laboratory Analyses: 128-135", "Laboratory Analyses", "SAP", "confirmed", "reference"),
+    src("s-8-4-4", "TLF Package — Efficacy (Tables)", "Listing 16.2.8 Lab Abnormalities: 80-140", "Lab Abnormalities Listing", "TLF", "confirmed", "reference"),
   ]),
   c("c-8-5", "Vital signs and physical findings", "OUTPUT_TYPE_SUMMARY", [
     src("s-8-5-1", "TLF Package — Safety (Figures)", "Figure 14.3.7 Vital Signs: 9-15", "Figure 14.3.7 Vital Signs", "TLF"),

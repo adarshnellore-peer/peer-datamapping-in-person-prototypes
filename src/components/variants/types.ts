@@ -16,7 +16,7 @@ import {
   type SourceFormatRole,
   type SourceRole,
 } from "../../data/roadmap";
-import { getArtifactTypeLabel, getSourceDocumentCategory, getSourceTypeTag } from "../../data/sourceHelpers";
+import { getArtifactTypeLabel, getSourceDocumentCategory, getSourceLabel, getSourceTypeTag } from "../../data/sourceHelpers";
 import type { DocumentBlock } from "../../types";
 
 export type SourceRef = { blockId: string; sourceId: string };
@@ -33,8 +33,6 @@ export type VariantProps = {
 /** Stable display order for document categories in the V3 library column. */
 export const CATEGORY_ORDER = [
   "Template",
-  "Protocol",
-  "SAP",
   "CSR",
   "IB",
   "TLF",
@@ -46,8 +44,6 @@ export const CATEGORY_ORDER = [
 /** Color dot per document category — a quick scan cue for a section's sources. */
 export const CATEGORY_DOT: Record<string, string> = {
   Template: "bg-[#6b7280]",
-  Protocol: "bg-[#2563eb]",
-  SAP: "bg-[#7c3aed]",
   CSR: "bg-[#0d9488]",
   IB: "bg-[#d97706]",
   TLF: "bg-[#db2777]",
@@ -65,16 +61,6 @@ export const CATEGORY_CHIP: Record<string, { badge: string; field: string; accen
     badge: "border-[#9ca3af] bg-[#f3f4f6] text-[#374151]",
     field: "border-[#c4c9d1] bg-[#f8f9fa]",
     accent: "#6b7280",
-  },
-  Protocol: {
-    badge: "border-[#3b82f6] bg-[#dbeafe] text-[#1e3a8a]",
-    field: "border-[#93c5fd] bg-[#eff6ff]",
-    accent: "#2563eb",
-  },
-  SAP: {
-    badge: "border-[#a78bfa] bg-[#ede9fe] text-[#5b21b6]",
-    field: "border-[#c4b5fd] bg-[#f5f3ff]",
-    accent: "#7c3aed",
   },
   CSR: {
     badge: "border-[#2dd4bf] bg-[#ccfbf1] text-[#115e59]",
@@ -286,6 +272,24 @@ export const MATRIX_COLUMNS: {
   },
 ];
 
+export function isInDocReferenceSource(source: RoadmapSource): boolean {
+  return source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT";
+}
+
+/** Which compressed evidence row a mapped source belongs in. */
+export function evidenceSectionForSource(
+  source: RoadmapSource,
+  rolePickerMode: "usage" | "format" = "format",
+): "source" | "reference" {
+  if (isInDocReferenceSource(source)) return "reference";
+  if (rolePickerMode === "format") {
+    return effectiveFormatRole(source) === "reference" ? "reference" : "source";
+  }
+  if (source.sourceType === "REFERENCE_SOURCE") return "reference";
+  if (effectiveSourceRole(source) === "reference") return "reference";
+  return "source";
+}
+
 export function matrixColumnForSource(source: RoadmapSource): MatrixColumnId {
   const role = effectiveSourceRole(source);
   if (role === "primary") return "insert";
@@ -335,6 +339,28 @@ export function outlineRefTocTargetId(
     return match?.id ?? null;
   }
   return null;
+}
+
+/** Short chip label for compressed storyline evidence rows. */
+export function getCompactEvidenceLabel(
+  source: RoadmapSource,
+  blocks?: DocumentBlock[],
+): string {
+  if (isInDocReferenceSource(source)) {
+    const targetId = outlineRefTocTargetId(source, blocks ?? []);
+    if (targetId) {
+      const match = targetId.match(/^c-(\d+)-(\d+)$/);
+      if (match) return `sec_${match[1]}_${match[2]}`;
+      return targetId;
+    }
+    const content =
+      source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT"
+        ? source.content || ""
+        : "";
+    if (content.length > 28) return `${content.slice(0, 26)}…`;
+    return content || "Reference";
+  }
+  return getSourceLabel(source);
 }
 
 export function artifactTypeLabel(source: RoadmapSource, blocks?: import("../../types").DocumentBlock[]): string {
@@ -515,7 +541,7 @@ export const MAPPING_BADGE: Record<
 
 /**
  * Compact text summary of a section's sources for collapsed rows, e.g.
- * "3 sources · Protocol, CSR, SAP". Appends "· N proposed" when any are
+ * "3 sources · CSR, TLF, Data". Appends "· N proposed" when any are
  * unconfirmed.
  */
 export function categorySummary(sources: RoadmapSource[]): string {

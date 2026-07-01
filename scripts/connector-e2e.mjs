@@ -111,7 +111,7 @@ async function main() {
     check("outline search filters", filteredSections >= 0);
 
     await outline.fill("");
-    await sources.fill("protocol");
+    await sources.fill("clinical");
     await page.waitForTimeout(300);
     const filteredSources = await page.locator('[data-node-kind="reference"], [data-node-kind="document"]').count();
     check("source search filters", filteredSources >= 0);

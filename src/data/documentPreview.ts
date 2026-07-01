@@ -28,22 +28,6 @@ export const DOCUMENT_PDF_ASSETS: Record<string, DocumentPdfAsset> = {
     file: "/pdfs/clinical-study-report.pdf",
     pageCount: 154,
   },
-  "247HV101 Protocol Version 3": {
-    file: "/pdfs/protocol.pdf",
-    pageCount: 1413,
-  },
-  "109MS306 (CONNECT) LTE Statistical Analysis Plan": {
-    file: "/pdfs/sap.pdf",
-    pageCount: 59,
-  },
-  "C4591001 Protocol Amendment 9": {
-    file: "/pdfs/c4591001-protocol.pdf",
-    pageCount: 1413,
-  },
-  "C4591001 Final Statistical Analysis Plan": {
-    file: "/pdfs/c4591001-sap.pdf",
-    pageCount: 59,
-  },
   "Biogen Clinical Study Report Template": {
     file: "/pdfs/generic-template.pdf",
     pageCount: 65,
@@ -52,11 +36,7 @@ export const DOCUMENT_PDF_ASSETS: Record<string, DocumentPdfAsset> = {
 
 const DOCUMENT_PAGE_COUNTS: Record<string, number> = {
   "Biogen Clinical Study Report Template": 65,
-  "247HV101 Protocol Version 3": 312,
-  "109MS306 (CONNECT) LTE Statistical Analysis Plan": 128,
   "Clinical Study Report": 420,
-  "C4591001 Protocol Amendment 9": 1413,
-  "C4591001 Final Statistical Analysis Plan": 59,
 };
 
 export function getDocumentPdfAsset(dataSource: string): DocumentPdfAsset | null {
@@ -71,11 +51,6 @@ export function getDocumentPdfPageUrl(dataSource: string, page: number): string 
 }
 
 const SECTION_PREVIEWS: Record<string, string> = {
-  "Protocol Title Page: 1-1":
-    "A PHASE 1/2/3, PLACEBO-CONTROLLED, RANDOMIZED study to evaluate the safety, tolerability, immunogenicity, and efficacy of SARS-CoV-2 RNA vaccine candidates against COVID-19 in healthy individuals.",
-  "Protocol Amendment Summary of Changes / Document History: 2-9":
-    "Summary of changes table listing amendment dates, sections affected, and brief descriptions of revisions.",
-  "Table of Contents: 10-15": "Protocol section listing with page references.",
   "Synopsis: 3-13":
     "Study synopsis including objectives, design, population, treatments, and key efficacy and safety results.",
   "Template Section 9.2: 142-148":
@@ -179,76 +154,6 @@ export const DOCUMENT_SECTIONS: Record<string, DocumentSection[]> = {
       preview: "Document outline and section page references.",
     },
   ],
-  "247HV101 Protocol Version 3": [
-    {
-      id: "247hv-title",
-      referenceKey: "Protocol Title Page: 1-1",
-      title: "Protocol Title Page",
-      kind: "section",
-      preview: SECTION_PREVIEWS["Protocol Title Page: 1-1"],
-    },
-    {
-      id: "247hv-intro",
-      referenceKey: "Section 1: 17-34",
-      title: "Introduction & Study Objectives",
-      kind: "section",
-      preview: "Background, rationale, and primary and secondary study objectives.",
-    },
-    {
-      id: "247hv-design",
-      referenceKey: "Section 8: 84-102",
-      title: "Study Design",
-      kind: "section",
-      preview: "Overall study design, visit schedule, and treatment schema.",
-    },
-    {
-      id: "247hv-ie",
-      referenceKey: "Section 9.2: 118-126",
-      title: "Inclusion & Exclusion Criteria",
-      kind: "section",
-      preview: "Eligibility criteria for study enrollment.",
-    },
-    {
-      id: "247hv-toc",
-      referenceKey: "Table of Contents: 10-15",
-      title: "Table of Contents",
-      kind: "section",
-      preview: "Protocol section listing with page references.",
-    },
-  ],
-  "C4591001 Protocol Amendment 9": [
-    {
-      id: "c459-title",
-      referenceKey: "Protocol Title Page: 1-1",
-      title: "Protocol Title Page",
-      kind: "section",
-      preview: SECTION_PREVIEWS["Protocol Title Page: 1-1"],
-    },
-    {
-      id: "c459-amend",
-      referenceKey: "Protocol Amendment Summary of Changes / Document History: 2-9",
-      title: "Protocol Amendment Summary of Changes",
-      kind: "section",
-      preview: SECTION_PREVIEWS["Protocol Amendment Summary of Changes / Document History: 2-9"],
-    },
-    ...buildSectionsFromReferenceKeys("C4591001 Protocol Amendment 9")
-      .filter(
-        (s) =>
-          s.referenceKey !== "Protocol Title Page: 1-1" &&
-          s.referenceKey !== "Protocol Amendment Summary of Changes / Document History: 2-9",
-      )
-      .map((s) => {
-        const titles: Record<string, string> = {
-          "Section 1: 17-34": "Introduction",
-          "Section 1.1: 17-25": "Background & Rationale",
-          "Section 1.2: 25-26": "Study Objectives",
-          "Section 1.3: 26-34": "Study Endpoints",
-          "List of Tables: 15-17": "List of Tables",
-          "Table of Contents: 10-15": "Table of Contents",
-        };
-        return titles[s.referenceKey] ? { ...s, title: titles[s.referenceKey] } : s;
-      }),
-  ],
   "Biogen Clinical Study Report Template": buildSectionsFromReferenceKeys(
     "Biogen Clinical Study Report Template",
   ).map((s) => {
@@ -265,12 +170,6 @@ export const DOCUMENT_SECTIONS: Record<string, DocumentSection[]> = {
       isTemplateInstruction: true,
     };
   }),
-  "109MS306 (CONNECT) LTE Statistical Analysis Plan": buildSectionsFromReferenceKeys(
-    "109MS306 (CONNECT) LTE Statistical Analysis Plan",
-  ),
-  "C4591001 Final Statistical Analysis Plan": buildSectionsFromReferenceKeys(
-    "C4591001 Final Statistical Analysis Plan",
-  ),
 };
 
 export function getSectionsForDocument(dataSource: string): DocumentSection[] {
