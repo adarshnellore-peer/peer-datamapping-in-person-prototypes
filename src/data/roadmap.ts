@@ -236,6 +236,12 @@ export type SubcontentRoadmapSource = RoadmapSourceBase & {
   content: string;
   /** V3 matrix: points at another subcontent row used as evidence. */
   referencedBlockId?: string;
+  /** Snapshot of outline text under the linked row when mapped. */
+  outlineContext?: string;
+  /** Short LLM-generated label for chips and pickers. */
+  aiDescriptor?: string;
+  /** Data sources already mapped on the linked outline row(s). */
+  bundledSources?: RoadmapSource[];
 };
 
 export type ContentRoadmapSource = RoadmapSourceBase & {
@@ -243,6 +249,9 @@ export type ContentRoadmapSource = RoadmapSourceBase & {
   content: string;
   /** V3 matrix: points at a content heading used as evidence. */
   referencedHeadingId?: string;
+  outlineContext?: string;
+  aiDescriptor?: string;
+  bundledSources?: RoadmapSource[];
 };
 
 export type ReferenceSourceRoadmapSource = RoadmapSourceBase & {

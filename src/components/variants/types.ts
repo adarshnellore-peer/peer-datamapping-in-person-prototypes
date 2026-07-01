@@ -347,6 +347,13 @@ export function getCompactEvidenceLabel(
   blocks?: DocumentBlock[],
 ): string {
   if (isInDocReferenceSource(source)) {
+    if (
+      (source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT") &&
+      source.aiDescriptor?.trim()
+    ) {
+      return source.aiDescriptor.trim();
+    }
+
     const targetId = outlineRefTocTargetId(source, blocks ?? []);
     if (targetId) {
       const match = targetId.match(/^c-(\d+)-(\d+)$/);
@@ -361,6 +368,20 @@ export function getCompactEvidenceLabel(
     return content || "Reference";
   }
   return getSourceLabel(source);
+}
+
+export function getOutlineRefTooltip(
+  source: RoadmapSource,
+): string | undefined {
+  if (source.sourceType !== "CONTENT" && source.sourceType !== "SUBCONTENT") {
+    return undefined;
+  }
+  const parts: string[] = [];
+  if (source.content?.trim()) parts.push(source.content.trim());
+  if (source.aiDescriptor?.trim()) parts.push(source.aiDescriptor.trim());
+  if (source.outlineContext?.trim()) parts.push(source.outlineContext.trim());
+  if (parts.length === 0) return undefined;
+  return parts.join("\n\n");
 }
 
 export function artifactTypeLabel(source: RoadmapSource, blocks?: import("../../types").DocumentBlock[]): string {

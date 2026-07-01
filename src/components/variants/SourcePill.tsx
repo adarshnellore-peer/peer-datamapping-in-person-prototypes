@@ -408,7 +408,9 @@ export function SourcePill({
   const primaryTitle =
     source.sourceType === "DATA_SOURCE"
       ? source.dataSource || "Select document…"
-      : nonDataSourceLabel(source) || "Select…";
+      : isOutlineRef && (source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT") && source.aiDescriptor?.trim()
+        ? source.aiDescriptor.trim()
+        : nonDataSourceLabel(source) || "Select…";
 
   const dragHandleClass = (outlineRef = false) => {
     const classes = [

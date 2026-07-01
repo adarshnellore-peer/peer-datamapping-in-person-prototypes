@@ -139,7 +139,11 @@ export function getSourceLabel(source: RoadmapSource): string {
   if (source.sourceType === "REFERENCE_SOURCE") {
     return source.referenceSource || "Reference source";
   }
-  return source.content || "Source";
+  if (source.sourceType === "SUBCONTENT" || source.sourceType === "CONTENT") {
+    if (source.aiDescriptor?.trim()) return source.aiDescriptor.trim();
+    return source.content || "Source";
+  }
+  return "Source";
 }
 
 /** Card title — same as production source chip text. */

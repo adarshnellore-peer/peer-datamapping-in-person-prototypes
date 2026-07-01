@@ -271,7 +271,7 @@ html {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .peer-evidence-chip {
@@ -378,6 +378,106 @@ html {
 .peer-evidence-chip-overflow:hover {
   border-color: var(--peer-border);
   color: var(--peer-text-secondary);
+}
+
+.peer-evidence-chip-wrap.has-bundled {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.peer-evidence-chip-wrap.has-bundled.is-bundled-open {
+  width: 100%;
+}
+
+.peer-evidence-chip-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--peer-text-caption);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.peer-evidence-chip-expand:hover {
+  color: var(--peer-text-secondary);
+  background: color-mix(in srgb, var(--peer-surface-muted) 80%, transparent);
+}
+
+.peer-evidence-chip-expand-icon {
+  transition: transform 0.15s ease;
+}
+
+.peer-evidence-chip-expand-icon.is-open {
+  transform: rotate(180deg);
+}
+
+.peer-evidence-chip-bundled-count {
+  flex-shrink: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--peer-surface-nested);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--peer-text-caption);
+}
+
+.peer-evidence-bundled-panel {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--peer-border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--peer-surface-nested) 70%, var(--peer-surface));
+}
+
+.peer-evidence-bundled-panel-label {
+  margin: 0 0 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--peer-text-caption);
+}
+
+.peer-evidence-bundled-panel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.peer-evidence-chip--bundled-readonly {
+  pointer-events: none;
+}
+
+.peer-evidence-chip-main--readonly {
+  cursor: default;
+  max-width: 280px;
+}
+
+.peer-evidence-chip-type {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--peer-text-caption);
+}
+
+.peer-evidence-chip.is-pending-descriptor {
+  opacity: 0.72;
+}
+
+.peer-evidence-chip.is-pending-descriptor .peer-evidence-chip-label {
+  font-style: italic;
 }
 
 .peer-evidence-chip-overflow--less {

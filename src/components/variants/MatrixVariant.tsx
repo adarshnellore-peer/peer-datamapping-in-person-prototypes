@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Info } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { Info, Plus, Trash2 } from "lucide-react";
 import { DataSourcePanel } from "../DataSourcePanel";
 import { StudyDataSourcesList } from "../StudyDataSourcesList";
+import { OutlineActionButton, OutlineRowActions } from "../roadmap/OutlineActionButton";
 import {
   RoadmapOutlineHeader,
   RoadmapOutlineRow,
@@ -12,7 +13,7 @@ import type { StudyDataSource } from "../../data/studyDataSources";
 import { isTlfRoadmapSource } from "../../data/studyDataSources";
 import type { RoadmapSource } from "../../data/roadmap";
 import type { HeadingBlock } from "../../types";
-import { buildTocFlatList, isHeadingInsertionSlot } from "../../utils/documentBlocks";
+import { buildTocFlatList, isHeadingInsertionSlot, type TocFlatItem } from "../../utils/documentBlocks";
 import {
   FORMAT_MATRIX_COLUMNS,
   formatRoleForFormatMatrixColumn,
@@ -30,6 +31,7 @@ import { SourcePill } from "./SourcePill";
 import {
   hasV2DragType,
   LIBRARY_TRACE_BLOCK,
+  outlineRefDragPayload,
   readV2DragData,
   setV2DragData,
   studySourceIdsFromPayload,
@@ -97,6 +99,23 @@ function headingDragLabel(heading: HeadingBlock): string {
   return heading.number ? `${heading.number} ${heading.title}` : heading.title;
 }
 
+function outlineRefPayloadFromTocItem(item: TocFlatItem): OutlineRefPayload {
+  if (item.kind === "heading") {
+    return {
+      kind: "outline-ref",
+      sourceType: "CONTENT",
+      label: headingDragLabel(item.heading),
+      fromHeadingId: item.heading.id,
+    };
+  }
+  return {
+    kind: "outline-ref",
+    sourceType: "SUBCONTENT",
+    label: item.block.title,
+    fromBlockId: item.block.id,
+  };
+}
+
 /**
  * V3 — Mode matrix + document library. Rows are roadmap sections; columns are
  * Primary narrative / Supporting evidence / Background reference. Drag from the library or
@@ -129,6 +148,12 @@ export function MatrixVariant({
   onTraceSourceChange,
   onCloseTrace,
   onUpdateMappedSource,
+  onNavigateBlock,
+  onMoveBlock,
+  onAddHeadingAfter,
+  onAddContentAfter,
+  onDeleteHeading,
+  onDeleteContent,
   tlfOnly = false,
 }: VariantProps & {
   activeBlockId?: string | null;
@@ -174,24 +199,75 @@ export function MatrixVariant({
   onTraceSourceChange?: (sourceId: string) => void;
   onCloseTrace?: () => void;
   onUpdateMappedSource?: (source: RoadmapSource) => void;
+  onNavigateBlock?: (blockId: string) => void;
+  onMoveBlock?: (blockId: string, dropFlatIndex: number) => void;
+  onAddHeadingAfter?: (headingId: string) => void;
+  onAddContentAfter?: (contentId: string) => void;
+  onDeleteHeading?: (headingId: string) => void;
+  onDeleteContent?: (blockId: string) => void;
   /** When true, only TLF-mapped sources are shown in matrix cells. */
   tlfOnly?: boolean;
 }) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
+  const [outlineDragId, setOutlineDragId] = useState<string | null>(null);
+  const [outlineReorder, setOutlineReorder] = useState<{
+    blockId: string;
+    dropFlatIndex: number;
+  } | null>(null);
   const draggingRef = useRef<V2DragPayload | null>(null);
   const rowRefs = useRef<Record<string, HTMLElement | null>>({});
+  const outlineRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const columns = useMemo(() => matrixColumnsForMode(columnMode), [columnMode]);
   const tableMinWidth = columnMode === "format" ? "min-w-[640px]" : "min-w-[840px]";
 
-  const outlineByBlockId = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof buildTocFlatList>[number]>();
-    for (const item of buildTocFlatList(blocks)) {
-      map.set(item.id, item);
-    }
-    return map;
-  }, [blocks]);
+  const flatItems = useMemo(() => buildTocFlatList(blocks), [blocks]);
 
-  const beginDrag = (event: React.DragEvent, payload: V2DragPayload) => {
+  const visibleItems = useMemo(() => {
+    return flatItems.filter((item) => {
+      for (const ancestorId of item.ancestorHeadingIds) {
+        if (collapsedIds.has(ancestorId)) return false;
+      }
+      return true;
+    });
+  }, [flatItems, collapsedIds]);
+
+  const visibleItemsRef = useRef(visibleItems);
+  visibleItemsRef.current = visibleItems;
+
+  const computeOutlineDropIndex = useCallback((clientY: number) => {
+    for (let i = 0; i < visibleItemsRef.current.length; i++) {
+      const row = outlineRowRefs.current[visibleItemsRef.current[i]!.id];
+      if (!row) continue;
+      const rect = row.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) return i;
+    }
+    return visibleItemsRef.current.length;
+  }, []);
+
+  const toggleCollapse = useCallback((headingId: string) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(headingId)) next.delete(headingId);
+      else next.add(headingId);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!activeBlockId) return;
+    const activeItem = flatItems.find((item) => item.id === activeBlockId);
+    if (!activeItem) return;
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      for (const ancestorId of activeItem.ancestorHeadingIds) {
+        next.delete(ancestorId);
+      }
+      return next;
+    });
+  }, [activeBlockId, flatItems]);
+
+  const beginDrag = (event: DragEvent, payload: V2DragPayload) => {
     draggingRef.current = payload;
     setV2DragData(event.dataTransfer, payload);
   };
@@ -199,6 +275,128 @@ export function MatrixVariant({
   const endDrag = () => {
     draggingRef.current = null;
     setDropTarget(null);
+    setOutlineDragId(null);
+    setOutlineReorder(null);
+  };
+
+  const startOutlineRowDrag = useCallback((item: TocFlatItem, event: DragEvent) => {
+    setOutlineDragId(item.id);
+    draggingRef.current = outlineRefPayloadFromTocItem(item);
+    setV2DragData(event.dataTransfer, outlineRefDragPayload([outlineRefPayloadFromTocItem(item)]));
+  }, []);
+
+  const handleOutlineDragOver = useCallback(
+    (event: DragEvent) => {
+      if (!outlineDragId || !onMoveBlock) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "move";
+      const dropFlatIndex = computeOutlineDropIndex(event.clientY);
+      setOutlineReorder({ blockId: outlineDragId, dropFlatIndex });
+    },
+    [computeOutlineDropIndex, onMoveBlock, outlineDragId],
+  );
+
+  const handleOutlineDrop = useCallback(
+    (event: DragEvent) => {
+      if (!outlineDragId || !onMoveBlock) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const dropFlatIndex = computeOutlineDropIndex(event.clientY);
+      onMoveBlock(outlineDragId, dropFlatIndex);
+      endDrag();
+    },
+    [computeOutlineDropIndex, onMoveBlock, outlineDragId],
+  );
+
+  const canEditOutline =
+    onAddHeadingAfter &&
+    onAddContentAfter &&
+    onDeleteHeading &&
+    onDeleteContent;
+
+  const renderOutlineActions = (item: TocFlatItem) => {
+    if (!canEditOutline) return undefined;
+
+    if (item.kind === "heading") {
+      return (
+        <OutlineRowActions>
+          <OutlineActionButton
+            label="Add heading"
+            onClick={() => onAddHeadingAfter!(item.id)}
+          >
+            <Plus size={12} strokeWidth={2} />
+          </OutlineActionButton>
+          <OutlineActionButton
+            label="Delete heading"
+            variant="danger"
+            onClick={() => onDeleteHeading!(item.id)}
+          >
+            <Trash2 size={12} strokeWidth={2} />
+          </OutlineActionButton>
+        </OutlineRowActions>
+      );
+    }
+
+    return (
+      <OutlineRowActions>
+        <OutlineActionButton
+          label="Add section below"
+          onClick={() => onAddContentAfter!(item.id)}
+        >
+          <Plus size={12} strokeWidth={2} />
+        </OutlineActionButton>
+        <OutlineActionButton
+          label="Delete section"
+          variant="danger"
+          onClick={() => onDeleteContent!(item.id)}
+        >
+          <Trash2 size={12} strokeWidth={2} />
+        </OutlineActionButton>
+      </OutlineRowActions>
+    );
+  };
+
+  const renderOutlineCell = (item: TocFlatItem, index: number) => {
+    const isHeadingRow = item.kind === "heading";
+    const showDropBefore =
+      outlineReorder !== null &&
+      outlineReorder.dropFlatIndex === index &&
+      outlineReorder.blockId !== item.id;
+
+    return (
+      <td
+        className={`${ROADMAP_OUTLINE_COLUMN_CLASS} relative`}
+        onDragOver={onMoveBlock ? handleOutlineDragOver : undefined}
+        onDrop={onMoveBlock ? handleOutlineDrop : undefined}
+      >
+        {showDropBefore ? (
+          <div
+            className="pointer-events-none absolute left-2 right-2 top-0 z-10 h-0.5 -translate-y-0.5 rounded-full bg-[#ff4e49]"
+            aria-hidden
+          />
+        ) : null}
+        <RoadmapOutlineRow
+          compact
+          depth={item.depth}
+          isHeading={isHeadingRow}
+          isActive={activeBlockId === item.id}
+          isDragging={outlineDragId === item.id}
+          number={isHeadingRow ? item.heading.number : item.number}
+          title={isHeadingRow ? item.heading.title : item.block.title}
+          hasChevron={isHeadingRow ? item.hasChildren : false}
+          isCollapsed={isHeadingRow ? collapsedIds.has(item.id) : undefined}
+          onToggleCollapse={
+            isHeadingRow && item.hasChildren ? () => toggleCollapse(item.id) : undefined
+          }
+          onNavigate={onNavigateBlock ? () => onNavigateBlock(item.id) : undefined}
+          onDragStart={(event) => startOutlineRowDrag(item, event)}
+          onDragEnd={endDrag}
+          dragTitle="Drag to reorder or map to a cell"
+          actions={renderOutlineActions(item)}
+        />
+      </td>
+    );
   };
 
   useEffect(() => {
@@ -305,7 +503,7 @@ export function MatrixVariant({
     setDropTarget(null);
   };
 
-  const handleCellDragOver = (cellId: string, event: React.DragEvent) => {
+  const handleCellDragOver = (cellId: string, event: DragEvent) => {
     if (!hasV2DragType(event.dataTransfer) && !draggingRef.current) return;
     event.preventDefault();
     event.stopPropagation();
@@ -333,8 +531,8 @@ export function MatrixVariant({
       const cellDropHandlers = options?.dropDisabled
         ? undefined
         : {
-            onDragOver: (e: React.DragEvent) => handleCellDragOver(cellId, e),
-            onDrop: (e: React.DragEvent) => {
+            onDragOver: (e: DragEvent) => handleCellDragOver(cellId, e),
+            onDrop: (e: DragEvent) => {
               e.preventDefault();
               e.stopPropagation();
               dropOnCell(rowId, col.id, e.dataTransfer, {
@@ -437,39 +635,20 @@ export function MatrixVariant({
               </tr>
             </thead>
             <tbody>
-              {blocks.map((block) => {
-                if (block.type === "heading") {
+              {visibleItems.map((item, index) => {
+                if (item.kind === "heading") {
+                  const block = item.heading;
                   const isInsertionSlot = isHeadingInsertionSlot(blocks, block.id);
-                  const outline = outlineByBlockId.get(block.id);
-                  const depth = outline?.kind === "heading" ? outline.depth : 0;
                   return (
                     <tr
-                      key={block.id}
+                      key={item.id}
                       ref={(el) => {
-                        rowRefs.current[block.id] = el;
+                        rowRefs.current[item.id] = el;
+                        outlineRowRefs.current[item.id] = el;
                       }}
                       className="group/heading"
                     >
-                      <td className={ROADMAP_OUTLINE_COLUMN_CLASS}>
-                        <RoadmapOutlineRow
-                          compact
-                          depth={depth}
-                          isHeading
-                          isActive={activeBlockId === block.id}
-                          number={block.number}
-                          title={block.title}
-                          onDragStart={(event) => {
-                            beginDrag(event, {
-                              kind: "outline-ref",
-                              sourceType: "CONTENT",
-                              label: headingDragLabel(block),
-                              fromHeadingId: block.id,
-                            });
-                          }}
-                          onDragEnd={endDrag}
-                          dragTitle="Drag content heading as evidence to another row"
-                        />
-                      </td>
+                      {renderOutlineCell(item, index)}
                       {renderMatrixCells(block.id, block.sources ?? [], {
                         rejectOutlineRef: (payload) =>
                           payload.sourceType === "CONTENT" && payload.fromHeadingId === block.id,
@@ -479,42 +658,31 @@ export function MatrixVariant({
                     </tr>
                   );
                 }
-                if (block.type !== "content") return null;
-                const outline = outlineByBlockId.get(block.id);
-                const depth = outline?.kind === "content" ? outline.depth : 0;
+
+                const block = item.block;
                 return (
                   <tr
-                    key={block.id}
+                    key={item.id}
                     ref={(el) => {
-                      rowRefs.current[block.id] = el;
+                      rowRefs.current[item.id] = el;
+                      outlineRowRefs.current[item.id] = el;
                     }}
                     className="group"
                   >
-                    <td className={ROADMAP_OUTLINE_COLUMN_CLASS}>
-                      <RoadmapOutlineRow
-                        compact
-                        depth={depth}
-                        isHeading={false}
-                        isActive={activeBlockId === block.id}
-                        title={block.title}
-                        onDragStart={(event) => {
-                          beginDrag(event, {
-                            kind: "outline-ref",
-                            sourceType: "SUBCONTENT",
-                            label: block.title,
-                            fromBlockId: block.id,
-                          });
-                        }}
-                        onDragEnd={endDrag}
-                        dragTitle="Drag subcontent as evidence to another row"
-                      />
-                    </td>
+                    {renderOutlineCell(item, index)}
                     {renderMatrixCells(block.id, block.sources, {
                       rejectOutlineRef: (payload) => payload.fromBlockId === block.id,
                     })}
                   </tr>
                 );
               })}
+              {outlineReorder && outlineReorder.dropFlatIndex === visibleItems.length ? (
+                <tr aria-hidden>
+                  <td colSpan={columns.length + 1} className="border-0 p-0">
+                    <div className="mx-2 h-0.5 rounded-full bg-[#ff4e49]" />
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

@@ -51,6 +51,12 @@ import { SourcePickerOverlay } from "./SourcePickerOverlay";
 import { DOCUMENT_BLOCKS } from "../data/roadmapDocument";
 import type { OutlineRefPayload } from "../utils/v2DragPayload";
 import {
+  buildOutlineRefSource,
+  extractBundledSources,
+  extractOutlineContext,
+  generateOutlineRefDescriptor,
+} from "../utils/outlineRefEnrichment";
+import {
   appendReferenceKeyToDataSource,
   consolidateContentBlockSourcesIfNeeded,
   consolidateDocumentBlocks,
@@ -260,6 +266,11 @@ export function RoadmapPage() {
 
   const moveBlockFromToc = useCallback((blockId: string, dropFlatIndex: number) => {
     setBlocks((prev) => moveDocumentBlockFromTocDrop(prev, blockId, dropFlatIndex));
+  }, []);
+
+  const navigateMatrixBlock = useCallback((id: string) => {
+    setActiveTocId(id);
+    setMatrixScrollTick((tick) => tick + 1);
   }, []);
 
   useEffect(() => {
@@ -712,41 +723,77 @@ export function RoadmapPage() {
     }
   };
 
+  const scheduleOutlineRefDescriptor = useCallback(
+    (
+      targetBlockId: string,
+      sourceId: string,
+      outlineContext: string,
+      payload: OutlineRefPayload,
+      documentBlocks: DocumentBlock[],
+    ) => {
+      void generateOutlineRefDescriptor(outlineContext, payload, documentBlocks).then(
+        (aiDescriptor) => {
+          setBlocks((prev) =>
+            prev.map((block) => {
+              if (block.id !== targetBlockId) return block;
+              if (block.type !== "content" && block.type !== "heading") return block;
+              const sources = block.type === "content" ? block.sources : (block.sources ?? []);
+              const nextSources = sources.map((source) =>
+                source.id === sourceId &&
+                (source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT")
+                  ? { ...source, aiDescriptor, status: "confirmed" as const }
+                  : source,
+              );
+              return block.type === "content"
+                ? { ...block, sources: nextSources }
+                : { ...block, sources: nextSources };
+            }),
+          );
+        },
+      );
+    },
+    [],
+  );
+
   const mapOutlineRefToSectionWithRole = useCallback(
     (toBlockId: string, payload: OutlineRefPayload, role: MatrixTagRole): string | undefined => {
       if (payload.fromBlockId === toBlockId) return undefined;
-      const base = createSourceForType(payload.sourceType, {
-        content: payload.label,
-        status: "confirmed",
-      });
-      const created =
-        payload.sourceType === "SUBCONTENT"
-          ? {
-              ...base,
-              referencedBlockId: payload.fromBlockId,
-              role,
-            }
-          : {
-              ...base,
-              referencedHeadingId: payload.fromHeadingId,
-              role,
-            };
-      setBlocks((prev) =>
-        prev.map((block) => {
+
+      let createdId: string | undefined;
+      let snapshot: DocumentBlock[] = [];
+
+      setBlocks((prev) => {
+        snapshot = prev;
+        const outlineContext = extractOutlineContext(prev, payload);
+        const bundledSources = extractBundledSources(prev, payload);
+        const sourceId = crypto.randomUUID();
+        createdId = sourceId;
+        const created = buildOutlineRefSource(payload, outlineContext, {
+          id: sourceId,
+          role,
+          bundledSources,
+        });
+
+        return prev.map((block) => {
           if (block.id !== toBlockId) return block;
           if (block.type !== "content" && block.type !== "heading") return block;
           const sources = block.type === "content" ? block.sources : (block.sources ?? []);
           return { ...block, sources: [...sources, created] };
-        }),
-      );
+        });
+      });
+
+      if (!createdId) return undefined;
+
+      const outlineContext = extractOutlineContext(snapshot, payload);
+      scheduleOutlineRefDescriptor(toBlockId, createdId, outlineContext, payload, snapshot);
       setToast(
         payload.sourceType === "SUBCONTENT"
           ? "Subcontent linked as evidence"
           : "Content linked as evidence",
       );
-      return created.id;
+      return createdId;
     },
-    [],
+    [scheduleOutlineRefDescriptor],
   );
 
   const matrixDropOnHeadingSlot = useCallback(
@@ -833,48 +880,52 @@ export function RoadmapPage() {
   );
 
   // V2 board: drag an outline row (TOC) onto a section as subcontent or content.
-  const mapOutlineRefToSection = (
-    blockId: string,
-    payload: import("../utils/v2DragPayload").OutlineRefPayload,
-  ) => {
-    if (payload.sourceType === "SUBCONTENT" && payload.fromBlockId === blockId) return;
-    let added = false;
-    setBlocks((prev) =>
-      prev.map((block) => {
-        if (block.type !== "content" || block.id !== blockId) return block;
-        const duplicate = block.sources.some((source) =>
-          payload.sourceType === "SUBCONTENT"
-            ? source.sourceType === "SUBCONTENT" &&
-              source.referencedBlockId === payload.fromBlockId
-            : source.sourceType === "CONTENT" &&
-              source.referencedHeadingId === payload.fromHeadingId,
-        );
-        if (duplicate) return block;
-        const base = createSourceForType(payload.sourceType, {
-          content: payload.label,
-          status: "confirmed",
+  const mapOutlineRefToSection = useCallback(
+    (blockId: string, payload: OutlineRefPayload) => {
+      if (payload.sourceType === "SUBCONTENT" && payload.fromBlockId === blockId) return;
+
+      let added = false;
+      let createdId: string | undefined;
+      let snapshot: DocumentBlock[] = [];
+
+      setBlocks((prev) => {
+        snapshot = prev;
+        return prev.map((block) => {
+          if (block.type !== "content" || block.id !== blockId) return block;
+          const duplicate = block.sources.some((source) =>
+            payload.sourceType === "SUBCONTENT"
+              ? source.sourceType === "SUBCONTENT" &&
+                source.referencedBlockId === payload.fromBlockId
+              : source.sourceType === "CONTENT" &&
+                source.referencedHeadingId === payload.fromHeadingId,
+          );
+          if (duplicate) return block;
+
+          const outlineContext = extractOutlineContext(prev, payload);
+          const bundledSources = extractBundledSources(prev, payload);
+          const sourceId = crypto.randomUUID();
+          createdId = sourceId;
+          const created = buildOutlineRefSource(payload, outlineContext, {
+            id: sourceId,
+            bundledSources,
+          });
+          added = true;
+          return { ...block, sources: [...block.sources, created] };
         });
-        const created =
-          payload.sourceType === "SUBCONTENT"
-            ? {
-                ...base,
-                referencedBlockId: payload.fromBlockId,
-              }
-            : {
-                ...base,
-                referencedHeadingId: payload.fromHeadingId,
-              };
-        added = true;
-        return { ...block, sources: [...block.sources, created] };
-      }),
-    );
-    if (!added) return;
-    setToast(
-      payload.sourceType === "SUBCONTENT"
-        ? "Subcontent linked to section"
-        : "Content linked to section",
-    );
-  };
+      });
+
+      if (!added || !createdId) return;
+
+      const outlineContext = extractOutlineContext(snapshot, payload);
+      scheduleOutlineRefDescriptor(blockId, createdId, outlineContext, payload, snapshot);
+      setToast(
+        payload.sourceType === "SUBCONTENT"
+          ? "Subcontent linked to section"
+          : "Content linked to section",
+      );
+    },
+    [scheduleOutlineRefDescriptor],
+  );
 
   // V2 board / V6 source view: map a specific library document onto a section,
   // optionally pre-filling its usage role (V6 "Add to section").
@@ -1873,6 +1924,12 @@ export function RoadmapPage() {
                 onTraceSourceChange: handleTracedSourceChange,
                 onCloseTrace: closeTrace,
                 onUpdateMappedSource: handleTracedMappedSourceUpdate,
+                onNavigateBlock: navigateMatrixBlock,
+                onMoveBlock: moveBlockFromToc,
+                onAddHeadingAfter: addHeadingAfter,
+                onAddContentAfter: addContentAfter,
+                onDeleteHeading: deleteHeading,
+                onDeleteContent: deleteContentBlock,
                 tlfOnly,
               }}
             />
@@ -1930,6 +1987,12 @@ export function RoadmapPage() {
               onTraceSourceChange={handleTracedSourceChange}
               onCloseTrace={closeTrace}
               onUpdateMappedSource={handleTracedMappedSourceUpdate}
+              onNavigateBlock={navigateMatrixBlock}
+              onMoveBlock={moveBlockFromToc}
+              onAddHeadingAfter={addHeadingAfter}
+              onAddContentAfter={addContentAfter}
+              onDeleteHeading={deleteHeading}
+              onDeleteContent={deleteContentBlock}
             />
           )}
 

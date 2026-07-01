@@ -135,6 +135,12 @@ type MatrixProps = VariantProps & {
   onTraceSourceChange?: (sourceId: string) => void;
   onCloseTrace?: () => void;
   onUpdateMappedSource?: (source: RoadmapSource) => void;
+  onNavigateBlock?: (blockId: string) => void;
+  onMoveBlock?: (blockId: string, dropFlatIndex: number) => void;
+  onAddHeadingAfter?: (headingId: string) => void;
+  onAddContentAfter?: (contentId: string) => void;
+  onDeleteHeading?: (headingId: string) => void;
+  onDeleteContent?: (blockId: string) => void;
   tlfOnly?: boolean;
 };
 

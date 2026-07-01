@@ -14,6 +14,7 @@ import {
   type OutlineRefPayload,
 } from "../utils/v2DragPayload";
 import { RoadmapOutlineRow } from "./roadmap/RoadmapOutlineRow";
+import { OutlineActionButton, OutlineRowActions } from "./roadmap/OutlineActionButton";
 
 function headingLabel(heading: HeadingBlock): string {
   return heading.number ? `${heading.number} ${heading.title}` : heading.title;
@@ -95,49 +96,6 @@ function collectAncestorIds(items: TocFlatItem[], matchedIds: Set<string>): Set<
   return expanded;
 }
 
-function TocRowActions({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/toc-row:opacity-100 group-focus-within/toc-row:opacity-100 group-hover/outline-row:opacity-100 group-focus-within/outline-row:opacity-100">
-      {children}
-    </div>
-  );
-}
-
-function TocActionButton({
-  label,
-  onClick,
-  variant = "default",
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  variant?: "default" | "danger";
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded transition-colors ${
-        variant === "danger"
-          ? "text-[#bdbdbd] hover:bg-[#fff0f0] hover:text-[#ff4e49]"
-          : "text-[#bdbdbd] hover:bg-black/[0.06] hover:text-[#636161]"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 function TocRow({
   depth,
   isActive,
@@ -201,7 +159,7 @@ function TocRow({
         onToggleSelected={onToggleSelected}
         dragTitle="Drag to reorder or map to section"
         onNavigate={onNavigate}
-        actions={actions ? <TocRowActions>{actions}</TocRowActions> : undefined}
+        actions={actions ? <OutlineRowActions>{actions}</OutlineRowActions> : undefined}
       />
     );
   }
@@ -270,7 +228,7 @@ function TocRow({
 
         {actions && (
           <div data-toc-no-drag onPointerDown={(event) => event.stopPropagation()}>
-            <TocRowActions>{actions}</TocRowActions>
+            <OutlineRowActions>{actions}</OutlineRowActions>
           </div>
         )}
       </div>
@@ -656,28 +614,28 @@ export function TableOfContents({
                       onToggleCollapse={() => toggleCollapse(item.id)}
                       actions={
                         hideAddActions ? (
-                          <TocActionButton
+                          <OutlineActionButton
                             label="Delete heading"
                             variant="danger"
                             onClick={() => onDeleteHeading(item.id)}
                           >
                             <Trash2 size={12} strokeWidth={2} />
-                          </TocActionButton>
+                          </OutlineActionButton>
                         ) : (
                           <>
-                            <TocActionButton
+                            <OutlineActionButton
                               label="Add heading"
                               onClick={() => onAddHeadingAfter(item.id)}
                             >
                               <Plus size={12} strokeWidth={2} />
-                            </TocActionButton>
-                            <TocActionButton
+                            </OutlineActionButton>
+                            <OutlineActionButton
                               label="Delete heading"
                               variant="danger"
                               onClick={() => onDeleteHeading(item.id)}
                             >
                               <Trash2 size={12} strokeWidth={2} />
-                            </TocActionButton>
+                            </OutlineActionButton>
                           </>
                         )
                       }
@@ -687,28 +645,28 @@ export function TableOfContents({
                       {...rowProps}
                       actions={
                         hideAddActions ? (
-                          <TocActionButton
+                          <OutlineActionButton
                             label="Delete section"
                             variant="danger"
                             onClick={() => onDeleteContent(item.id)}
                           >
                             <Trash2 size={12} strokeWidth={2} />
-                          </TocActionButton>
+                          </OutlineActionButton>
                         ) : (
                           <>
-                            <TocActionButton
+                            <OutlineActionButton
                               label="Add section below"
                               onClick={() => onAddContentAfter(item.id)}
                             >
                               <Plus size={12} strokeWidth={2} />
-                            </TocActionButton>
-                            <TocActionButton
+                            </OutlineActionButton>
+                            <OutlineActionButton
                               label="Delete section"
                               variant="danger"
                               onClick={() => onDeleteContent(item.id)}
                             >
                               <Trash2 size={12} strokeWidth={2} />
-                            </TocActionButton>
+                            </OutlineActionButton>
                           </>
                         )
                       }
