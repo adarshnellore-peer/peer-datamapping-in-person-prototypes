@@ -1,24 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight } from "lucide-react";
-
-function promptPreview(value: string): string {
-  const collapsed = value.replace(/\s+/g, " ").trim();
-  return collapsed || "Add system instructions for this section…";
-}
+import { Pencil } from "lucide-react";
+import type { RoadmapSource } from "../data/roadmap";
+import { BlockOutputTypeIcon } from "./roadmap/BlockOutputTypeIcon";
+import { generateBlockSummary } from "../utils/blockSummary";
 
 export function KeyMessageFooter({
   value,
   onChange,
   placement = "footer",
+  outputType,
+  draftSources = [],
 }: {
   value: string;
   onChange: (value: string) => void;
   placement?: "header" | "footer";
+  outputType?: string;
+  /** Mapped drafting sources — used to anchor the summary in real document sections. */
+  draftSources?: RoadmapSource[];
 }) {
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasPrompt = value.replace(/\s+/g, " ").trim().length > 0;
-  const preview = promptPreview(value);
+  const summary = generateBlockSummary(value, outputType, draftSources);
 
   useEffect(() => {
     if (!expanded) return;
@@ -27,54 +30,66 @@ export function KeyMessageFooter({
     textareaRef.current?.setSelectionRange(length, length);
   }, [expanded]);
 
+  const descriptionControl = expanded ? (
+    <div className="peer-key-message-row flex min-w-0 items-start gap-2">
+      {outputType ? (
+        <BlockOutputTypeIcon outputType={outputType} size="sm" className="mt-2 shrink-0" />
+      ) : null}
+      <div className="peer-key-message-editor min-w-0 flex-1">
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setExpanded(false);
+          }}
+          onBlur={() => setExpanded(false)}
+          rows={4}
+          placeholder="Add system instructions for this section…"
+          className="peer-key-message-textarea"
+          aria-label="Section instructions"
+        />
+      </div>
+    </div>
+  ) : (
+    <div className="peer-key-message-row flex min-w-0 items-center gap-2">
+      {outputType ? (
+        <BlockOutputTypeIcon outputType={outputType} size="sm" className="shrink-0" />
+      ) : null}
+      <button
+        type="button"
+        aria-expanded={false}
+        aria-label={hasPrompt ? "Edit generation instructions" : "Add generation instructions"}
+        onClick={() => setExpanded(true)}
+        className="peer-key-message-chip group/chip min-w-0 flex-1"
+        title={hasPrompt ? value.replace(/\s+/g, " ").trim() : undefined}
+      >
+        <span
+          className={`peer-key-message-summary min-w-0 flex-1 truncate ${
+            hasPrompt ? "" : "is-placeholder"
+          }`}
+        >
+          {summary}
+        </span>
+        <Pencil
+          size={12}
+          strokeWidth={2}
+          className="shrink-0 text-[var(--peer-key-message-icon)] opacity-50 transition-opacity group-hover/chip:opacity-90"
+          aria-hidden
+        />
+      </button>
+    </div>
+  );
+
   return (
     <div
       className={
-        placement === "header" ? "peer-card-prompt peer-card-prompt--header" : "peer-card-footer"
+        placement === "header"
+          ? "peer-beat-summary peer-card-prompt--header"
+          : "peer-card-footer"
       }
     >
-      {expanded ? (
-        <div className="flex items-start gap-1.5">
-          <button
-            type="button"
-            aria-expanded
-            aria-label="Collapse key message"
-            onClick={() => setExpanded(false)}
-            className="mt-2.5 shrink-0 rounded p-0.5 text-[var(--peer-muted)] transition-colors hover:text-[var(--peer-text)]"
-          >
-            <ChevronRight size={14} className="rotate-90" aria-hidden />
-          </button>
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            rows={4}
-            placeholder="Add system instructions for this section…"
-            className="min-w-0 flex-1 resize-y rounded-md border border-[var(--peer-border)] bg-white px-3 py-2.5 text-[14px] leading-relaxed text-[var(--peer-text)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
-          />
-        </div>
-      ) : (
-        <button
-          type="button"
-          aria-expanded={false}
-          onClick={() => setExpanded(true)}
-          className="flex w-full min-w-0 items-center gap-1.5 text-left transition-colors hover:text-[var(--peer-text)]"
-        >
-          <ChevronRight
-            size={14}
-            className="shrink-0 text-[var(--peer-muted)]"
-            aria-hidden
-          />
-          <span
-            className={`min-w-0 flex-1 truncate text-[12px] leading-snug ${
-              hasPrompt ? "text-[var(--peer-text)]" : "italic text-[var(--peer-muted)]"
-            }`}
-            title={hasPrompt ? preview : undefined}
-          >
-            {preview}
-          </span>
-        </button>
-      )}
+      {descriptionControl}
     </div>
   );
 }

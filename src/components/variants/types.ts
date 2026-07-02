@@ -1,6 +1,6 @@
 import {
+  AlignLeft,
   BookMarked,
-  FileText,
   Image,
   List,
   Table2,
@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import {
   normalizeSourceFormatRole,
+  OUTPUT_TYPE_LABELS,
+  OUTPUT_TYPES,
   SOURCE_FORMAT_ROLE_LABELS,
   SOURCE_FORMAT_ROLES,
   SOURCE_ROLE_LABELS,
@@ -163,12 +165,35 @@ export function formatRoleLabel(role: SourceFormatRole): string {
 
 /** Tooltip copy for V6 storyline source / reference tags. */
 export const FORMAT_ROLE_HINT: Record<SourceFormatRole, string> = {
-  source: "Draft from this evidence — pull values in and interpret them.",
-  reference: "Cross-check only — cite for traceability, not drafted from directly.",
+  source:
+    "Study data you draft from — tables, figures, and listings whose values and findings appear in this section.",
+  reference:
+    "Cross-references for traceability — other sections or documents cited here but not drafted from directly.",
 };
 
 export function formatRoleHint(role: SourceFormatRole): string {
   return FORMAT_ROLE_HINT[role];
+}
+
+/** Block output icons — matches original OutputTypeToggle (AlignLeft + Table2) plus Figure. */
+export const OUTPUT_TYPE_ICONS: Record<(typeof OUTPUT_TYPES)[number], LucideIcon> = {
+  OUTPUT_TYPE_SUMMARY: AlignLeft,
+  OUTPUT_TYPE_TABLE: Table2,
+  OUTPUT_TYPE_FIGURE: Image,
+};
+
+export function blockOutputTypeIcon(outputType?: string): LucideIcon {
+  if (outputType && outputType in OUTPUT_TYPE_ICONS) {
+    return OUTPUT_TYPE_ICONS[outputType as keyof typeof OUTPUT_TYPE_ICONS];
+  }
+  return OUTPUT_TYPE_ICONS.OUTPUT_TYPE_SUMMARY;
+}
+
+export function blockOutputTypeLabel(outputType?: string): string {
+  if (outputType && outputType in OUTPUT_TYPE_LABELS) {
+    return OUTPUT_TYPE_LABELS[outputType as keyof typeof OUTPUT_TYPE_LABELS];
+  }
+  return OUTPUT_TYPE_LABELS.OUTPUT_TYPE_SUMMARY;
 }
 
 /** V6 matrix: two columns aligned with storyline Source / Reference tags. */
@@ -354,18 +379,27 @@ export function getCompactEvidenceLabel(
       return source.aiDescriptor.trim();
     }
 
-    const targetId = outlineRefTocTargetId(source, blocks ?? []);
+    const blockList = blocks ?? [];
+    const targetId = outlineRefTocTargetId(source, blockList);
     if (targetId) {
-      const match = targetId.match(/^c-(\d+)-(\d+)$/);
-      if (match) return `sec_${match[1]}_${match[2]}`;
-      return targetId;
+      const block = blockList.find((entry) => entry.id === targetId);
+      if (block?.type === "heading") {
+        return block.number ? `${block.number} ${block.title}` : block.title;
+      }
+      if (block?.type === "content") {
+        return block.title;
+      }
     }
+
     const content =
       source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT"
-        ? source.content || ""
+        ? source.content?.trim() || ""
         : "";
-    if (content.length > 28) return `${content.slice(0, 26)}…`;
-    return content || "Reference";
+    if (content) {
+      if (content.length > 28) return `${content.slice(0, 26)}…`;
+      return content;
+    }
+    return "Reference";
   }
   return getSourceLabel(source);
 }
@@ -389,7 +423,7 @@ export function artifactTypeLabel(source: RoadmapSource, blocks?: import("../../
 }
 
 const ARTIFACT_LABEL_ICON: Record<string, LucideIcon> = {
-  Text: FileText,
+  Text: AlignLeft,
   Table: Table2,
   Figure: Image,
   Listing: List,
@@ -401,7 +435,7 @@ export function artifactTypeIcon(
   blocks?: DocumentBlock[],
 ): LucideIcon {
   const label = getArtifactTypeLabel(source, blocks);
-  return ARTIFACT_LABEL_ICON[label] ?? FileText;
+  return ARTIFACT_LABEL_ICON[label] ?? AlignLeft;
 }
 
 export function artifactTypeIconKind(

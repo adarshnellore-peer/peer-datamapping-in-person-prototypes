@@ -157,23 +157,18 @@ export function BeatCard({
           placement="header"
           value={block.prompt}
           onChange={onPromptChange}
+          outputType={block.outputType}
+          draftSources={dataSources}
         />
       ) : null}
 
-      <div className="peer-card-header peer-card-header--compressed">
-        <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-[var(--peer-text-secondary)] line-clamp-2">
-          {block.title}
-        </p>
-      </div>
-
-      <div className="peer-card-body peer-card-body--compressed">
+      <div className="peer-beat-evidence peer-card-body peer-card-body--compressed">
         <div className="peer-card-evidence peer-card-evidence--compressed relative">
           {dropOverlay}
 
           <EvidenceSection
             kind="source"
             label="Sources"
-            showInfo
             blockId={block.id}
             sources={dataSources}
             blocks={blocks}

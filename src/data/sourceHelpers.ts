@@ -6,7 +6,7 @@ import {
   type RoadmapSource,
 } from "./roadmap";
 import { getDocumentSectionKind } from "./documentPreview";
-import { findStudySourceForRoadmapSource } from "./studyDataSources";
+import { findStudySourceById, findStudySourceForRoadmapSource } from "./studyDataSources";
 import { getDataSourceReferenceKeys } from "../utils/dataSourceReferences";
 import type { DocumentBlock } from "../types";
 
@@ -129,6 +129,14 @@ export function getSourceHeaderParts(source: RoadmapSource): {
 /** Chip / trace label — matches production source chips. */
 export function getSourceLabel(source: RoadmapSource): string {
   if (source.sourceType === "DATA_SOURCE") {
+    const study =
+      source.studySourceId != null
+        ? findStudySourceById(source.studySourceId)
+        : findStudySourceForRoadmapSource(source);
+    if (study?.kind === "figure" || study?.kind === "listing") {
+      return study.name;
+    }
+
     const section = getSourceSectionName(source);
     const category = getSourceDocumentCategory(source);
     if (category === "Template") {

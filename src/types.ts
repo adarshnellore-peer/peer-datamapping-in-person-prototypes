@@ -5,7 +5,7 @@ export type ViewMode = "roadmap" | "document";
 export type HeadingBlock = {
   id: string;
   type: "heading";
-  level: 1 | 2 | 3;
+  level: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   number: string;
   title: string;
   /** V3 matrix: evidence mapped directly to this content heading row. */

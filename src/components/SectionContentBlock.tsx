@@ -151,7 +151,14 @@ export function SectionContentBlock({
         />
       </div>
 
-      <KeyMessageFooter value={block.prompt} onChange={onPromptChange} />
+      <KeyMessageFooter
+        value={block.prompt}
+        onChange={onPromptChange}
+        outputType={block.outputType}
+        draftSources={block.sources.filter(
+          (s) => s.sourceType === "DATA_SOURCE",
+        )}
+      />
     </div>
   );
 }

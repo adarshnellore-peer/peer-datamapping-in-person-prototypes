@@ -311,6 +311,12 @@ const SOURCES_1_12: RoadmapSource[] = [
   ),
 ];
 
+const PROMPT_1_1 =
+  "[CONTEXT FOR THE MODEL] You are writing the opening section of a plain language summary for a general audience. Explain what this document is and what readers can expect to find. [REQUESTED TASK] After reading the CSR synopsis, produce 2–3 short sentences in friendly, non-technical language.";
+
+const PROMPT_1_2 =
+  "[CONTEXT FOR THE MODEL] You are writing a plain language summary section that helps readers understand who the document is for and how to use it. [REQUESTED TASK] After reading the CSR text appended below, explain who should read this summary and what they will learn. Keep it to 1–2 short paragraphs.";
+
 const PROMPT_1_3 =
   "[CONTEXT FOR THE MODEL] You are crafting a short subsection 2of a plain language summary for a general audience. This paragraph should cover the timeline of the trial, when it began and ended, how long participants were enrolled, and note that a final report was created. It should be concise, neutral, and friendly. [REQUESTED TASK] After reading the appended CSR text, produce a brief paragraph (roughly 3-4 sentences) that: 1. Mentions how long the trial ran in total and how long participants took part. 2. States the trial's start and end dates. 3. Explains that the data was reviewed and a report was written. 4. Directs readers to additional resources for more details, if provided. Do not include headings or disclaimers, and do not repeat text from other sections.";
 
@@ -345,7 +351,7 @@ const PROMPT_1_11 =
 const PROMPT_1_12 =
   "[CONTEXT FOR THE MODEL] You are preparing a \"Where can I learn more about this trial?\" section for a Plain Language Summary aimed at a general public audience. This section should clearly direct readers to additional sources of information about the trial, such as clinical trial registries, published reports, or official websites. [REQUESTED TASK] After reading the CSR text that I will append below, produce a final output in valid markdown format that: 1. In plain language, explains that readers can find more details about the trial at the websites provided. 2. Lists the relevant websites or online resources as bullet points.";
 
-function h(id: string, level: 1 | 2 | 3, number: string, title: string): DocumentBlock {
+function h(id: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7, number: string, title: string): DocumentBlock {
   return { id, type: "heading", level, number, title };
 }
 
@@ -495,6 +501,38 @@ const CSR_BODY: DocumentBlock[] = [
 
 const RAW_DOCUMENT_BLOCKS: DocumentBlock[] = [
   {
+    id: "h-1-1",
+    type: "heading",
+    level: 2,
+    number: "1.1",
+    title: "What is this plain language summary?",
+  },
+  {
+    id: "c-1-1",
+    type: "content",
+    title: "Purpose of this document",
+    previewText: PROMPT_1_1.slice(0, 120) + "…",
+    prompt: PROMPT_1_1,
+    outputType: "OUTPUT_TYPE_SUMMARY",
+    sources: SOURCES_1_3,
+  },
+  {
+    id: "h-1-2",
+    type: "heading",
+    level: 2,
+    number: "1.2",
+    title: "Who is this summary for?",
+  },
+  {
+    id: "c-1-2",
+    type: "content",
+    title: "Intended audience and how to read it",
+    previewText: PROMPT_1_2.slice(0, 120) + "…",
+    prompt: PROMPT_1_2,
+    outputType: "OUTPUT_TYPE_SUMMARY",
+    sources: SOURCES_1_5,
+  },
+  {
     id: "h-1-3",
     type: "heading",
     level: 2,
@@ -582,9 +620,73 @@ const RAW_DOCUMENT_BLOCKS: DocumentBlock[] = [
     title: "What happened during the trial?",
   },
   {
-    id: "c-1-8-narrative",
+    id: "h-1-8-1",
+    type: "heading",
+    level: 3,
+    number: "1.8.1",
+    title: "Participant visits and study procedures",
+  },
+  {
+    id: "c-1-8-1-1",
     type: "content",
-    title: "What participants did",
+    title: "Screening and baseline assessments",
+    previewText: PROMPT_1_8_NARRATIVE.slice(0, 120) + "…",
+    prompt: PROMPT_1_8_NARRATIVE,
+    outputType: "OUTPUT_TYPE_SUMMARY",
+    sources: SOURCES_1_8_NARRATIVE,
+  },
+  {
+    id: "h-1-8-1-2",
+    type: "heading",
+    level: 4,
+    number: "1.8.1.2",
+    title: "Treatment period monitoring",
+  },
+  {
+    id: "c-1-8-1-2-1",
+    type: "content",
+    title: "Weekly lab draws and vital signs",
+    previewText: PROMPT_1_8_NARRATIVE.slice(0, 120) + "…",
+    prompt: PROMPT_1_8_NARRATIVE,
+    outputType: "OUTPUT_TYPE_SUMMARY",
+    sources: SOURCES_1_8_NARRATIVE,
+  },
+  {
+    id: "c-1-8-1-2-2",
+    type: "content",
+    title: "Dosing visits and treatment compliance checks",
+    previewText: PROMPT_1_8_NARRATIVE.slice(0, 120) + "…",
+    prompt: PROMPT_1_8_NARRATIVE,
+    outputType: "OUTPUT_TYPE_SUMMARY",
+    sources: SOURCES_1_8_NARRATIVE,
+  },
+  {
+    id: "h-1-8-1-2-2",
+    type: "heading",
+    level: 5,
+    number: "1.8.1.2.2",
+    title: "Safety monitoring during treatment",
+  },
+  {
+    id: "c-1-8-1-2-2-1",
+    type: "content",
+    title: "Serious adverse event reporting and follow-up",
+    previewText: PROMPT_1_8_NARRATIVE.slice(0, 120) + "…",
+    prompt: PROMPT_1_8_NARRATIVE,
+    outputType: "OUTPUT_TYPE_SUMMARY",
+    sources: SOURCES_1_8_NARRATIVE,
+  },
+  {
+    id: "h-1-8-1-2-2-1",
+    type: "heading",
+    level: 6,
+    number: "1.8.1.2.2.1",
+    title: "Investigator follow-up calls",
+  },
+  {
+    id: "c-1-8-1-2-2-1-1",
+    type: "content",
+    title: "Unplanned contact logs and symptom triage",
     previewText: PROMPT_1_8_NARRATIVE.slice(0, 120) + "…",
     prompt: PROMPT_1_8_NARRATIVE,
     outputType: "OUTPUT_TYPE_SUMMARY",

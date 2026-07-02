@@ -139,6 +139,8 @@ type MatrixProps = VariantProps & {
   onMoveBlock?: (blockId: string, dropFlatIndex: number) => void;
   onAddHeadingAfter?: (headingId: string) => void;
   onAddContentAfter?: (contentId: string) => void;
+  onDuplicateHeading?: (headingId: string) => void;
+  onDuplicateContent?: (contentId: string) => void;
   onDeleteHeading?: (headingId: string) => void;
   onDeleteContent?: (blockId: string) => void;
   tlfOnly?: boolean;

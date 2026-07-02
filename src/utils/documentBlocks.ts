@@ -1,9 +1,10 @@
 import type { ContentBlockData, DocumentBlock, HeadingBlock } from "../types";
+import type { RoadmapSource } from "../data/roadmap";
 
 export function isTocHeading(
   block: DocumentBlock,
 ): block is HeadingBlock {
-  return block.type === "heading" && block.level <= 2;
+  return block.type === "heading";
 }
 
 export function findInsertIndexAfterHeadingSection(
@@ -379,4 +380,90 @@ export function moveDocumentBlockFromTocDrop(
   const toIndex = resolveTocDropIndex(blocks, flatItems, dropFlatIndex);
   if (toIndex < 0) return blocks;
   return moveDocumentBlocks(blocks, blockId, toIndex);
+}
+
+function cloneRoadmapSource(source: RoadmapSource): RoadmapSource {
+  const cloned = structuredClone(source);
+  cloned.id = crypto.randomUUID();
+  if (
+    (cloned.sourceType === "CONTENT" || cloned.sourceType === "SUBCONTENT") &&
+    cloned.bundledSources?.length
+  ) {
+    cloned.bundledSources = cloned.bundledSources.map(cloneRoadmapSource);
+  }
+  return cloned;
+}
+
+function cloneContentBlock(block: ContentBlockData): ContentBlockData {
+  return {
+    ...structuredClone(block),
+    id: crypto.randomUUID(),
+    sources: block.sources.map(cloneRoadmapSource),
+  };
+}
+
+export function duplicateContentBlockInDocument(
+  blocks: DocumentBlock[],
+  blockId: string,
+): { blocks: DocumentBlock[]; newBlockId: string | null } {
+  const index = blocks.findIndex((block) => block.id === blockId);
+  if (index === -1) return { blocks, newBlockId: null };
+
+  const block = blocks[index];
+  if (block.type !== "content") return { blocks, newBlockId: null };
+
+  const clone = cloneContentBlock(block);
+  const next = [...blocks];
+  next.splice(index + 1, 0, clone);
+  return { blocks: next, newBlockId: clone.id };
+}
+
+export function duplicateHeadingSectionInDocument(
+  blocks: DocumentBlock[],
+  headingId: string,
+): { blocks: DocumentBlock[]; newHeadingId: string | null } {
+  const headingIndex = blocks.findIndex((block) => block.id === headingId);
+  if (headingIndex === -1) return { blocks, newHeadingId: null };
+
+  const heading = blocks[headingIndex];
+  if (heading.type !== "heading") return { blocks, newHeadingId: null };
+
+  const insertAt = findInsertIndexAfterHeadingSection(blocks, headingId);
+  if (insertAt === null) return { blocks, newHeadingId: null };
+
+  const newNumber = nextSiblingHeadingNumber(blocks, headingIndex);
+  const clones: DocumentBlock[] = [];
+  let newHeadingId: string | null = null;
+
+  for (let i = headingIndex; i < blocks.length; i++) {
+    const block = blocks[i];
+    if (i > headingIndex && block.type === "heading" && block.level <= heading.level) {
+      break;
+    }
+
+    if (block.type === "heading") {
+      const id = crypto.randomUUID();
+      newHeadingId = id;
+      clones.push({
+        ...structuredClone(block),
+        id,
+        number: newNumber,
+        title: block.title.endsWith(" (copy)") ? block.title : `${block.title} (copy)`,
+      });
+      continue;
+    }
+
+    if (block.type === "content") {
+      clones.push(cloneContentBlock(block));
+    }
+  }
+
+  if (clones.length === 0) return { blocks, newHeadingId: null };
+
+  const next = [...blocks];
+  next.splice(insertAt, 0, ...clones);
+  return {
+    blocks: bumpSubsequentHeadingNumbers(next, insertAt, heading.level, newNumber),
+    newHeadingId,
+  };
 }

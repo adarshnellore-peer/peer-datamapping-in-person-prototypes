@@ -27,6 +27,8 @@ import { SectionContentBlock } from "./SectionContentBlock";
 import { DataSourcePanel } from "./DataSourcePanel";
 import { StudyDataSourcesList } from "./StudyDataSourcesList";
 import { TableOfContents } from "./TableOfContents";
+import { PanelResizeHandle } from "./roadmap/PanelResizeHandle";
+import { useResizablePanelWidth } from "../hooks/useResizablePanelWidth";
 import { VariantSwitcher, type VariantId } from "./VariantSwitcher";
 import {
   MappingSubviewControl,
@@ -71,6 +73,8 @@ import type { ContentBlockData, DocumentBlock, HeadingBlock, ViewMode } from "..
 import {
   bumpSubsequentHeadingNumbers,
   deleteHeadingSection,
+  duplicateContentBlockInDocument,
+  duplicateHeadingSectionInDocument,
   findInsertIndexAfterHeadingSection,
   getHeadingSectionBlockIds,
   isHeadingInsertionSlot,
@@ -175,7 +179,8 @@ function createContentBlock(): ContentBlockData {
   };
 }
 
-const ROADMAP_BLOCKS_STORAGE_KEY = "peer-roadmap-blocks-v1";
+const ROADMAP_BLOCKS_STORAGE_KEY = "peer-roadmap-blocks-v2";
+const ROADMAP_BLOCKS_STORAGE_KEY_LEGACY = "peer-roadmap-blocks-v1";
 
 function findMatchingDataSourceIndex(
   sources: RoadmapSource[],
@@ -191,11 +196,17 @@ function findMatchingDataSourceIndex(
 
 function loadRoadmapBlocks(): DocumentBlock[] {
   try {
-    const raw = localStorage.getItem(ROADMAP_BLOCKS_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(ROADMAP_BLOCKS_STORAGE_KEY) ??
+      localStorage.getItem(ROADMAP_BLOCKS_STORAGE_KEY_LEGACY);
     if (raw) {
       const parsed = JSON.parse(raw) as unknown;
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return consolidateDocumentBlocks(parsed as DocumentBlock[]);
+        const consolidated = consolidateDocumentBlocks(parsed as DocumentBlock[]);
+        if (!consolidated.some((block) => block.id === "h-1-1")) {
+          return structuredClone(DOCUMENT_BLOCKS);
+        }
+        return consolidated;
       }
     }
   } catch {
@@ -224,6 +235,9 @@ export function RoadmapPage() {
   const [sourcePicker, setSourcePicker] = useState<SourcePickerState>(null);
   // const [libraryMode, setLibraryMode] = useState<LibraryMode | null>(null);
   const blockRefs = useRef<Record<string, HTMLElement | null>>({});
+  const outlinePanel = useResizablePanelWidth("peer-outline-panel-width-v1", 320, 240, 560);
+  const libraryPanel = useResizablePanelWidth("peer-library-panel-width-v1", 360, 280, 600);
+  const tracePanel = useResizablePanelWidth("peer-trace-panel-width-v1", 360, 280, 600);
 
   useEffect(() => {
     try {
@@ -1173,6 +1187,38 @@ export function RoadmapPage() {
     insertBlockAfter(afterBlockId, createContentBlock());
   };
 
+  const duplicateHeading = (headingId: string) => {
+    setBlocks((prev) => {
+      const { blocks: next, newHeadingId } = duplicateHeadingSectionInDocument(prev, headingId);
+      if (newHeadingId) {
+        setActiveTocId(newHeadingId);
+        if (storylineLayout) {
+          setTocScrollTick((tick) => tick + 1);
+        } else {
+          setMatrixScrollTick((tick) => tick + 1);
+        }
+      }
+      return next;
+    });
+    setToast("Heading duplicated");
+  };
+
+  const duplicateContent = (blockId: string) => {
+    setBlocks((prev) => {
+      const { blocks: next, newBlockId } = duplicateContentBlockInDocument(prev, blockId);
+      if (newBlockId) {
+        setActiveTocId(newBlockId);
+        if (storylineLayout) {
+          setTocScrollTick((tick) => tick + 1);
+        } else {
+          setMatrixScrollTick((tick) => tick + 1);
+        }
+      }
+      return next;
+    });
+    setToast("Section duplicated");
+  };
+
   const closeTrace = useCallback(() => {
     setTraceState(null);
     setExpandedSource(null);
@@ -1790,7 +1836,10 @@ export function RoadmapPage() {
           />
         )}
         {showGlobalToc && tocOpen && (
-          <aside className="fixed inset-y-0 left-0 z-40 flex w-[min(92vw,320px)] shrink-0 flex-col border-r border-[#d4ced3] bg-[#fafafa] shadow-lg md:relative md:z-0 md:w-[300px] md:shadow-none">
+          <aside
+            className="peer-outline-sidebar peer-outline-sidebar--resizable fixed inset-y-0 left-0 z-40 md:relative md:z-0"
+            style={{ width: outlinePanel.width }}
+          >
             <div className="flex shrink-0 flex-col border-b border-[#d4ced3] px-3 py-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
@@ -1814,10 +1863,16 @@ export function RoadmapPage() {
               onMoveBlock={moveBlockFromToc}
               onAddHeadingAfter={addHeadingAfter}
               onAddContentAfter={addContentAfter}
+              onDuplicateHeading={duplicateHeading}
+              onDuplicateContent={duplicateContent}
               onDeleteHeading={deleteHeading}
               onDeleteContent={deleteContentBlock}
               outlineMappingDrag={tocUsesOutlineMappingDrag}
               hideAddActions={tocHideAddActions}
+            />
+            <PanelResizeHandle
+              side="right"
+              onResizeStart={(event) => outlinePanel.startResize("right", event)}
             />
           </aside>
         )}
@@ -1928,6 +1983,8 @@ export function RoadmapPage() {
                 onMoveBlock: moveBlockFromToc,
                 onAddHeadingAfter: addHeadingAfter,
                 onAddContentAfter: addContentAfter,
+                onDuplicateHeading: duplicateHeading,
+                onDuplicateContent: duplicateContent,
                 onDeleteHeading: deleteHeading,
                 onDeleteContent: deleteContentBlock,
                 tlfOnly,
@@ -1991,6 +2048,8 @@ export function RoadmapPage() {
               onMoveBlock={moveBlockFromToc}
               onAddHeadingAfter={addHeadingAfter}
               onAddContentAfter={addContentAfter}
+              onDuplicateHeading={duplicateHeading}
+              onDuplicateContent={duplicateContent}
               onDeleteHeading={deleteHeading}
               onDeleteContent={deleteContentBlock}
             />
@@ -2043,8 +2102,13 @@ export function RoadmapPage() {
                   />
                   <aside
                     data-datasource-panel=""
-                    className="fixed inset-y-0 right-0 z-40 flex h-full w-[min(92vw,360px)] shrink-0 flex-col overflow-hidden border-l border-[#d4ced3] bg-[#fafafa] shadow-lg md:relative md:z-0 md:w-[360px] md:shadow-none"
+                    className="peer-library-sidebar peer-library-sidebar--resizable fixed inset-y-0 right-0 z-40 shadow-lg md:relative md:z-0 md:shadow-none"
+                    style={{ width: tracePanel.width }}
                   >
+                    <PanelResizeHandle
+                      side="left"
+                      onResizeStart={(event) => tracePanel.startResize("left", event)}
+                    />
                     <DataSourcePanel
                       embedded
                       source={tracedSource}
@@ -2099,8 +2163,13 @@ export function RoadmapPage() {
           v2DataPanelOpen && (
             <aside
               data-datasource-panel=""
-              className="peer-library-sidebar fixed inset-y-0 right-0 z-40 shadow-lg md:relative md:z-0 md:shadow-none"
+              className="peer-library-sidebar peer-library-sidebar--resizable fixed inset-y-0 right-0 z-40 shadow-lg md:relative md:z-0 md:shadow-none"
+              style={{ width: libraryPanel.width }}
             >
+              <PanelResizeHandle
+                side="left"
+                onResizeStart={(event) => libraryPanel.startResize("left", event)}
+              />
               <StudyDataSourcesList
                 enableMappingDrag
                 tlfOnly={tlfOnly}

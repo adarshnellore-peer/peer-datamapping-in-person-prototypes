@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Info, Plus, Trash2 } from "lucide-react";
+import { InfoHintTooltip } from "../roadmap/InfoHintTooltip";
 import { DataSourcePanel } from "../DataSourcePanel";
 import { StudyDataSourcesList } from "../StudyDataSourcesList";
-import { OutlineActionButton, OutlineRowActions } from "../roadmap/OutlineActionButton";
+import { OutlineContentActions, OutlineHeadingActions } from "../roadmap/OutlineActionButton";
 import {
   RoadmapOutlineHeader,
   RoadmapOutlineRow,
@@ -152,6 +152,8 @@ export function MatrixVariant({
   onMoveBlock,
   onAddHeadingAfter,
   onAddContentAfter,
+  onDuplicateHeading,
+  onDuplicateContent,
   onDeleteHeading,
   onDeleteContent,
   tlfOnly = false,
@@ -203,6 +205,8 @@ export function MatrixVariant({
   onMoveBlock?: (blockId: string, dropFlatIndex: number) => void;
   onAddHeadingAfter?: (headingId: string) => void;
   onAddContentAfter?: (contentId: string) => void;
+  onDuplicateHeading?: (headingId: string) => void;
+  onDuplicateContent?: (contentId: string) => void;
   onDeleteHeading?: (headingId: string) => void;
   onDeleteContent?: (blockId: string) => void;
   /** When true, only TLF-mapped sources are shown in matrix cells. */
@@ -312,6 +316,8 @@ export function MatrixVariant({
   const canEditOutline =
     onAddHeadingAfter &&
     onAddContentAfter &&
+    onDuplicateHeading &&
+    onDuplicateContent &&
     onDeleteHeading &&
     onDeleteContent;
 
@@ -320,40 +326,20 @@ export function MatrixVariant({
 
     if (item.kind === "heading") {
       return (
-        <OutlineRowActions>
-          <OutlineActionButton
-            label="Add heading"
-            onClick={() => onAddHeadingAfter!(item.id)}
-          >
-            <Plus size={12} strokeWidth={2} />
-          </OutlineActionButton>
-          <OutlineActionButton
-            label="Delete heading"
-            variant="danger"
-            onClick={() => onDeleteHeading!(item.id)}
-          >
-            <Trash2 size={12} strokeWidth={2} />
-          </OutlineActionButton>
-        </OutlineRowActions>
+        <OutlineHeadingActions
+          onAdd={() => onAddHeadingAfter!(item.id)}
+          onDuplicate={() => onDuplicateHeading!(item.id)}
+          onDelete={() => onDeleteHeading!(item.id)}
+        />
       );
     }
 
     return (
-      <OutlineRowActions>
-        <OutlineActionButton
-          label="Add section below"
-          onClick={() => onAddContentAfter!(item.id)}
-        >
-          <Plus size={12} strokeWidth={2} />
-        </OutlineActionButton>
-        <OutlineActionButton
-          label="Delete section"
-          variant="danger"
-          onClick={() => onDeleteContent!(item.id)}
-        >
-          <Trash2 size={12} strokeWidth={2} />
-        </OutlineActionButton>
-      </OutlineRowActions>
+      <OutlineContentActions
+        onAdd={() => onAddContentAfter!(item.id)}
+        onDuplicate={() => onDuplicateContent!(item.id)}
+        onDelete={() => onDeleteContent!(item.id)}
+      />
     );
   };
 
@@ -382,6 +368,7 @@ export function MatrixVariant({
           isHeading={isHeadingRow}
           isActive={activeBlockId === item.id}
           isDragging={outlineDragId === item.id}
+          outputType={!isHeadingRow ? item.block.outputType : undefined}
           number={isHeadingRow ? item.heading.number : item.number}
           title={isHeadingRow ? item.heading.title : item.block.title}
           hasChevron={isHeadingRow ? item.hasChildren : false}
@@ -627,7 +614,7 @@ export function MatrixVariant({
                       <span className={`text-[11px] font-semibold ${col.text}`}>
                         {col.label}
                       </span>
-                      <ColumnHintTooltip hint={col.hint} />
+                      <InfoHintTooltip hint={col.hint} />
                       <span className="peer-matrix-count-badge">{roleTotals(col.id)}</span>
                     </div>
                   </th>
@@ -718,25 +705,5 @@ export function MatrixVariant({
         </aside>
       </div>
     </div>
-  );
-}
-
-function ColumnHintTooltip({ hint }: { hint: string }) {
-  return (
-    <span className="group/hint relative inline-flex shrink-0">
-      <button
-        type="button"
-        aria-label={hint}
-        className="flex h-4 w-4 items-center justify-center rounded text-[#bdbdbd] transition-colors hover:bg-black/[0.05] hover:text-[#636161] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff4e49]/30"
-      >
-        <Info size={12} strokeWidth={2} aria-hidden />
-      </button>
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-50 hidden w-56 -translate-x-1/2 rounded-md border border-[#d4ced3] bg-white px-2.5 py-2 text-[11px] leading-snug text-[#636161] shadow-[0_4px_12px_rgba(48,47,47,0.12)] group-hover/hint:block group-focus-within/hint:block"
-      >
-        {hint}
-      </span>
-    </span>
   );
 }

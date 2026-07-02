@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 
 export function OutlineActionButton({
   label,
@@ -20,11 +21,7 @@ export function OutlineActionButton({
         event.stopPropagation();
         onClick();
       }}
-      className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded transition-colors ${
-        variant === "danger"
-          ? "text-[#bdbdbd] hover:bg-[#fff0f0] hover:text-[#ff4e49]"
-          : "text-[#bdbdbd] hover:bg-black/[0.06] hover:text-[#636161]"
-      }`}
+      className={`peer-ol-action-btn ${variant === "danger" ? "peer-ol-action-btn--danger" : ""}`}
     >
       {children}
     </button>
@@ -32,9 +29,61 @@ export function OutlineActionButton({
 }
 
 export function OutlineRowActions({ children }: { children: ReactNode }) {
+  return <div className="peer-ol-row-actions">{children}</div>;
+}
+
+export function OutlineHeadingActions({
+  onAdd,
+  onDuplicate,
+  onDelete,
+  showAdd = true,
+}: {
+  onAdd?: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  showAdd?: boolean;
+}) {
   return (
-    <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/toc-row:opacity-100 group-focus-within/toc-row:opacity-100 group-hover/outline-row:opacity-100 group-focus-within/outline-row:opacity-100">
-      {children}
-    </div>
+    <OutlineRowActions>
+      {showAdd && onAdd ? (
+        <OutlineActionButton label="Add heading" onClick={onAdd}>
+          <Plus size={13} strokeWidth={2} />
+        </OutlineActionButton>
+      ) : null}
+      <OutlineActionButton label="Duplicate heading" onClick={onDuplicate}>
+        <Copy size={12} strokeWidth={2} />
+      </OutlineActionButton>
+      <OutlineActionButton label="Delete heading" variant="danger" onClick={onDelete}>
+        <Trash2 size={12} strokeWidth={2} />
+      </OutlineActionButton>
+    </OutlineRowActions>
+  );
+}
+
+export function OutlineContentActions({
+  onAdd,
+  onDuplicate,
+  onDelete,
+  showAdd = true,
+}: {
+  onAdd?: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  showAdd?: boolean;
+}) {
+  return (
+    <OutlineRowActions>
+      {showAdd && onAdd ? (
+        <OutlineActionButton label="Add section below" onClick={onAdd}>
+          <Plus size={13} strokeWidth={2} />
+        </OutlineActionButton>
+      ) : null}
+      <OutlineActionButton label="Duplicate section" onClick={onDuplicate}>
+        <Copy size={12} strokeWidth={2} />
+      </OutlineActionButton>
+      <OutlineActionButton label="Delete section" variant="danger" onClick={onDelete}>
+        <Trash2 size={12} strokeWidth={2} />
+      </OutlineActionButton>
+    </OutlineRowActions>
   );
 }

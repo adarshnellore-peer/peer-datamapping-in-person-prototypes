@@ -225,6 +225,8 @@ export type DataSourceRoadmapSource = RoadmapSourceBase & {
   referenceKey: string;
   /** Additional sections from the same document on one mapped entry. */
   referenceKeys?: string[];
+  /** Study library row this mapping came from (figures/listings). */
+  studySourceId?: string;
   /** Human-readable section name shown on the card, e.g. "Template Section 9.2". */
   sectionName?: string;
   /** Short document-type tag, e.g. "Template", "CSR", "TLF". */

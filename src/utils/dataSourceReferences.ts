@@ -124,6 +124,10 @@ export function dataSourceConsolidationKey(source: RoadmapSource): string {
         ? "reference"
         : "source";
 
+  if (source.studySourceId) {
+    return `study:${source.studySourceId}::${usage}::${format}`;
+  }
+
   return `${source.dataSource}::${usage}::${format}`;
 }
 

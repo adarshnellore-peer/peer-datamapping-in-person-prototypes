@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from "react";
-import { CircleHelp } from "lucide-react";
 import type { RoadmapSource, SourceFormatRole } from "../../data/roadmap";
 import type { DocumentBlock } from "../../types";
+import { InfoHintTooltip } from "../roadmap/InfoHintTooltip";
 import {
   acceptsV2Drag,
   getActiveV2DragPayload,
@@ -13,7 +13,7 @@ import {
   type V2DragPayload,
 } from "../../utils/v2DragPayload";
 import { EvidenceChip } from "./EvidenceChip";
-import { isInDocReferenceSource } from "./types";
+import { FORMAT_ROLE_HINT, isInDocReferenceSource } from "./types";
 
 export type EvidenceSectionKind = "source" | "reference";
 
@@ -22,10 +22,14 @@ const DEFAULT_VISIBLE = {
   reference: 8,
 } as const;
 
+const EMPTY_HINT: Record<EvidenceSectionKind, string> = {
+  source: "+ Add Source",
+  reference: "+ Add Reference",
+};
+
 export function EvidenceSection({
   kind,
   label,
-  showInfo,
   blockId,
   sources,
   blocks,
@@ -41,7 +45,6 @@ export function EvidenceSection({
 }: {
   kind: EvidenceSectionKind;
   label: string;
-  showInfo?: boolean;
   blockId: string;
   sources: RoadmapSource[];
   blocks?: DocumentBlock[];
@@ -157,17 +160,19 @@ export function EvidenceSection({
     >
       <div className="peer-evidence-section-head">
         <p className="peer-section-label peer-section-label--compact">{label}</p>
-        {showInfo ? (
-          <CircleHelp
-            size={12}
-            strokeWidth={1.75}
-            className="text-[var(--peer-text-caption)]"
-            aria-label="External study documents and files"
-          />
-        ) : null}
+        <InfoHintTooltip hint={FORMAT_ROLE_HINT[kind]} />
       </div>
-      <div className="peer-evidence-chip-row">
-        {visible.map((source) => (
+      <div
+        className={`peer-evidence-chip-row ${
+          sources.length === 0 ? "peer-evidence-chip-row--empty" : ""
+        }`}
+        aria-label={sources.length === 0 ? `Drop ${label.toLowerCase()} here` : undefined}
+      >
+        {sources.length === 0 ? (
+          <span className="peer-evidence-empty-hint">{EMPTY_HINT[kind]}</span>
+        ) : (
+          <>
+            {visible.map((source) => (
           <EvidenceChip
             key={source.id}
             source={source}
@@ -210,6 +215,8 @@ export function EvidenceSection({
             Less
           </button>
         ) : null}
+          </>
+        )}
       </div>
     </section>
   );

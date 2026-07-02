@@ -1,6 +1,5 @@
-import { useMemo, useState, type DragEvent } from "react";
+import { useMemo, useRef, useState, type DragEvent } from "react";
 import {
-  ChevronDown,
   ExternalLink,
   SquareArrowDownLeft,
   X,
@@ -9,10 +8,8 @@ import { getSourceLabel } from "../../data/sourceHelpers";
 import type { RoadmapSource } from "../../data/roadmap";
 import type { DocumentBlock } from "../../types";
 import { getBundledSourcesForOutlineRef } from "../../utils/outlineRefEnrichment";
+import { PortalPillDropdown } from "../shared/PortalPillDropdown";
 import {
-  artifactTypeIcon,
-  artifactTypeIconColor,
-  artifactTypeLabel,
   getCompactEvidenceLabel,
   getOutlineRefTooltip,
   isInDocReferenceSource,
@@ -24,7 +21,6 @@ export function EvidenceChip({
   isTraced,
   inDoc,
   onTrace,
-  onNavigateOutlineRef,
   onRemove,
   mappedDrag,
 }: {
@@ -46,37 +42,37 @@ export function EvidenceChip({
     return getBundledSourcesForOutlineRef(source, blocks ?? []);
   }, [isInternal, source, blocks]);
   const [bundledOpen, setBundledOpen] = useState(false);
+  const chipRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const isPendingDescriptor =
-    isInternal &&
-    source.status === "proposed" &&
-    !(source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT"
-      ? source.aiDescriptor?.trim()
-      : false);
-  const label = isPendingDescriptor
-    ? `${getCompactEvidenceLabel(source, blocks)}…`
-    : getCompactEvidenceLabel(source, blocks);
+  const label = getCompactEvidenceLabel(source, blocks);
   const tooltip = getOutlineRefTooltip(source) ?? label;
   const Icon = isInternal ? SquareArrowDownLeft : ExternalLink;
+  const hasBundled = bundled.length > 0;
+  const displayLabel = hasBundled ? `${label} (${bundled.length})` : label;
+  const bundledMenuLabel = `Bundled sources for ${label}`;
 
-  const handleClick = () => {
-    if (isInternal && onNavigateOutlineRef) {
-      onNavigateOutlineRef();
+  const handleMainClick = () => {
+    if (hasBundled) {
+      setBundledOpen((value) => !value);
       return;
     }
-    onTrace?.();
+    if (!isInternal) {
+      onTrace?.();
+    }
   };
 
   return (
     <div
-      className={`peer-evidence-chip-wrap ${bundled.length > 0 ? "has-bundled" : ""} ${
+      ref={chipRef}
+      className={`peer-evidence-chip-wrap ${hasBundled ? "has-bundled" : ""} ${
         bundledOpen ? "is-bundled-open" : ""
       }`}
     >
       <div
         className={`peer-evidence-chip group/chip ${isTraced ? "is-traced" : ""} ${
-          isPendingDescriptor ? "is-pending-descriptor" : ""
-        } ${isInternal ? "peer-evidence-chip--internal" : "peer-evidence-chip--external"}`}
+          isInternal ? "peer-evidence-chip--internal" : "peer-evidence-chip--external"
+        } ${bundledOpen ? "is-menu-open" : ""}`}
         draggable={Boolean(mappedDrag)}
         onDragStart={(event) => {
           event.stopPropagation();
@@ -87,39 +83,19 @@ export function EvidenceChip({
           mappedDrag?.onDragEnd();
         }}
       >
-        {bundled.length > 0 ? (
-          <button
-            type="button"
-            aria-expanded={bundledOpen}
-            aria-label={`${bundledOpen ? "Hide" : "Show"} ${bundled.length} bundled sources`}
-            onClick={(event) => {
-              event.stopPropagation();
-              setBundledOpen((value) => !value);
-            }}
-            className="peer-evidence-chip-expand"
-          >
-            <ChevronDown
-              size={11}
-              strokeWidth={2}
-              className={`peer-evidence-chip-expand-icon ${bundledOpen ? "is-open" : ""}`}
-              aria-hidden
-            />
-          </button>
-        ) : null}
         <button
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            handleClick();
+            handleMainClick();
           }}
+          aria-expanded={hasBundled ? bundledOpen : undefined}
+          aria-haspopup={hasBundled ? "menu" : undefined}
           title={tooltip}
-          className="peer-evidence-chip-main"
+          className={`peer-evidence-chip-main ${hasBundled ? "peer-evidence-chip-main--expandable" : ""}`}
         >
           <Icon size={12} strokeWidth={1.75} className="peer-evidence-chip-icon" aria-hidden />
-          <span className="peer-evidence-chip-label">{label}</span>
-          {bundled.length > 0 && !bundledOpen ? (
-            <span className="peer-evidence-chip-bundled-count">{bundled.length}</span>
-          ) : null}
+          <span className="peer-evidence-chip-label">{displayLabel}</span>
         </button>
         <button
           type="button"
@@ -135,37 +111,23 @@ export function EvidenceChip({
         </button>
       </div>
 
-      {bundledOpen && bundled.length > 0 ? (
-        <div className="peer-evidence-bundled-panel" role="region" aria-label="Bundled sources">
-          <p className="peer-evidence-bundled-panel-label">From outline</p>
-          <div className="peer-evidence-bundled-panel-chips">
-            {bundled.map((item) => {
-              const TypeIcon = artifactTypeIcon(item, blocks);
-              const iconColor = artifactTypeIconColor(item, blocks);
-              const typeLabel = artifactTypeLabel(item, blocks);
-              const itemLabel = getSourceLabel(item);
-              return (
-                <div
-                  key={`${item.id}-${itemLabel}`}
-                  className="peer-evidence-chip peer-evidence-chip--external peer-evidence-chip--bundled-readonly"
-                  title={itemLabel}
-                >
-                  <div className="peer-evidence-chip-main peer-evidence-chip-main--readonly">
-                    <TypeIcon
-                      size={12}
-                      strokeWidth={1.75}
-                      className="peer-evidence-chip-icon"
-                      style={{ color: iconColor }}
-                      aria-hidden
-                    />
-                    <span className="peer-evidence-chip-type">{typeLabel}</span>
-                    <span className="peer-evidence-chip-label">{itemLabel}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {hasBundled ? (
+        <PortalPillDropdown
+          open={bundledOpen}
+          anchorRef={chipRef}
+          menuRef={menuRef}
+          onClose={() => setBundledOpen(false)}
+          ariaLabel={bundledMenuLabel}
+          header={<span className="peer-library-eyebrow">Bundled sources</span>}
+          items={bundled.map((item) => {
+            const itemLabel = getSourceLabel(item);
+            return {
+              key: `${item.id}-${itemLabel}`,
+              label: itemLabel,
+              title: itemLabel,
+            };
+          })}
+        />
       ) : null}
     </div>
   );

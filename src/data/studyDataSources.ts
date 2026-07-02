@@ -170,12 +170,16 @@ export function defaultFormatRoleForStudySource(_entry: StudyDataSource): Source
 }
 
 export function studySourceToRoadmapSource(entry: StudyDataSource): DataSourceRoadmapSource {
+  const isFigureOrListing = entry.kind === "figure" || entry.kind === "listing";
   return enrichDataSourceSource({
     id: entry.id,
     sourceType: "DATA_SOURCE",
     dataSource: entry.dataSource,
     referenceKey: entry.referenceKey,
     status: "confirmed",
+    ...(isFigureOrListing
+      ? { studySourceId: entry.id, sectionName: entry.name }
+      : {}),
   });
 }
 

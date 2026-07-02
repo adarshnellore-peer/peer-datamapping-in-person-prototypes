@@ -1,5 +1,6 @@
-import { ChevronRight } from "lucide-react";
-import { useRef, type DragEvent, type PointerEvent, type ReactNode } from "react";
+import { useRef, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import { BlockOutputTypeIcon } from "./BlockOutputTypeIcon";
+import { OutlineChevronButton } from "./OutlineChevronButton";
 
 export const ROADMAP_OUTLINE_COLUMN_WIDTH = 220;
 
@@ -8,22 +9,7 @@ export const ROADMAP_OUTLINE_COLUMN_CLASS = "peer-outline-column";
 export const ROADMAP_OUTLINE_HEAD_CLASS = "peer-outline-head";
 
 export function RoadmapOutlineHeader({ title = "Outline" }: { title?: string }) {
-  return (
-    <span className="peer-library-eyebrow">
-      {title}
-    </span>
-  );
-}
-
-export function roadmapOutlineLabelClass(isHeading: boolean, compact = false): string {
-  if (compact) {
-    return isHeading
-      ? "text-[11px] font-semibold leading-snug text-[var(--peer-text)]"
-      : "text-[11px] font-normal leading-snug text-[var(--peer-muted)]";
-  }
-  return isHeading
-    ? "py-0.5 text-[12px] font-semibold leading-[1.3] text-[var(--peer-text)]"
-    : "py-0.5 text-[12px] font-normal leading-[1.35] text-[var(--peer-muted)]";
+  return <span className="peer-library-eyebrow">{title}</span>;
 }
 
 export function RoadmapOutlineRow({
@@ -31,8 +17,6 @@ export function RoadmapOutlineRow({
   isHeading,
   isActive = false,
   isSelected = false,
-  isIndeterminate = false,
-  label,
   number,
   title,
   hasChevron = false,
@@ -41,189 +25,159 @@ export function RoadmapOutlineRow({
   onDragStart,
   onDragEnd,
   onReorderPointerDown,
-  showSelectionCheckbox = false,
-  onToggleSelected,
+  onRowClick,
   dragTitle,
   onNavigate,
   actions,
   compact = false,
   isDragging = false,
+  outputType,
 }: {
   depth: number;
   isHeading: boolean;
   isActive?: boolean;
   isSelected?: boolean;
-  isIndeterminate?: boolean;
   isDragging?: boolean;
-  /** Pre-built label; overrides number/title when set. */
-  label?: ReactNode;
   number?: string;
-  title?: string;
+  title?: ReactNode;
   hasChevron?: boolean;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onDragStart?: (event: DragEvent) => void;
   onDragEnd?: () => void;
   onReorderPointerDown?: (event: PointerEvent<HTMLElement>) => void;
-  showSelectionCheckbox?: boolean;
-  onToggleSelected?: () => void;
+  onRowClick?: (event: MouseEvent) => void;
   dragTitle?: string;
   onNavigate?: () => void;
   actions?: ReactNode;
   compact?: boolean;
+  outputType?: string;
 }) {
-  const indent = depth * 10;
-  const labelContent =
-    label ??
-    (number ? (
-      <>
-        <span className="mr-1 tabular-nums text-[var(--peer-text-caption)]">{number}</span>
-        {title ?? ""}
-      </>
-    ) : (
-      (title ?? "")
-    ));
-
   const rowReorderOnly = !onDragStart && !!onReorderPointerDown;
   const rowDraggable = Boolean(onDragStart) || rowReorderOnly;
-  const labelInteractionRef = useRef<{ x: number; y: number; suppressClick: boolean } | null>(
-    null,
-  );
+  const isInteractive = Boolean(onNavigate || onRowClick);
 
-  const handleLabelPointerDown = (event: PointerEvent<HTMLSpanElement>) => {
-    labelInteractionRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-      suppressClick: false,
-    };
+  const clickRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+
+  const handleTitlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    clickRef.current = { x: event.clientX, y: event.clientY, moved: false };
   };
 
-  const handleLabelPointerMove = (event: PointerEvent<HTMLSpanElement>) => {
-    const state = labelInteractionRef.current;
-    if (!state || state.suppressClick) return;
-    const dx = event.clientX - state.x;
-    const dy = event.clientY - state.y;
-    if (Math.hypot(dx, dy) > 6) {
-      state.suppressClick = true;
+  const handleTitlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    const state = clickRef.current;
+    if (!state || state.moved) return;
+    if (Math.hypot(event.clientX - state.x, event.clientY - state.y) > 5) {
+      state.moved = true;
     }
   };
 
-  const handleLabelClick = () => {
-    const state = labelInteractionRef.current;
-    labelInteractionRef.current = null;
-    if (!onNavigate || state?.suppressClick) return;
-    onNavigate();
+  const handleTitleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const state = clickRef.current;
+    clickRef.current = null;
+    if (state?.moved) return;
+    event.stopPropagation();
+    if (onRowClick) {
+      onRowClick(event);
+      return;
+    }
+    onNavigate?.();
+  };
+
+  const handleTitleDoubleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (onRowClick && onNavigate) onNavigate();
+  };
+
+  const handleRowPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (!rowReorderOnly) return;
+    if ((event.target as Element).closest("[data-ol-no-drag]")) return;
+    onReorderPointerDown?.(event);
+  };
+
+  const handleRowDragStart = (event: DragEvent<HTMLDivElement>) => {
+    if ((event.target as Element).closest("[data-ol-no-drag]")) {
+      event.preventDefault();
+      return;
+    }
+    onDragStart?.(event);
   };
 
   return (
-    <div style={{ marginLeft: `${indent}px` }} className={compact ? "peer-outline-row" : "py-0.5"}>
+    <div
+      className={`peer-ol-item ${isHeading ? "peer-ol-item--heading" : "peer-ol-item--content"} ${
+        compact ? "peer-ol-item--compact" : ""
+      }`}
+      style={{ "--ol-depth": depth } as CSSProperties}
+      data-depth={depth}
+    >
       <div
-        draggable={rowDraggable}
-        onPointerDown={
-          rowReorderOnly
-            ? (event) => {
-                if ((event.target as Element).closest("[data-toc-no-drag]")) return;
-                onReorderPointerDown?.(event);
-              }
-            : undefined
-        }
-        onDragStart={(event) => {
-          if ((event.target as Element).closest("[data-toc-no-drag]")) {
-            event.preventDefault();
-            return;
-          }
-          onDragStart?.(event);
-        }}
+        className={[
+          "group/ol-row",
+          "peer-ol-row",
+          isHeading ? "peer-ol-row--heading" : "peer-ol-row--content",
+          compact ? "peer-ol-row--compact" : "",
+          rowDraggable ? "peer-ol-row--draggable" : "",
+          isInteractive ? "peer-ol-row--interactive" : "",
+          isActive ? "is-active" : "",
+          isSelected ? "is-selected" : "",
+          isDragging ? "is-dragging" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        draggable={rowDraggable && Boolean(onDragStart)}
+        onPointerDown={handleRowPointerDown}
+        onDragStart={handleRowDragStart}
         onDragEnd={onDragEnd}
         title={
           rowReorderOnly
             ? "Drag to reorder"
             : dragTitle ?? (onDragStart ? "Drag to reorder or map to section" : undefined)
         }
-        className={`group/outline-row flex select-none items-center pr-0.5 transition-[background-color,border-color,opacity] peer-toc-card ${
-          compact ? "min-h-0" : "min-h-[26px]"
-        } ${rowDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
-          isActive ? "is-active" : ""
-        } ${isSelected ? "is-selected" : ""} ${isDragging ? "opacity-40" : ""}`}
       >
-        {showSelectionCheckbox && onToggleSelected ? (
-          <span
-            data-toc-no-drag
-            draggable={false}
-            className="mr-0.5 flex shrink-0 items-center"
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <input
-              type="checkbox"
-              checked={isSelected}
-              ref={(el) => {
-                if (el) el.indeterminate = isIndeterminate;
-              }}
-              onChange={onToggleSelected}
-              aria-label="Select for mapping"
-              className="h-3.5 w-3.5 cursor-pointer rounded border-[#c8c0c6] text-[#ff4e49] focus:ring-[#ff4e49]/25"
+        <div className="peer-ol-chevron-slot" data-ol-no-drag>
+          {hasChevron ? (
+            <OutlineChevronButton
+              isCollapsed={isCollapsed}
+              onToggle={onToggleCollapse}
             />
-          </span>
-        ) : null}
-        <button
-          type="button"
-          draggable={false}
-          data-toc-no-drag
-          aria-label={isCollapsed ? "Expand section" : "Collapse section"}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleCollapse?.();
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-          className={`${compact && !hasChevron ? "hidden" : "mr-0.5 flex h-[18px] w-4 shrink-0 items-center justify-center rounded text-[#9e9e9e] transition-colors hover:bg-black/[0.06] hover:text-[#636161]"} ${
-            hasChevron ? "visible" : compact ? "hidden" : "invisible pointer-events-none"
-          }`}
-        >
-          <ChevronRight
-            size={12}
-            strokeWidth={2}
-            className={`transition-transform ${isCollapsed ? "" : "rotate-90"}`}
-          />
-        </button>
+          ) : null}
+        </div>
 
-        <span
-          role={onNavigate ? "button" : undefined}
-          tabIndex={onNavigate ? 0 : undefined}
-          onPointerDown={onNavigate ? handleLabelPointerDown : undefined}
-          onPointerMove={onNavigate ? handleLabelPointerMove : undefined}
-          onPointerCancel={() => {
-            labelInteractionRef.current = null;
-          }}
-          onClick={handleLabelClick}
-          onKeyDown={
-            onNavigate
-              ? (event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onNavigate();
-                  }
-                }
-              : undefined
-          }
-          className={`min-w-0 flex-1 whitespace-normal break-words text-left ${roadmapOutlineLabelClass(
-            isHeading,
-            compact,
-          )} ${isActive ? "text-[var(--peer-text)]" : ""}`}
-        >
-          {labelContent}
+        <span className="peer-ol-leading" aria-hidden>
+          {!isHeading && outputType ? (
+            <BlockOutputTypeIcon outputType={outputType} size="sm" />
+          ) : null}
         </span>
 
-        {actions && (
-          <div
-            data-toc-no-drag
-            draggable={false}
-            className="flex shrink-0 items-center"
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {actions}
-          </div>
-        )}
+        <button
+          type="button"
+          className="peer-ol-title-btn"
+          draggable={false}
+          data-ol-no-drag
+          disabled={!isInteractive}
+          onPointerDown={isInteractive ? handleTitlePointerDown : undefined}
+          onPointerMove={isInteractive ? handleTitlePointerMove : undefined}
+          onPointerCancel={() => {
+            clickRef.current = null;
+          }}
+          onClick={isInteractive ? handleTitleClick : undefined}
+          onDoubleClick={isInteractive ? handleTitleDoubleClick : undefined}
+        >
+          <span className="peer-ol-label">
+            {number ? <span className="peer-ol-num">{number}</span> : null}
+            <span
+              className={`peer-ol-title ${
+                isHeading ? "peer-ol-title--heading" : "peer-ol-title--content"
+              }`}
+            >
+              {title}
+            </span>
+          </span>
+        </button>
+
+        <div className="peer-ol-actions" data-ol-no-drag>
+          {actions}
+        </div>
       </div>
     </div>
   );
