@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { InfoHintTooltip } from "../roadmap/InfoHintTooltip";
 import { DataSourcePanel } from "../DataSourcePanel";
 import { StudyDataSourcesList } from "../StudyDataSourcesList";
 import { OutlineContentActions, OutlineHeadingActions } from "../roadmap/OutlineActionButton";
+import { PanelResizeHandle } from "../roadmap/PanelResizeHandle";
 import {
   RoadmapOutlineHeader,
   RoadmapOutlineRow,
@@ -12,8 +13,15 @@ import {
 import type { StudyDataSource } from "../../data/studyDataSources";
 import { isTlfRoadmapSource } from "../../data/studyDataSources";
 import type { RoadmapSource } from "../../data/roadmap";
-import type { HeadingBlock } from "../../types";
-import { buildTocFlatList, isHeadingInsertionSlot, type TocFlatItem } from "../../utils/documentBlocks";
+import {
+  buildTocFlatList,
+  getTocRowParts,
+  isHeadingInsertionSlot,
+  outlineRefPayloadFromTocItem,
+  type TocFlatItem,
+} from "../../utils/documentBlocks";
+import { useResizableColumnWidths } from "../../hooks/useResizableColumnWidths";
+import { useResizablePanelWidth } from "../../hooks/useResizablePanelWidth";
 import {
   FORMAT_MATRIX_COLUMNS,
   formatRoleForFormatMatrixColumn,
@@ -22,6 +30,7 @@ import {
   matrixColumnForSource,
   MATRIX_COLUMNS,
   roleForMatrixColumn,
+  sourceHasMappedEvidence,
   type FormatMatrixColumnId,
   type MatrixColumnId,
   type MatrixTagRole,
@@ -38,6 +47,23 @@ import {
   type OutlineRefPayload,
   type V2DragPayload,
 } from "../../utils/v2DragPayload";
+
+function matrixEmptyHint(colId: string, columnMode: "usage" | "format"): string {
+  if (columnMode === "format") {
+    return colId === "reference" ? "+ Add Reference" : "+ Add Source";
+  }
+  return colId === "reference" ? "+ Add Reference" : "+ Add Source";
+}
+
+function defaultMatrixColumnWidths(columnMode: "usage" | "format"): Record<string, number> {
+  if (columnMode === "format") {
+    return { source: 220, reference: 220 };
+  }
+  return { insert: 200, interpret: 200, reference: 200 };
+}
+
+const MATRIX_COLUMN_MIN_PX = 120;
+const MATRIX_COLUMN_MAX_PX = 480;
 
 function sourcesForMatrixCell(sources: RoadmapSource[]): RoadmapSource[] {
   return [...sources].sort((a, b) => {
@@ -95,27 +121,6 @@ function roleForColumn(colId: string, columnMode: "usage" | "format"): MatrixTag
   return roleForMatrixColumn(colId as MatrixColumnId);
 }
 
-function headingDragLabel(heading: HeadingBlock): string {
-  return heading.number ? `${heading.number} ${heading.title}` : heading.title;
-}
-
-function outlineRefPayloadFromTocItem(item: TocFlatItem): OutlineRefPayload {
-  if (item.kind === "heading") {
-    return {
-      kind: "outline-ref",
-      sourceType: "CONTENT",
-      label: headingDragLabel(item.heading),
-      fromHeadingId: item.heading.id,
-    };
-  }
-  return {
-    kind: "outline-ref",
-    sourceType: "SUBCONTENT",
-    label: item.block.title,
-    fromBlockId: item.block.id,
-  };
-}
-
 /**
  * V3 — Mode matrix + document library. Rows are roadmap sections; columns are
  * Primary narrative / Supporting evidence / Background reference. Drag from the library or
@@ -156,7 +161,11 @@ export function MatrixVariant({
   onDuplicateContent,
   onDeleteHeading,
   onDeleteContent,
+  onRenameBlock,
+  onNavigateOutlineRef,
   tlfOnly = false,
+  collapsedHeadingIds: collapsedHeadingIdsProp,
+  onCollapsedHeadingIdsChange,
 }: VariantProps & {
   activeBlockId?: string | null;
   /** Bumped when library placement navigation should scroll the active row into view. */
@@ -209,11 +218,18 @@ export function MatrixVariant({
   onDuplicateContent?: (contentId: string) => void;
   onDeleteHeading?: (headingId: string) => void;
   onDeleteContent?: (blockId: string) => void;
+  onRenameBlock?: (blockId: string, title: string) => void;
+  onNavigateOutlineRef?: (source: RoadmapSource) => void;
   /** When true, only TLF-mapped sources are shown in matrix cells. */
   tlfOnly?: boolean;
+  /** Shared with storyline TOC so expand/collapse stays in sync across views. */
+  collapsedHeadingIds?: Set<string>;
+  onCollapsedHeadingIdsChange?: React.Dispatch<React.SetStateAction<Set<string>>>;
 }) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
+  const [internalCollapsedIds, setInternalCollapsedIds] = useState<Set<string>>(() => new Set());
+  const collapsedIds = collapsedHeadingIdsProp ?? internalCollapsedIds;
+  const setCollapsedIds = onCollapsedHeadingIdsChange ?? setInternalCollapsedIds;
   const [outlineDragId, setOutlineDragId] = useState<string | null>(null);
   const [outlineReorder, setOutlineReorder] = useState<{
     blockId: string;
@@ -223,7 +239,23 @@ export function MatrixVariant({
   const rowRefs = useRef<Record<string, HTMLElement | null>>({});
   const outlineRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const columns = useMemo(() => matrixColumnsForMode(columnMode), [columnMode]);
-  const tableMinWidth = columnMode === "format" ? "min-w-[640px]" : "min-w-[840px]";
+  const columnIds = useMemo(() => columns.map((col) => col.id), [columns]);
+  const outlinePanel = useResizablePanelWidth("peer-matrix-outline-width-v1", 180, 140, 400);
+  const libraryPanel = useResizablePanelWidth("peer-library-panel-width-v1", 360, 280, 600);
+  const columnWidths = useResizableColumnWidths(
+    `peer-matrix-cols-${columnMode}-v1`,
+    columnIds,
+    defaultMatrixColumnWidths(columnMode),
+    MATRIX_COLUMN_MIN_PX,
+    MATRIX_COLUMN_MAX_PX,
+  );
+  const tableStyle = useMemo(
+    () =>
+      ({
+        "--peer-matrix-outline-width": `${outlinePanel.width}px`,
+      }) as CSSProperties,
+    [outlinePanel.width],
+  );
 
   const flatItems = useMemo(() => buildTocFlatList(blocks), [blocks]);
 
@@ -345,6 +377,7 @@ export function MatrixVariant({
 
   const renderOutlineCell = (item: TocFlatItem, index: number) => {
     const isHeadingRow = item.kind === "heading";
+    const { number, titleText } = getTocRowParts(item);
     const showDropBefore =
       outlineReorder !== null &&
       outlineReorder.dropFlatIndex === index &&
@@ -358,7 +391,7 @@ export function MatrixVariant({
       >
         {showDropBefore ? (
           <div
-            className="pointer-events-none absolute left-2 right-2 top-0 z-10 h-0.5 -translate-y-0.5 rounded-full bg-[#ff4e49]"
+            className="pointer-events-none absolute left-2 right-2 top-0 z-10 h-0.5 -translate-y-0.5 rounded-full bg-[var(--peer-primary)]"
             aria-hidden
           />
         ) : null}
@@ -369,14 +402,17 @@ export function MatrixVariant({
           isActive={activeBlockId === item.id}
           isDragging={outlineDragId === item.id}
           outputType={!isHeadingRow ? item.block.outputType : undefined}
-          number={isHeadingRow ? item.heading.number : item.number}
-          title={isHeadingRow ? item.heading.title : item.block.title}
+          number={number}
+          titleText={titleText}
           hasChevron={isHeadingRow ? item.hasChildren : false}
           isCollapsed={isHeadingRow ? collapsedIds.has(item.id) : undefined}
           onToggleCollapse={
             isHeadingRow && item.hasChildren ? () => toggleCollapse(item.id) : undefined
           }
           onNavigate={onNavigateBlock ? () => onNavigateBlock(item.id) : undefined}
+          onRename={
+            onRenameBlock ? (nextTitle) => onRenameBlock(item.id, nextTitle) : undefined
+          }
           onDragStart={(event) => startOutlineRowDrag(item, event)}
           onDragEnd={endDrag}
           dragTitle="Drag to reorder or map to a cell"
@@ -508,9 +544,9 @@ export function MatrixVariant({
       dropDisabled?: boolean;
     },
   ) => {
-    const visibleRowSources = tlfOnly
-      ? rowSources.filter(isTlfRoadmapSource)
-      : rowSources;
+    const visibleRowSources = rowSources
+      .filter(sourceHasMappedEvidence)
+      .filter((source) => (tlfOnly ? isTlfRoadmapSource(source) : true));
     return columns.map((col) => {
       const cellId = `${rowId}|${col.id}`;
       const cellSources = sourcesForMatrixCell(sourcesInColumn(visibleRowSources, col.id));
@@ -548,6 +584,9 @@ export function MatrixVariant({
             }`}
             {...(cellDropHandlers ?? {})}
           >
+            {cellSources.length === 0 && !options?.dropDisabled ? (
+              <span className="peer-matrix-empty-hint">{matrixEmptyHint(col.id, columnMode)}</span>
+            ) : null}
             {cellSources.map((source) => (
               <SourcePill
                 key={source.id}
@@ -581,6 +620,11 @@ export function MatrixVariant({
                     ? () => onTraceSource(rowId, source.id)
                     : undefined
                 }
+                onNavigateOutlineRef={
+                  onNavigateOutlineRef && isOutlineReferenceSource(source)
+                    ? () => onNavigateOutlineRef(source)
+                    : undefined
+                }
                 onRemove={() => onRemoveSource(rowId, source.id)}
               />
             ))}
@@ -594,16 +638,30 @@ export function MatrixVariant({
     <div className="flex h-full min-h-0 flex-col bg-[var(--peer-surface)]">
       <div className="flex min-h-0 flex-1">
         <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-          <table className={`w-full ${tableMinWidth} border-separate border-spacing-0`}>
+          <table
+            className="peer-matrix-table w-full border-separate border-spacing-0"
+            style={tableStyle}
+          >
+            <colgroup>
+              <col style={{ width: outlinePanel.width }} />
+              {columns.map((col) => (
+                <col key={col.id} style={{ width: columnWidths.widths[col.id] }} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
-                <th className={ROADMAP_OUTLINE_HEAD_CLASS}>
+                <th className={`${ROADMAP_OUTLINE_HEAD_CLASS} relative`}>
                   <RoadmapOutlineHeader />
+                  <PanelResizeHandle
+                    side="right"
+                    onResizeStart={(event) => outlinePanel.startResize("right", event)}
+                  />
                 </th>
                 {columns.map((col) => (
                   <th
                     key={col.id}
-                    className={`sticky top-0 z-20 min-w-[200px] border-b border-r border-[var(--peer-border)] px-2 py-1 text-left align-top ${col.cellTint} ${col.cellAccent}`}
+                    style={{ width: columnWidths.widths[col.id] }}
+                    className={`peer-matrix-col-head sticky top-0 z-20 border-b border-r border-[var(--peer-border)] px-2 py-1 text-left align-top ${col.cellTint} ${col.cellAccent}`}
                   >
                     <div className="flex items-center gap-2">
                       <span
@@ -611,12 +669,16 @@ export function MatrixVariant({
                         style={{ background: col.dotHex }}
                         aria-hidden
                       />
-                      <span className={`text-[11px] font-semibold ${col.text}`}>
+                      <span className="peer-library-eyebrow normal-case tracking-normal text-[11px]">
                         {col.label}
                       </span>
                       <InfoHintTooltip hint={col.hint} />
                       <span className="peer-matrix-count-badge">{roleTotals(col.id)}</span>
                     </div>
+                    <PanelResizeHandle
+                      side="right"
+                      onResizeStart={(event) => columnWidths.startResize(col.id, event)}
+                    />
                   </th>
                 ))}
               </tr>
@@ -666,7 +728,7 @@ export function MatrixVariant({
               {outlineReorder && outlineReorder.dropFlatIndex === visibleItems.length ? (
                 <tr aria-hidden>
                   <td colSpan={columns.length + 1} className="border-0 p-0">
-                    <div className="mx-2 h-0.5 rounded-full bg-[#ff4e49]" />
+                    <div className="mx-2 h-0.5 rounded-full bg-[var(--peer-primary)]" />
                   </td>
                 </tr>
               ) : null}
@@ -674,7 +736,15 @@ export function MatrixVariant({
           </table>
         </div>
 
-        <aside data-datasource-panel="" className="peer-library-sidebar">
+        <aside
+          data-datasource-panel=""
+          className="peer-library-sidebar peer-library-sidebar--resizable"
+          style={{ width: libraryPanel.width }}
+        >
+          <PanelResizeHandle
+            side="left"
+            onResizeStart={(event) => libraryPanel.startResize("left", event)}
+          />
           {showTracePanel && traceSource && onCloseTrace ? (
             <DataSourcePanel
               embedded

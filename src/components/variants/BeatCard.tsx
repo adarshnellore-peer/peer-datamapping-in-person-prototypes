@@ -1,31 +1,19 @@
-import { type DragEvent, type ReactNode } from "react";
+import { useMemo, type DragEvent, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import type { RoadmapSource, SourceFormatRole } from "../../data/roadmap";
 import { isTlfRoadmapSource } from "../../data/studyDataSources";
 import type { ContentBlockData, DocumentBlock } from "../../types";
 import type { OutlineRefPayload } from "../../utils/v2DragPayload";
+import { buildTocFlatList, getTocRowParts } from "../../utils/documentBlocks";
 import { KeyMessageFooter } from "../KeyMessageFooter";
+import { BlockOutputTypeIcon } from "../roadmap/BlockOutputTypeIcon";
 // import { AddEvidenceDropZone } from "./AddEvidenceDropZone";
 import { EvidenceSection } from "./EvidenceSection";
 import {
-  effectiveFormatRole,
-  effectiveSourceRole,
+  blockHasMappingGap,
   evidenceSectionForSource,
+  sourceHasMappedEvidence,
 } from "./types";
-
-function sourceHasMappedEvidence(source: RoadmapSource): boolean {
-  switch (source.sourceType) {
-    case "DATA_SOURCE":
-      return Boolean(source.dataSource?.trim() || source.referenceKey?.trim());
-    case "REFERENCE_SOURCE":
-      return Boolean(source.referenceSource?.trim());
-    case "CONTENT":
-    case "SUBCONTENT":
-      return Boolean(source.content?.trim());
-    default:
-      return true;
-  }
-}
 
 /** Nearest preceding heading label for a content block. */
 export function headingLabelFor(blocks: DocumentBlock[], blockId: string): string | null {
@@ -108,21 +96,7 @@ export function BeatCard({
   /** When true, only TLF-mapped sources are shown in the card. */
   tlfOnly?: boolean;
 }) {
-  const sourceTagCount = block.sources.filter(
-    (source) => effectiveFormatRole(source) === "source",
-  ).length;
-  const showGap =
-    rolePickerMode === "format"
-      ? block.sources.some(
-          (source) =>
-            source.sourceType === "DATA_SOURCE" || source.sourceType === "REFERENCE_SOURCE",
-        ) &&
-        sourceTagCount === 0
-      : block.sources.some(
-          (source) =>
-            source.sourceType === "DATA_SOURCE" || source.sourceType === "REFERENCE_SOURCE",
-        ) &&
-        !block.sources.some((source) => effectiveSourceRole(source) === "primary");
+  const showGap = blockHasMappingGap(block, rolePickerMode);
 
   const mappedDrag =
     onMappedDragStart && onMappedDragEnd
@@ -144,6 +118,17 @@ export function BeatCard({
     (source) => evidenceSectionForSource(source, rolePickerMode) === "reference",
   );
 
+  const rowParts = useMemo(() => {
+    if (!blocks?.length) {
+      return { number: undefined, titleText: block.title };
+    }
+    const item = buildTocFlatList(blocks).find((entry) => entry.id === block.id);
+    if (!item || item.kind !== "content") {
+      return { number: undefined, titleText: block.title };
+    }
+    return getTocRowParts(item);
+  }, [blocks, block.id, block.title]);
+
   return (
     <div
       ref={cardRef}
@@ -152,15 +137,27 @@ export function BeatCard({
       onDragLeave={onEvidenceDragLeave}
       onDrop={onEvidenceDrop}
     >
-      {onPromptChange ? (
-        <KeyMessageFooter
-          placement="header"
-          value={block.prompt}
-          onChange={onPromptChange}
-          outputType={block.outputType}
-          draftSources={dataSources}
-        />
-      ) : null}
+      <div className="peer-beat-header">
+        <div className="peer-beat-title-row">
+          <BlockOutputTypeIcon outputType={block.outputType} size="sm" className="shrink-0" />
+          <h3 className="peer-beat-title">
+            {rowParts.number ? (
+              <span className="peer-doc-heading-num">{rowParts.number} </span>
+            ) : null}
+            {rowParts.titleText}
+          </h3>
+        </div>
+        {onPromptChange ? (
+          <KeyMessageFooter
+            placement="header"
+            value={block.prompt}
+            onChange={onPromptChange}
+            outputType={block.outputType}
+            draftSources={dataSources}
+            hideTypeIcon
+          />
+        ) : null}
+      </div>
 
       <div className="peer-beat-evidence peer-card-body peer-card-body--compressed">
         <div className="peer-card-evidence peer-card-evidence--compressed relative">

@@ -28,6 +28,7 @@ import { DataSourcePanel } from "./DataSourcePanel";
 import { StudyDataSourcesList } from "./StudyDataSourcesList";
 import { TableOfContents } from "./TableOfContents";
 import { PanelResizeHandle } from "./roadmap/PanelResizeHandle";
+import { RoadmapOutlineHeader } from "./roadmap/RoadmapOutlineRow";
 import { useResizablePanelWidth } from "../hooks/useResizablePanelWidth";
 import { VariantSwitcher, type VariantId } from "./VariantSwitcher";
 import {
@@ -50,7 +51,7 @@ import { MatrixVariant } from "./variants/MatrixVariant";
 import { MATRIX_COLUMNS, outlineRefTocTargetId, type MatrixTagRole } from "./variants/types";
 import { SourcePickerOverlay } from "./SourcePickerOverlay";
 // import { SourceLibraryOverlay } from "./SourceLibraryOverlay";
-import { DOCUMENT_BLOCKS } from "../data/roadmapDocument";
+import { DOCUMENT_BLOCKS, ensurePlsRootHeading } from "../data/roadmapDocument";
 import type { OutlineRefPayload } from "../utils/v2DragPayload";
 import {
   buildOutlineRefSource,
@@ -202,7 +203,9 @@ function loadRoadmapBlocks(): DocumentBlock[] {
     if (raw) {
       const parsed = JSON.parse(raw) as unknown;
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const consolidated = consolidateDocumentBlocks(parsed as DocumentBlock[]);
+        const consolidated = consolidateDocumentBlocks(
+          ensurePlsRootHeading(parsed as DocumentBlock[]),
+        );
         if (!consolidated.some((block) => block.id === "h-1-1")) {
           return structuredClone(DOCUMENT_BLOCKS);
         }
@@ -229,6 +232,7 @@ export function RoadmapPage() {
   const [libraryTraceSource, setLibraryTraceSource] = useState<RoadmapSource | null>(null);
   const [v2DataPanelOpen, setV2DataPanelOpen] = useState(true);
   const [mappingSubview, setMappingSubview] = useState<MappingSubview>("storyline");
+  const [outlineCollapsedIds, setOutlineCollapsedIds] = useState<Set<string>>(() => new Set());
   const [tlfOnly, setTlfOnly] = useState(false);
   const [expandedSource, setExpandedSource] = useState<ExpandedSourceState>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -300,6 +304,20 @@ export function RoadmapPage() {
       ),
     );
   };
+
+  const renameBlock = useCallback((blockId: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    setBlocks((prev) =>
+      prev.map((block) => {
+        if (block.id !== blockId) return block;
+        if (block.type === "heading" || block.type === "content") {
+          return { ...block, title: trimmed };
+        }
+        return block;
+      }),
+    );
+  }, []);
 
   const updateAdditionalContext = (blockId: string, additionalContext: string) => {
     setBlocks((prev) =>
@@ -1577,9 +1595,9 @@ export function RoadmapPage() {
   );
 
   return (
-    <div className="flex h-dvh flex-col bg-[#eeeeee]">
+    <div className="flex h-dvh flex-col bg-[var(--peer-bg)]">
       {/* Header row */}
-      <header className="shrink-0 border-b border-[#d4ced3] bg-white">
+      <header className="shrink-0 border-b border-[var(--peer-border)] bg-[var(--peer-surface)]">
         <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-2 px-3 py-2 sm:min-h-[68px] sm:gap-4 sm:px-4 sm:py-0">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <button
@@ -1840,15 +1858,13 @@ export function RoadmapPage() {
             className="peer-outline-sidebar peer-outline-sidebar--resizable fixed inset-y-0 left-0 z-40 md:relative md:z-0"
             style={{ width: outlinePanel.width }}
           >
-            <div className="flex shrink-0 flex-col border-b border-[#d4ced3] px-3 py-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
-                  Outline
-                </span>
+            <div className="peer-panel-header">
+              <div className="flex items-center justify-between gap-2">
+                <RoadmapOutlineHeader />
                 <button
                   type="button"
                   onClick={() => setTocOpen(false)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-[#9e9e9e] hover:bg-[#dcdcdc] hover:text-[#302f2f]"
+                  className="peer-panel-chrome-btn h-7 w-7"
                   aria-label="Collapse outline"
                   title="Collapse outline"
                 >
@@ -1867,8 +1883,11 @@ export function RoadmapPage() {
               onDuplicateContent={duplicateContent}
               onDeleteHeading={deleteHeading}
               onDeleteContent={deleteContentBlock}
+              onRenameBlock={renameBlock}
               outlineMappingDrag={tocUsesOutlineMappingDrag}
               hideAddActions={tocHideAddActions}
+              collapsedHeadingIds={outlineCollapsedIds}
+              onCollapsedHeadingIdsChange={setOutlineCollapsedIds}
             />
             <PanelResizeHandle
               side="right"
@@ -1877,11 +1896,11 @@ export function RoadmapPage() {
           </aside>
         )}
         {showGlobalToc && !tocOpen && (
-          <div className="hidden shrink-0 border-r border-[#e8e8e8] bg-[#fafafa] md:flex md:w-9 md:flex-col md:items-center md:pt-2">
+          <div className="peer-panel-collapsed-rail">
             <button
               type="button"
               onClick={() => setTocOpen(true)}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-[#9e9e9e] hover:bg-[#f0f0f0] hover:text-[#302f2f]"
+              className="peer-panel-chrome-btn h-8 w-8"
               aria-label="Expand outline"
               title="Expand outline"
             >
@@ -1987,7 +2006,11 @@ export function RoadmapPage() {
                 onDuplicateContent: duplicateContent,
                 onDeleteHeading: deleteHeading,
                 onDeleteContent: deleteContentBlock,
+                onRenameBlock: renameBlock,
+                onNavigateOutlineRef: navigateOutlineRef,
                 tlfOnly,
+                collapsedHeadingIds: outlineCollapsedIds,
+                onCollapsedHeadingIdsChange: setOutlineCollapsedIds,
               }}
             />
           )}
@@ -2052,6 +2075,9 @@ export function RoadmapPage() {
               onDuplicateContent={duplicateContent}
               onDeleteHeading={deleteHeading}
               onDeleteContent={deleteContentBlock}
+              onRenameBlock={renameBlock}
+              collapsedHeadingIds={outlineCollapsedIds}
+              onCollapsedHeadingIdsChange={setOutlineCollapsedIds}
             />
           )}
 

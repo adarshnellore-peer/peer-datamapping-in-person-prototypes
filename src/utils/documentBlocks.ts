@@ -1,5 +1,6 @@
 import type { ContentBlockData, DocumentBlock, HeadingBlock } from "../types";
 import type { RoadmapSource } from "../data/roadmap";
+import type { OutlineRefPayload } from "./v2DragPayload";
 
 export function isTocHeading(
   block: DocumentBlock,
@@ -119,6 +120,36 @@ export function getTocFlatItemNumber(item: TocFlatItem): string | undefined {
   }
   const number = item.number.trim();
   return number || undefined;
+}
+
+/** Shared outline row label parts for storyline TOC and matrix outline column. */
+export function getTocRowParts(item: TocFlatItem): { number?: string; titleText: string } {
+  return {
+    number: getTocFlatItemNumber(item),
+    titleText: item.kind === "heading" ? item.heading.title : item.block.title,
+  };
+}
+
+export function getTocItemLabel(item: TocFlatItem): string {
+  const { number, titleText } = getTocRowParts(item);
+  return number ? `${number} ${titleText}` : titleText;
+}
+
+export function outlineRefPayloadFromTocItem(item: TocFlatItem): OutlineRefPayload {
+  if (item.kind === "heading") {
+    return {
+      kind: "outline-ref",
+      sourceType: "CONTENT",
+      label: getTocItemLabel(item),
+      fromHeadingId: item.heading.id,
+    };
+  }
+  return {
+    kind: "outline-ref",
+    sourceType: "SUBCONTENT",
+    label: item.block.title,
+    fromBlockId: item.block.id,
+  };
 }
 
 export function buildTocFlatList(blocks: DocumentBlock[]): TocFlatItem[] {

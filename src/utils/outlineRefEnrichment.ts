@@ -156,7 +156,7 @@ function buildDescriptorHeuristic(
       return clampDescriptor(`${kind}: ${task}`);
     }
     if (subsections.length > 1) {
-      return clampDescriptor(`${payload.label} (${subsections.length} subsections)`);
+      return clampDescriptor(payload.label);
     }
   }
 

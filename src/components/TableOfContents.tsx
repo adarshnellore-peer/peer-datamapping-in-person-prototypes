@@ -4,9 +4,12 @@ import { getSourceHeaderParts } from "../data/sourceHelpers";
 import {
   buildTocFlatList,
   getHeadingSectionBlockIds,
+  getTocItemLabel,
+  getTocRowParts,
+  outlineRefPayloadFromTocItem,
   type TocFlatItem,
 } from "../utils/documentBlocks";
-import type { DocumentBlock, HeadingBlock } from "../types";
+import type { DocumentBlock } from "../types";
 import type { RoadmapSource } from "../data/roadmap";
 import {
   outlineRefDragPayload,
@@ -15,27 +18,6 @@ import {
 } from "../utils/v2DragPayload";
 import { RoadmapOutlineRow } from "./roadmap/RoadmapOutlineRow";
 import { OutlineContentActions, OutlineHeadingActions } from "./roadmap/OutlineActionButton";
-
-function headingLabel(heading: HeadingBlock): string {
-  return heading.number ? `${heading.number} ${heading.title}` : heading.title;
-}
-
-function outlineRefPayloadFromTocItem(item: TocFlatItem): OutlineRefPayload {
-  if (item.kind === "heading") {
-    return {
-      kind: "outline-ref",
-      sourceType: "CONTENT",
-      label: headingLabel(item.heading),
-      fromHeadingId: item.heading.id,
-    };
-  }
-  return {
-    kind: "outline-ref",
-    sourceType: "SUBCONTENT",
-    label: item.block.title,
-    fromBlockId: item.block.id,
-  };
-}
 
 function selectableIdsForTocItem(blocks: DocumentBlock[], item: TocFlatItem): string[] {
   if (item.kind === "heading") {
@@ -59,11 +41,12 @@ function sourceSearchText(source: RoadmapSource): string {
 
 function itemSearchText(item: TocFlatItem): string {
   if (item.kind === "heading") {
-    return headingLabel(item.heading);
+    return getTocItemLabel(item);
   }
   const sourceText = item.block.sources.map(sourceSearchText).join(" ");
-  const numberPrefix = item.number ? `${item.number} ` : "";
-  return `${numberPrefix}${item.block.title} ${sourceText}`;
+  const { number, titleText } = getTocRowParts(item);
+  const numberPrefix = number ? `${number} ` : "";
+  return `${numberPrefix}${titleText} ${sourceText}`;
 }
 
 function highlightMatch(text: string, query: string): ReactNode {
@@ -77,7 +60,7 @@ function highlightMatch(text: string, query: string): ReactNode {
   return (
     <>
       {text.slice(0, index)}
-      <mark className="rounded-sm bg-[#fedbda] px-0.5 text-inherit">
+      <mark className="rounded-sm bg-[var(--peer-primary-tint)] px-0.5 text-inherit">
         {text.slice(index, index + normalized.length)}
       </mark>
       {text.slice(index + normalized.length)}
@@ -107,8 +90,11 @@ export function TableOfContents({
   onDuplicateContent,
   onDeleteHeading,
   onDeleteContent,
+  onRenameBlock,
   outlineMappingDrag = false,
   hideAddActions = false,
+  collapsedHeadingIds: collapsedHeadingIdsProp,
+  onCollapsedHeadingIdsChange,
 }: {
   blocks: DocumentBlock[];
   activeId: string | null;
@@ -120,12 +106,18 @@ export function TableOfContents({
   onDuplicateContent: (contentId: string) => void;
   onDeleteHeading: (headingId: string) => void;
   onDeleteContent: (blockId: string) => void;
+  onRenameBlock?: (blockId: string, title: string) => void;
   /** V2: drag outline rows onto section mapping targets. */
   outlineMappingDrag?: boolean;
   hideAddActions?: boolean;
+  /** Shared with matrix outline so expand/collapse stays in sync across views. */
+  collapsedHeadingIds?: Set<string>;
+  onCollapsedHeadingIdsChange?: React.Dispatch<React.SetStateAction<Set<string>>>;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
+  const [internalCollapsedIds, setInternalCollapsedIds] = useState<Set<string>>(() => new Set());
+  const collapsedIds = collapsedHeadingIdsProp ?? internalCollapsedIds;
+  const setCollapsedIds = onCollapsedHeadingIdsChange ?? setInternalCollapsedIds;
   const [tocDrag, setTocDrag] = useState<{
     blockId: string;
     dropFlatIndex: number;
@@ -286,8 +278,9 @@ export function TableOfContents({
 
       setSelectedIds(new Set(itemIds));
       lastSelectedIndexRef.current = index;
+      onNavigate(item.id);
     },
-    [blocks],
+    [blocks, onNavigate],
   );
 
   const startOutlineDrag = useCallback(
@@ -347,17 +340,14 @@ export function TableOfContents({
   const visibleItemsRef = useRef(visibleItems);
   visibleItemsRef.current = visibleItems;
 
-  const getTocItemParts = (item: TocFlatItem): { number?: string; title: ReactNode } => {
-    if (item.kind === "heading") {
-      const { heading } = item;
-      return {
-        number: heading.number || undefined,
-        title: highlightMatch(heading.title, searchQuery),
-      };
-    }
+  const getTocItemParts = (
+    item: TocFlatItem,
+  ): { number?: string; titleText: string; titleDisplay: ReactNode } => {
+    const { number, titleText } = getTocRowParts(item);
     return {
-      number: item.number || undefined,
-      title: highlightMatch(item.block.title, searchQuery),
+      number,
+      titleText,
+      titleDisplay: highlightMatch(titleText, searchQuery),
     };
   };
 
@@ -389,8 +379,8 @@ export function TableOfContents({
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search outline…"
-            aria-label="Search outline"
+            placeholder="Search"
+            aria-label="Search"
             className="peer-outline-search"
           />
           {searchQuery && (
@@ -412,7 +402,7 @@ export function TableOfContents({
         onDrop={outlineMappingDrag ? handleTocListDrop : undefined}
       >
         {visibleItems.length === 0 ? (
-          <p className="px-2 py-6 text-center text-[12px] text-[#9e9e9e]">
+          <p className="px-2 py-6 text-center text-[12px] text-[var(--peer-text-caption)]">
             {normalizedQuery ? "No matches" : "No sections yet"}
           </p>
         ) : (
@@ -424,7 +414,7 @@ export function TableOfContents({
               const showDropBefore =
                 tocDrag !== null && tocDrag.dropFlatIndex === index && tocDrag.blockId !== item.id;
               const isHeadingRow = item.kind === "heading";
-              const { number, title } = getTocItemParts(item);
+              const { number, titleText, titleDisplay } = getTocItemParts(item);
               const dragMeta = outlineDragMeta(item);
               const outlineDragStart = renderOutlineDragStart(item);
               const selectableIds = outlineMappingDrag
@@ -443,7 +433,7 @@ export function TableOfContents({
                 >
                   {showDropBefore && (
                     <div
-                      className="pointer-events-none absolute left-2 right-2 top-0 z-10 h-0.5 -translate-y-0.5 rounded-full bg-[#ff4e49]"
+                      className="pointer-events-none absolute left-2 right-2 top-0 z-10 h-0.5 -translate-y-0.5 rounded-full bg-[var(--peer-primary)]"
                       aria-hidden
                     />
                   )}
@@ -454,12 +444,9 @@ export function TableOfContents({
                     isSelected={outlineMappingDrag ? allSelected : false}
                     isDragging={isDragging}
                     number={number}
-                    title={
-                      <>
-                        {title}
-                        {dragMeta.badge}
-                      </>
-                    }
+                    titleText={titleText}
+                    titleDisplay={titleDisplay}
+                    titleSuffix={dragMeta.badge}
                     hasChevron={isHeadingRow ? item.hasChildren : false}
                     isCollapsed={isHeadingRow ? collapsedIds.has(item.id) : undefined}
                     onToggleCollapse={
@@ -483,6 +470,11 @@ export function TableOfContents({
                         : "Drag to reorder"
                     }
                     onNavigate={() => onNavigate(item.id)}
+                    onRename={
+                      onRenameBlock
+                        ? (nextTitle) => onRenameBlock(item.id, nextTitle)
+                        : undefined
+                    }
                     outputType={!isHeadingRow ? item.block.outputType : undefined}
                     actions={
                       isHeadingRow ? (
@@ -511,7 +503,7 @@ export function TableOfContents({
             })}
             {tocDrag && tocDrag.dropFlatIndex === visibleItems.length && (
               <li aria-hidden>
-                <div className="mx-2 h-0.5 rounded-full bg-[#ff4e49]" />
+                <div className="mx-2 h-0.5 rounded-full bg-[var(--peer-primary)]" />
               </li>
             )}
           </ul>

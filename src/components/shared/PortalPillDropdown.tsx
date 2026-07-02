@@ -97,22 +97,26 @@ export function PortalPillDropdown({
   onClose,
   header,
   items,
+  children,
   ariaLabel,
   width = DROPDOWN_MENU_WIDTH_PX,
   maxHeight = DROPDOWN_MENU_MAX_HEIGHT_PX,
   align = "start",
+  className = "",
 }: {
   open: boolean;
   anchorRef: RefObject<HTMLElement | null>;
   triggerRef?: RefObject<HTMLElement | null>;
   menuRef: RefObject<HTMLDivElement | null>;
   onClose: () => void;
-  header: ReactNode;
-  items: PortalPillDropdownItem[];
+  header?: ReactNode | null;
+  items?: PortalPillDropdownItem[];
+  children?: ReactNode;
   ariaLabel: string;
   width?: number;
   maxHeight?: number;
   align?: MenuAlign;
+  className?: string;
 }) {
   const menuStyle = usePortalDropdownPosition(anchorRef, open, width, maxHeight, align);
 
@@ -131,47 +135,50 @@ export function PortalPillDropdown({
 
   if (!open) return null;
 
+  const menuItems = items ?? [];
+
   return createPortal(
     <div
       ref={menuRef}
       role="menu"
       aria-label={ariaLabel}
-      className="peer-dropdown-menu peer-dropdown-menu--portal"
+      className={`peer-dropdown-menu peer-dropdown-menu--portal ${className}`.trim()}
       style={menuStyle}
     >
-      <div className="peer-dropdown-menu-head">{header}</div>
+      {header ? <div className="peer-dropdown-menu-head">{header}</div> : null}
       <div className="peer-dropdown-menu-body">
-        {items.map((item) => {
-          const content = (
-            <ReferenceSectionLabel number={item.number} title={item.label} />
-          );
-          const tooltip =
-            item.title ?? (item.number ? `${item.number} ${item.label}` : item.label);
-
-          if (item.onClick) {
-            return (
-              <button
-                key={item.key}
-                type="button"
-                role="menuitem"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  item.onClick?.();
-                }}
-                className="peer-dropdown-pill peer-dropdown-pill--interactive"
-                title={tooltip}
-              >
-                {content}
-              </button>
+        {children ??
+          menuItems.map((item) => {
+            const content = (
+              <ReferenceSectionLabel number={item.number} title={item.label} />
             );
-          }
+            const tooltip =
+              item.title ?? (item.number ? `${item.number} ${item.label}` : item.label);
 
-          return (
-            <div key={item.key} className="peer-dropdown-pill" title={tooltip}>
-              {content}
-            </div>
-          );
-        })}
+            if (item.onClick) {
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    item.onClick?.();
+                  }}
+                  className="peer-dropdown-pill peer-dropdown-pill--interactive"
+                  title={tooltip}
+                >
+                  {content}
+                </button>
+              );
+            }
+
+            return (
+              <div key={item.key} className="peer-dropdown-pill" title={tooltip}>
+                {content}
+              </div>
+            );
+          })}
       </div>
     </div>,
     document.body,

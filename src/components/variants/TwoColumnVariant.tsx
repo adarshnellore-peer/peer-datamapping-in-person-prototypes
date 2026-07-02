@@ -43,7 +43,7 @@ function V2Heading({
   return (
     <div ref={headingRef} className={`first:mt-0 ${wrapperClassName}`}>
       <Tag className={tagClassName}>
-        {block.number && <span>{block.number} </span>}
+        {block.number && <span className="peer-doc-heading-num">{block.number} </span>}
         {block.title}
       </Tag>
     </div>

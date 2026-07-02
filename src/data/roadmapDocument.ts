@@ -500,6 +500,7 @@ const CSR_BODY: DocumentBlock[] = [
 ];
 
 const RAW_DOCUMENT_BLOCKS: DocumentBlock[] = [
+  h("h-1", 1, "1", "Plain Language Summary"),
   {
     id: "h-1-1",
     type: "heading",
@@ -767,6 +768,22 @@ const RAW_DOCUMENT_BLOCKS: DocumentBlock[] = [
   },
   ...CSR_BODY,
 ];
+
+/** Top-level PLS section inserted above 1.1 for documents saved before it existed. */
+export const PLS_ROOT_HEADING: DocumentBlock = h("h-1", 1, "1", "Plain Language Summary");
+
+export function ensurePlsRootHeading(blocks: DocumentBlock[]): DocumentBlock[] {
+  if (blocks.some((block) => block.id === "h-1")) return blocks;
+
+  const insertAt = blocks.findIndex(
+    (block) => block.type === "heading" && block.id === "h-1-1",
+  );
+  if (insertAt === -1) return blocks;
+
+  const next = [...blocks];
+  next.splice(insertAt, 0, PLS_ROOT_HEADING);
+  return next;
+}
 
 export const DOCUMENT_BLOCKS: DocumentBlock[] = consolidateDocumentBlocks(RAW_DOCUMENT_BLOCKS);
 

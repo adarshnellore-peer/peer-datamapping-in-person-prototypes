@@ -19,7 +19,8 @@ import {
   type SourceRole,
 } from "../../data/roadmap";
 import { getArtifactTypeLabel, getSourceDocumentCategory, getSourceLabel, getSourceTypeTag } from "../../data/sourceHelpers";
-import type { DocumentBlock } from "../../types";
+import type { ContentBlockData, DocumentBlock } from "../../types";
+import { getSubsectionsForHeading } from "../../utils/documentBlocks";
 
 export type SourceRef = { blockId: string; sourceId: string };
 
@@ -315,6 +316,39 @@ export function evidenceSectionForSource(
   return "source";
 }
 
+export function sourceHasMappedEvidence(source: RoadmapSource): boolean {
+  switch (source.sourceType) {
+    case "DATA_SOURCE":
+      return Boolean(source.dataSource?.trim() || source.referenceKey?.trim());
+    case "REFERENCE_SOURCE":
+      return Boolean(source.referenceSource?.trim());
+    case "CONTENT":
+    case "SUBCONTENT":
+      return Boolean(source.content?.trim());
+    default:
+      return true;
+  }
+}
+
+export function blockHasMappingGap(
+  block: ContentBlockData,
+  rolePickerMode: "usage" | "format" = "format",
+): boolean {
+  const hasExternal = block.sources.some(
+    (source) => source.sourceType === "DATA_SOURCE" || source.sourceType === "REFERENCE_SOURCE",
+  );
+  if (!hasExternal) return false;
+
+  if (rolePickerMode === "format") {
+    const sourceTagCount = block.sources.filter(
+      (source) => effectiveFormatRole(source) === "source",
+    ).length;
+    return sourceTagCount === 0;
+  }
+
+  return !block.sources.some((source) => effectiveSourceRole(source) === "primary");
+}
+
 export function matrixColumnForSource(source: RoadmapSource): MatrixColumnId {
   const role = effectiveSourceRole(source);
   if (role === "primary") return "insert";
@@ -366,19 +400,26 @@ export function outlineRefTocTargetId(
   return null;
 }
 
+/** Subsection count for a bundled CONTENT heading reference (when > 1). */
+export function getOutlineRefSubsectionCount(
+  source: RoadmapSource,
+  blocks: DocumentBlock[],
+): number | undefined {
+  if (source.sourceType !== "CONTENT" || !source.referencedHeadingId) return undefined;
+  const subsections = getSubsectionsForHeading(blocks, source.referencedHeadingId);
+  return subsections.length > 1 ? subsections.length : undefined;
+}
+
+function stripSubsectionSuffix(label: string): string {
+  return label.replace(/\s*\(\d+\s+subsections?\)\s*$/i, "").trim();
+}
+
 /** Short chip label for compressed storyline evidence rows. */
 export function getCompactEvidenceLabel(
   source: RoadmapSource,
   blocks?: DocumentBlock[],
 ): string {
   if (isInDocReferenceSource(source)) {
-    if (
-      (source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT") &&
-      source.aiDescriptor?.trim()
-    ) {
-      return source.aiDescriptor.trim();
-    }
-
     const blockList = blocks ?? [];
     const targetId = outlineRefTocTargetId(source, blockList);
     if (targetId) {
@@ -389,6 +430,13 @@ export function getCompactEvidenceLabel(
       if (block?.type === "content") {
         return block.title;
       }
+    }
+
+    if (
+      (source.sourceType === "CONTENT" || source.sourceType === "SUBCONTENT") &&
+      source.aiDescriptor?.trim()
+    ) {
+      return stripSubsectionSuffix(source.aiDescriptor.trim());
     }
 
     const content =

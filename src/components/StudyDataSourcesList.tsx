@@ -321,7 +321,7 @@ function LibrarySectionRow({
         <GripVertical
           size={12}
           strokeWidth={2}
-          className="pointer-events-none shrink-0 text-[#d8d8d8]"
+          className="pointer-events-none shrink-0 text-[var(--peer-icon-muted)]"
           aria-hidden
         />
       ) : (
@@ -417,13 +417,13 @@ function LibraryDocumentRow({
       <GripVertical
         size={12}
         strokeWidth={2}
-        className="pointer-events-none shrink-0 text-[#d8d8d8]"
+        className="pointer-events-none shrink-0 text-[var(--peer-icon-muted)]"
         aria-hidden
       />
       <ChevronRight
         size={13}
         strokeWidth={2}
-        className={`shrink-0 text-[#c8c8c8] transition-transform ${expanded ? "rotate-90" : ""}`}
+        className={`shrink-0 text-[var(--peer-icon-muted)] transition-transform ${expanded ? "rotate-90" : ""}`}
         aria-hidden
       />
       <span
@@ -597,7 +597,7 @@ function DocumentGroupSection({
         <ChevronRight
           size={13}
           strokeWidth={2}
-          className={`shrink-0 text-[#bdbdbd] transition-transform ${expanded ? "rotate-90" : ""}`}
+          className={`shrink-0 text-[var(--peer-icon-muted)] transition-transform ${expanded ? "rotate-90" : ""}`}
         />
         <span
           className="h-2 w-2 shrink-0 rounded-full"
@@ -607,7 +607,7 @@ function DocumentGroupSection({
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--peer-text)]">
           {group.documentLabel}
         </span>
-        <span className="shrink-0 text-[10px] font-medium tabular-nums text-[#9e9e9e]">
+        <span className="shrink-0 text-[10px] font-medium tabular-nums text-[var(--peer-text-caption)]">
           {entries.length}
         </span>
       </button>
@@ -1026,14 +1026,14 @@ export function StudyDataSourcesList({
   return (
     <div ref={shellRef} className="peer-library-shell">
       <div className="peer-library-header">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 className="text-[13px] font-semibold text-[var(--peer-text)]">
-            Data Source
-            <span className="ml-1.5 font-normal tabular-nums text-[var(--peer-icon-muted)]">
+        <div className="peer-library-header-title mb-2 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <span className="peer-library-eyebrow">Data Source</span>
+            <span className="text-[11px] font-medium tabular-nums text-[var(--peer-text-caption)]">
               ({filtered.length}
               {tlfOnly && filtered.length !== sources.length ? ` of ${sources.length}` : ""})
             </span>
-          </h3>
+          </div>
           {onClose && (
             <button
               type="button"

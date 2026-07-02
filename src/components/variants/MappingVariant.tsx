@@ -143,7 +143,11 @@ type MatrixProps = VariantProps & {
   onDuplicateContent?: (contentId: string) => void;
   onDeleteHeading?: (headingId: string) => void;
   onDeleteContent?: (blockId: string) => void;
+  onRenameBlock?: (blockId: string, title: string) => void;
+  onNavigateOutlineRef?: (source: RoadmapSource) => void;
   tlfOnly?: boolean;
+  collapsedHeadingIds?: Set<string>;
+  onCollapsedHeadingIdsChange?: React.Dispatch<React.SetStateAction<Set<string>>>;
 };
 
 /**

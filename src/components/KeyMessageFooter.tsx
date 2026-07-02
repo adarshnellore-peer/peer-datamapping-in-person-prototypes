@@ -10,6 +10,7 @@ export function KeyMessageFooter({
   placement = "footer",
   outputType,
   draftSources = [],
+  hideTypeIcon = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -17,6 +18,7 @@ export function KeyMessageFooter({
   outputType?: string;
   /** Mapped drafting sources — used to anchor the summary in real document sections. */
   draftSources?: RoadmapSource[];
+  hideTypeIcon?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -32,7 +34,7 @@ export function KeyMessageFooter({
 
   const descriptionControl = expanded ? (
     <div className="peer-key-message-row flex min-w-0 items-start gap-2">
-      {outputType ? (
+      {!hideTypeIcon && outputType ? (
         <BlockOutputTypeIcon outputType={outputType} size="sm" className="mt-2 shrink-0" />
       ) : null}
       <div className="peer-key-message-editor min-w-0 flex-1">
@@ -53,7 +55,7 @@ export function KeyMessageFooter({
     </div>
   ) : (
     <div className="peer-key-message-row flex min-w-0 items-center gap-2">
-      {outputType ? (
+      {!hideTypeIcon && outputType ? (
         <BlockOutputTypeIcon outputType={outputType} size="sm" className="shrink-0" />
       ) : null}
       <button

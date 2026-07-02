@@ -1,14 +1,23 @@
-import { useRef, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { BlockOutputTypeIcon } from "./BlockOutputTypeIcon";
 import { OutlineChevronButton } from "./OutlineChevronButton";
 
-export const ROADMAP_OUTLINE_COLUMN_WIDTH = 220;
+export const ROADMAP_OUTLINE_COLUMN_WIDTH = 180;
 
 export const ROADMAP_OUTLINE_COLUMN_CLASS = "peer-outline-column";
 
 export const ROADMAP_OUTLINE_HEAD_CLASS = "peer-outline-head";
 
-export function RoadmapOutlineHeader({ title = "Outline" }: { title?: string }) {
+export function RoadmapOutlineHeader({ title = "Table of Contents" }: { title?: string }) {
   return <span className="peer-library-eyebrow">{title}</span>;
 }
 
@@ -18,7 +27,9 @@ export function RoadmapOutlineRow({
   isActive = false,
   isSelected = false,
   number,
-  title,
+  titleText,
+  titleDisplay,
+  titleSuffix,
   hasChevron = false,
   isCollapsed,
   onToggleCollapse,
@@ -28,6 +39,7 @@ export function RoadmapOutlineRow({
   onRowClick,
   dragTitle,
   onNavigate,
+  onRename,
   actions,
   compact = false,
   isDragging = false,
@@ -39,7 +51,11 @@ export function RoadmapOutlineRow({
   isSelected?: boolean;
   isDragging?: boolean;
   number?: string;
-  title?: ReactNode;
+  /** Plain title used for rename commits. */
+  titleText: string;
+  /** Optional rich display (search highlights, etc.). */
+  titleDisplay?: ReactNode;
+  titleSuffix?: ReactNode;
   hasChevron?: boolean;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -49,15 +65,47 @@ export function RoadmapOutlineRow({
   onRowClick?: (event: MouseEvent) => void;
   dragTitle?: string;
   onNavigate?: () => void;
+  onRename?: (nextTitle: string) => void;
   actions?: ReactNode;
   compact?: boolean;
   outputType?: string;
 }) {
   const rowReorderOnly = !onDragStart && !!onReorderPointerDown;
   const rowDraggable = Boolean(onDragStart) || rowReorderOnly;
-  const isInteractive = Boolean(onNavigate || onRowClick);
-
+  const isInteractive = Boolean(onNavigate || onRowClick || onRename);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(titleText);
+  const inputRef = useRef<HTMLInputElement>(null);
   const clickRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!editing) setDraft(titleText);
+  }, [editing, titleText]);
+
+  useEffect(() => {
+    if (!editing) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [editing]);
+
+  const commitRename = () => {
+    const trimmed = draft.trim();
+    setEditing(false);
+    if (!trimmed || trimmed === titleText.trim()) return;
+    onRename?.(trimmed);
+  };
+
+  const cancelRename = () => {
+    setDraft(titleText);
+    setEditing(false);
+  };
 
   const handleTitlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     clickRef.current = { x: event.clientX, y: event.clientY, moved: false };
@@ -72,20 +120,35 @@ export function RoadmapOutlineRow({
   };
 
   const handleTitleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (editing) return;
     const state = clickRef.current;
     clickRef.current = null;
     if (state?.moved) return;
     event.stopPropagation();
-    if (onRowClick) {
-      onRowClick(event);
-      return;
-    }
-    onNavigate?.();
+
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      if (onRowClick) {
+        onRowClick(event);
+        return;
+      }
+      onNavigate?.();
+    }, 220);
   };
 
   const handleTitleDoubleClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (onRowClick && onNavigate) onNavigate();
+    event.preventDefault();
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    if (onRename) {
+      setEditing(true);
+      return;
+    }
+    onNavigate?.();
   };
 
   const handleRowPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -102,11 +165,13 @@ export function RoadmapOutlineRow({
     onDragStart?.(event);
   };
 
+  const labelContent = titleDisplay ?? titleText;
+
   return (
     <div
       className={`peer-ol-item ${isHeading ? "peer-ol-item--heading" : "peer-ol-item--content"} ${
         compact ? "peer-ol-item--compact" : ""
-      }`}
+      } ${editing ? "is-renaming" : ""}`}
       style={{ "--ol-depth": depth } as CSSProperties}
       data-depth={depth}
     >
@@ -124,7 +189,7 @@ export function RoadmapOutlineRow({
         ]
           .filter(Boolean)
           .join(" ")}
-        draggable={rowDraggable && Boolean(onDragStart)}
+        draggable={rowDraggable && Boolean(onDragStart) && !editing}
         onPointerDown={handleRowPointerDown}
         onDragStart={handleRowDragStart}
         onDragEnd={onDragEnd}
@@ -149,31 +214,61 @@ export function RoadmapOutlineRow({
           ) : null}
         </span>
 
-        <button
-          type="button"
-          className="peer-ol-title-btn"
-          draggable={false}
-          data-ol-no-drag
-          disabled={!isInteractive}
-          onPointerDown={isInteractive ? handleTitlePointerDown : undefined}
-          onPointerMove={isInteractive ? handleTitlePointerMove : undefined}
-          onPointerCancel={() => {
-            clickRef.current = null;
-          }}
-          onClick={isInteractive ? handleTitleClick : undefined}
-          onDoubleClick={isInteractive ? handleTitleDoubleClick : undefined}
-        >
-          <span className="peer-ol-label">
+        {editing ? (
+          <div className="peer-ol-title-edit" data-ol-no-drag>
             {number ? <span className="peer-ol-num">{number}</span> : null}
-            <span
-              className={`peer-ol-title ${
-                isHeading ? "peer-ol-title--heading" : "peer-ol-title--content"
-              }`}
-            >
-              {title}
+            <input
+              ref={inputRef}
+              type="text"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitRename();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelRename();
+                }
+              }}
+              onBlur={commitRename}
+              className="peer-ol-title-input"
+              aria-label="Rename section"
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="peer-ol-title-btn"
+            draggable={false}
+            data-ol-no-drag
+            disabled={!isInteractive}
+            onPointerDown={isInteractive ? handleTitlePointerDown : undefined}
+            onPointerMove={isInteractive ? handleTitlePointerMove : undefined}
+            onPointerCancel={() => {
+              clickRef.current = null;
+            }}
+            onClick={isInteractive ? handleTitleClick : undefined}
+            onDoubleClick={isInteractive ? handleTitleDoubleClick : undefined}
+            title={onRename ? "Double-click to rename" : undefined}
+          >
+            <span className="peer-ol-label">
+              {number ? <span className="peer-ol-num">{number}</span> : null}
+              <span
+                className={`peer-ol-title ${
+                  isHeading ? "peer-ol-title--heading" : "peer-ol-title--content"
+                }`}
+              >
+                {labelContent}
+              </span>
+              {titleSuffix ? <span className="peer-ol-title-suffix">{titleSuffix}</span> : null}
             </span>
-          </span>
-        </button>
+          </button>
+        )}
 
         <div className="peer-ol-actions" data-ol-no-drag>
           {actions}
